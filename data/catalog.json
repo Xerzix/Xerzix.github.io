@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generatedAt": "2026-09-29T03:12:34.881Z",
+ "generatedAt": "2026-09-29T03:51:02.594Z",
  "titles": [
   {
    "id": "hanami",
@@ -50,13 +50,26 @@
     "#C6A46A",
     "#1A0F14"
    ],
-   "resolutions": [],
-   "quality": null,
+   "resolutions": [
+    2160,
+    1080,
+    720,
+    480,
+    360
+   ],
+   "quality": "4K",
    "hdr": null,
-   "audioLanguages": [],
-   "subtitleLanguages": [],
-   "hasSubtitles": false,
-   "audioFormats": [],
+   "audioLanguages": [
+    "zxx"
+   ],
+   "subtitleLanguages": [
+    "en",
+    "ja"
+   ],
+   "hasSubtitles": true,
+   "audioFormats": [
+    "AAC Stereo"
+   ],
    "seasonCount": null,
    "episodeCount": null,
    "playable": true,
@@ -65,8 +78,8 @@
    "featured": true,
    "editorialRank": 5,
    "status": "published",
-   "addedAt": "2026-09-29T02:52:25.394Z",
-   "publishedAt": "2026-09-29T02:52:25.394Z",
+   "addedAt": "2026-09-29T03:51:02.589Z",
+   "publishedAt": "2026-09-29T03:51:02.589Z",
    "credits": {
     "directors": [],
     "cast": [],
@@ -160,8 +173,8 @@
    "featured": true,
    "editorialRank": 10,
    "status": "published",
-   "addedAt": "2026-09-29T02:52:25.393Z",
-   "publishedAt": "2026-09-29T02:52:25.393Z",
+   "addedAt": "2026-09-29T03:51:02.589Z",
+   "publishedAt": "2026-09-29T03:51:02.589Z",
    "credits": {
     "directors": [
      "Colin Levy"
@@ -249,13 +262,25 @@
     "#E8C07D",
     "#0B0E14"
    ],
-   "resolutions": [],
-   "quality": null,
+   "resolutions": [
+    1080,
+    720,
+    480,
+    360
+   ],
+   "quality": "HD",
    "hdr": null,
-   "audioLanguages": [],
-   "subtitleLanguages": [],
-   "hasSubtitles": false,
-   "audioFormats": [],
+   "audioLanguages": [
+    "zxx"
+   ],
+   "subtitleLanguages": [
+    "en",
+    "ja"
+   ],
+   "hasSubtitles": true,
+   "audioFormats": [
+    "AAC Stereo"
+   ],
    "seasonCount": 2,
    "episodeCount": 4,
    "playable": true,
@@ -264,8 +289,8 @@
    "featured": true,
    "editorialRank": 15,
    "status": "published",
-   "addedAt": "2026-09-29T02:52:25.394Z",
-   "publishedAt": "2026-09-29T02:52:25.394Z",
+   "addedAt": "2026-09-29T03:51:02.589Z",
+   "publishedAt": "2026-09-29T03:51:02.589Z",
    "credits": {
     "directors": [],
     "cast": [],
@@ -296,7 +321,7 @@
        "name": "Dawn Petals",
        "synopsis": "First light reaches the temple roof while the cherry trees shed their petals into the pond.",
        "runtimeMin": 1,
-       "still": "assets/art/garden-hours-s1e1-still.svg",
+       "still": "assets/art/garden-hours-s1e1-still.jpg",
        "airDate": null,
        "hasMedia": true
       },
@@ -307,7 +332,7 @@
        "name": "Moonrise",
        "synopsis": "The moon clears the ridge and fireflies drift over the still water.",
        "runtimeMin": 1,
-       "still": "assets/art/garden-hours-s1e2-still.svg",
+       "still": "assets/art/garden-hours-s1e2-still.jpg",
        "airDate": null,
        "hasMedia": true
       }
@@ -326,7 +351,7 @@
        "name": "First Snow",
        "synopsis": "The season's first snow settles on the pavilion roofs and the stone lanterns.",
        "runtimeMin": 1,
-       "still": "assets/art/garden-hours-s2e1-still.svg",
+       "still": "assets/art/garden-hours-s2e1-still.jpg",
        "airDate": null,
        "hasMedia": true
       },
@@ -337,7 +362,7 @@
        "name": "Lantern Walk",
        "synopsis": "Lanterns glow along the courtyard path as embers rise into the night.",
        "runtimeMin": 1,
-       "still": "assets/art/garden-hours-s2e2-still.svg",
+       "still": "assets/art/garden-hours-s2e2-still.jpg",
        "airDate": null,
        "hasMedia": true
       }
@@ -418,8 +443,8 @@
    "featured": true,
    "editorialRank": 20,
    "status": "published",
-   "addedAt": "2026-09-29T02:52:25.394Z",
-   "publishedAt": "2026-09-29T02:52:25.394Z",
+   "addedAt": "2026-09-29T03:51:02.589Z",
+   "publishedAt": "2026-09-29T03:51:02.589Z",
    "credits": {
     "directors": [
      "Sacha Goedegebure"
@@ -522,8 +547,8 @@
    "featured": true,
    "editorialRank": 30,
    "status": "published",
-   "addedAt": "2026-09-29T02:52:25.394Z",
-   "publishedAt": "2026-09-29T02:52:25.394Z",
+   "addedAt": "2026-09-29T03:51:02.589Z",
+   "publishedAt": "2026-09-29T03:51:02.589Z",
    "credits": {
     "directors": [
      "Ian Hubert"
@@ -636,8 +661,8 @@
    "featured": false,
    "editorialRank": 40,
    "status": "published",
-   "addedAt": "2026-09-29T02:52:25.394Z",
-   "publishedAt": "2026-09-29T02:52:25.394Z",
+   "addedAt": "2026-09-29T03:51:02.589Z",
+   "publishedAt": "2026-09-29T03:51:02.589Z",
    "credits": {
     "directors": [
      "Bassam Kurdali"
@@ -720,13 +745,25 @@
     "#5A2A1C",
     "#1A120C"
    ],
-   "resolutions": [],
-   "quality": null,
+   "resolutions": [
+    1080,
+    720,
+    480,
+    360
+   ],
+   "quality": "HD",
    "hdr": null,
-   "audioLanguages": [],
-   "subtitleLanguages": [],
-   "hasSubtitles": false,
-   "audioFormats": [],
+   "audioLanguages": [
+    "zxx"
+   ],
+   "subtitleLanguages": [
+    "en",
+    "ja"
+   ],
+   "hasSubtitles": true,
+   "audioFormats": [
+    "AAC Stereo"
+   ],
    "seasonCount": null,
    "episodeCount": null,
    "playable": true,
@@ -735,8 +772,8 @@
    "featured": false,
    "editorialRank": 50,
    "status": "published",
-   "addedAt": "2026-09-29T02:52:25.394Z",
-   "publishedAt": "2026-09-29T02:52:25.394Z",
+   "addedAt": "2026-09-29T03:51:02.589Z",
+   "publishedAt": "2026-09-29T03:51:02.589Z",
    "credits": {
     "directors": [],
     "cast": [],
@@ -889,13 +926,41 @@
    "src": "media/originals/hanami/master.m3u8",
    "fallbacks": [],
    "variants": [],
-   "resolutions": [],
-   "verified": false,
-   "audioTracks": [],
-   "subtitleTracks": [],
-   "audioFormats": [],
+   "resolutions": [
+    2160,
+    1080,
+    720,
+    480,
+    360
+   ],
+   "verified": true,
+   "audioTracks": [
+    {
+     "lang": "zxx",
+     "label": "Original score (no dialogue)",
+     "kind": "main",
+     "default": true
+    }
+   ],
+   "subtitleTracks": [
+    {
+     "lang": "en",
+     "label": "English",
+     "kind": "subtitles",
+     "src": "media/originals/hanami/subs/en.vtt"
+    },
+    {
+     "lang": "ja",
+     "label": "日本語 (Japanese)",
+     "kind": "subtitles",
+     "src": "media/originals/hanami/subs/ja.vtt"
+    }
+   ],
+   "audioFormats": [
+    "AAC Stereo"
+   ],
    "hdr": null,
-   "durationS": null,
+   "durationS": 16,
    "introStart": null,
    "introEnd": null,
    "creditsStart": null
@@ -909,13 +974,40 @@
    "src": "media/originals/koyo-autumn-pavilion/master.m3u8",
    "fallbacks": [],
    "variants": [],
-   "resolutions": [],
-   "verified": false,
-   "audioTracks": [],
-   "subtitleTracks": [],
-   "audioFormats": [],
+   "resolutions": [
+    1080,
+    720,
+    480,
+    360
+   ],
+   "verified": true,
+   "audioTracks": [
+    {
+     "lang": "zxx",
+     "label": "Original score (no dialogue)",
+     "kind": "main",
+     "default": true
+    }
+   ],
+   "subtitleTracks": [
+    {
+     "lang": "en",
+     "label": "English",
+     "kind": "subtitles",
+     "src": "media/originals/koyo-autumn-pavilion/subs/en.vtt"
+    },
+    {
+     "lang": "ja",
+     "label": "日本語 (Japanese)",
+     "kind": "subtitles",
+     "src": "media/originals/koyo-autumn-pavilion/subs/ja.vtt"
+    }
+   ],
+   "audioFormats": [
+    "AAC Stereo"
+   ],
    "hdr": null,
-   "durationS": null,
+   "durationS": 14,
    "introStart": null,
    "introEnd": null,
    "creditsStart": null
@@ -929,16 +1021,43 @@
    "src": "media/originals/garden-hours-s1e1/master.m3u8",
    "fallbacks": [],
    "variants": [],
-   "resolutions": [],
-   "verified": false,
-   "audioTracks": [],
-   "subtitleTracks": [],
-   "audioFormats": [],
+   "resolutions": [
+    1080,
+    720,
+    480,
+    360
+   ],
+   "verified": true,
+   "audioTracks": [
+    {
+     "lang": "zxx",
+     "label": "Original score (no dialogue)",
+     "kind": "main",
+     "default": true
+    }
+   ],
+   "subtitleTracks": [
+    {
+     "lang": "en",
+     "label": "English",
+     "kind": "subtitles",
+     "src": "media/originals/garden-hours-s1e1/subs/en.vtt"
+    },
+    {
+     "lang": "ja",
+     "label": "日本語 (Japanese)",
+     "kind": "subtitles",
+     "src": "media/originals/garden-hours-s1e1/subs/ja.vtt"
+    }
+   ],
+   "audioFormats": [
+    "AAC Stereo"
+   ],
    "hdr": null,
-   "durationS": null,
-   "introStart": null,
-   "introEnd": null,
-   "creditsStart": null
+   "durationS": 12,
+   "introStart": 0,
+   "introEnd": 3,
+   "creditsStart": 9.5
   },
   "med_garden-hours-s1e2": {
    "id": "med_garden-hours-s1e2",
@@ -949,16 +1068,43 @@
    "src": "media/originals/garden-hours-s1e2/master.m3u8",
    "fallbacks": [],
    "variants": [],
-   "resolutions": [],
-   "verified": false,
-   "audioTracks": [],
-   "subtitleTracks": [],
-   "audioFormats": [],
+   "resolutions": [
+    1080,
+    720,
+    480,
+    360
+   ],
+   "verified": true,
+   "audioTracks": [
+    {
+     "lang": "zxx",
+     "label": "Original score (no dialogue)",
+     "kind": "main",
+     "default": true
+    }
+   ],
+   "subtitleTracks": [
+    {
+     "lang": "en",
+     "label": "English",
+     "kind": "subtitles",
+     "src": "media/originals/garden-hours-s1e2/subs/en.vtt"
+    },
+    {
+     "lang": "ja",
+     "label": "日本語 (Japanese)",
+     "kind": "subtitles",
+     "src": "media/originals/garden-hours-s1e2/subs/ja.vtt"
+    }
+   ],
+   "audioFormats": [
+    "AAC Stereo"
+   ],
    "hdr": null,
-   "durationS": null,
-   "introStart": null,
-   "introEnd": null,
-   "creditsStart": null
+   "durationS": 12,
+   "introStart": 0,
+   "introEnd": 3,
+   "creditsStart": 9.5
   },
   "med_garden-hours-s2e1": {
    "id": "med_garden-hours-s2e1",
@@ -969,16 +1115,43 @@
    "src": "media/originals/garden-hours-s2e1/master.m3u8",
    "fallbacks": [],
    "variants": [],
-   "resolutions": [],
-   "verified": false,
-   "audioTracks": [],
-   "subtitleTracks": [],
-   "audioFormats": [],
+   "resolutions": [
+    1080,
+    720,
+    480,
+    360
+   ],
+   "verified": true,
+   "audioTracks": [
+    {
+     "lang": "zxx",
+     "label": "Original score (no dialogue)",
+     "kind": "main",
+     "default": true
+    }
+   ],
+   "subtitleTracks": [
+    {
+     "lang": "en",
+     "label": "English",
+     "kind": "subtitles",
+     "src": "media/originals/garden-hours-s2e1/subs/en.vtt"
+    },
+    {
+     "lang": "ja",
+     "label": "日本語 (Japanese)",
+     "kind": "subtitles",
+     "src": "media/originals/garden-hours-s2e1/subs/ja.vtt"
+    }
+   ],
+   "audioFormats": [
+    "AAC Stereo"
+   ],
    "hdr": null,
-   "durationS": null,
-   "introStart": null,
-   "introEnd": null,
-   "creditsStart": null
+   "durationS": 12,
+   "introStart": 0,
+   "introEnd": 3,
+   "creditsStart": 9.5
   },
   "med_garden-hours-s2e2": {
    "id": "med_garden-hours-s2e2",
@@ -989,16 +1162,43 @@
    "src": "media/originals/garden-hours-s2e2/master.m3u8",
    "fallbacks": [],
    "variants": [],
-   "resolutions": [],
-   "verified": false,
-   "audioTracks": [],
-   "subtitleTracks": [],
-   "audioFormats": [],
+   "resolutions": [
+    1080,
+    720,
+    480,
+    360
+   ],
+   "verified": true,
+   "audioTracks": [
+    {
+     "lang": "zxx",
+     "label": "Original score (no dialogue)",
+     "kind": "main",
+     "default": true
+    }
+   ],
+   "subtitleTracks": [
+    {
+     "lang": "en",
+     "label": "English",
+     "kind": "subtitles",
+     "src": "media/originals/garden-hours-s2e2/subs/en.vtt"
+    },
+    {
+     "lang": "ja",
+     "label": "日本語 (Japanese)",
+     "kind": "subtitles",
+     "src": "media/originals/garden-hours-s2e2/subs/ja.vtt"
+    }
+   ],
+   "audioFormats": [
+    "AAC Stereo"
+   ],
    "hdr": null,
-   "durationS": null,
-   "introStart": null,
-   "introEnd": null,
-   "creditsStart": null
+   "durationS": 12,
+   "introStart": 0,
+   "introEnd": 3,
+   "creditsStart": 9.5
   }
  }
 }
