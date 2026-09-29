@@ -72,6 +72,6 @@ export function carousel({ id, title, subtitle, href, items, variant = 'poster',
 
 /** A responsive grid of cards (browse pages, My List, search results). */
 export function cardGrid(items, { variant = 'poster', render } = {}) {
-  const build = render || ((item) => titleCard(item.title || item, { ...(item.title ? item : {}), variant }));
+  const build = render || ((item) => (item && typeof item.title === 'object' ? titleCard(item.title, { ...item, variant }) : titleCard(item, { variant })));
   return h('ul', { class: ['lm-grid', variant === 'landscape' && 'lm-grid--landscape'], role: 'list' }, ...items.map((item) => h('li', null, build(item))));
 }

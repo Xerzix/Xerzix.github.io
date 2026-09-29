@@ -136,7 +136,7 @@ export function titleCard(t, o = {}) {
     h('div', { class: 'lm-card__caption' },
       h('span', { class: 'lm-card__title' }, t.title),
       landscape
-        ? h('span', { class: 'lm-card__sub' }, episodeLabel || (o.upNext ? 'Up next' : ''), o.durationS ? h('span', null, `· ${timeLeft(o.positionS, o.durationS)}`) : null)
+        ? h('span', { class: 'lm-card__sub' }, [episodeLabel || (o.upNext ? 'Up next' : ''), o.durationS ? timeLeft(o.positionS, o.durationS) : ''].filter(Boolean).join(' · '))
         : h('span', { class: 'lm-card__sub' }, facts.join(' · '), h('span', { class: 'lm-badge lm-badge--solid' }, t.ageRating))));
   return card;
 }

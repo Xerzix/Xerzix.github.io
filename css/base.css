@@ -112,6 +112,12 @@ p {
   border-radius: var(--lm-radius-xs);
 }
 
+/* Headings focused by the router after navigation don't need a visible ring. */
+[tabindex='-1']:focus:not(:focus-visible),
+h1[tabindex='-1']:focus {
+  outline: none;
+}
+
 .lm-skip-link {
   position: fixed;
   left: 16px;

@@ -81,6 +81,7 @@ async function render({ restore }) {
     route: match?.route,
     navigate,
     setTitle: (t) => {
+      ctx.titled = true;
       document.title = t ? `${t} · Lumina` : 'Lumina';
     },
     onDestroy: (fn) => cleanups.push(fn),
@@ -137,7 +138,7 @@ function swap(seq, ctx, node, route, cleanups, abort, restore = null) {
   const r = route || {};
   document.body.dataset.layout = r.layout || 'app';
   document.body.dataset.page = r.page || r.path?.split('/')[1] || 'home';
-  if (!document.title || r.title) ctx.setTitle(r.title);
+  if (!ctx.titled) ctx.setTitle(r.title);
   current = { route: r, ctx, cleanups, abort, path: ctx.path };
 
   window.scrollTo({ top: restore ?? 0, behavior: 'instant' });

@@ -207,8 +207,8 @@
 @media (hover: none), (pointer: coarse) {
   .lm-card__info-touch {
     position: absolute;
+    top: 6px;
     right: 6px;
-    bottom: 6px;
     z-index: 4;
     display: grid;
     place-items: center;
@@ -226,9 +226,6 @@
     height: 18px;
   }
 
-  .lm-card[data-variant='landscape'] .lm-card__info-touch {
-    bottom: 22px;
-  }
 }
 
 .lm-card--skeleton .lm-card__art {
