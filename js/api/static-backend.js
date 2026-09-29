@@ -215,6 +215,7 @@ export async function createStaticBackend() {
         return { ok: true };
       },
       continueWatching: async () => ({ items: progressRows().filter((p) => !p.completed && p.positionS >= 15).filter((p, i, arr) => arr.findIndex((x) => x.titleId === p.titleId) === i).map((p) => ({ ...p, title: byId.get(p.titleId) })) }),
+      titleProgress: async (titleId) => ({ items: Object.values(lib().progress).filter((p) => p.titleId === titleId) }),
       saveProgress: async ({ titleId, episodeId = null, positionS, durationS = null, completed, watchedDelta = 0 }) => {
         requireTitle(titleId);
         if (profile().preferences.playback?.saveProgress === false) return { completed: false, positionS, durationS };

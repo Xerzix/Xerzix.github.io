@@ -57,6 +57,7 @@ JSON over HTTPS, same-origin, cookie session. The browser client lives in `js/ap
 | PUT / DELETE | `/api/library/watchlist/:titleId` | `{ok}` |
 | PUT | `/api/library/watchlist-order` `{titleIds[]}` | `{ok}` |
 | GET | `/api/library/continue` | `{items: [{titleId, episodeId, positionS, durationS, episode, title}]}` |
+| GET | `/api/library/title-progress/:titleId` | `{items: [{titleId, episodeId, positionS, durationS, completed, updatedAt}]}` |
 | PUT | `/api/library/progress` `{titleId, episodeId?, positionS, durationS?, completed?, watchedDelta?}` | `{completed, positionS, durationS, updatedAt}` |
 | POST | `/api/library/watched` `{titleId, episodeId?}`; DELETE `/api/library/watched/:titleId` | `{ok}` |
 | GET | `/api/library/history?page` | `{items: [{id, titleId, episodeId, episode, watchedAt, seconds, title}], total, page, pageSize}` |

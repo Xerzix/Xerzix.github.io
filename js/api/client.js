@@ -126,6 +126,7 @@ export function createServerBackend() {
       removeFromList: (titleId) => del(`/api/library/watchlist/${enc(titleId)}`),
       reorderList: (titleIds) => put('/api/library/watchlist-order', { titleIds }),
       continueWatching: () => get('/api/library/continue'),
+      titleProgress: (titleId) => get(`/api/library/title-progress/${enc(titleId)}`),
       saveProgress: (d, opts) => put('/api/library/progress', d, opts),
       markWatched: (titleId, episodeId) => post('/api/library/watched', { titleId, episodeId }),
       unmarkWatched: (titleId) => del(`/api/library/watched/${enc(titleId)}`),

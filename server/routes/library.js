@@ -48,6 +48,11 @@ export default function register(app, { db, services }) {
     return { items: withTitles(latest) };
   });
 
+  // Per-episode (or movie) progress for one title — used by episode lists.
+  app.get('/api/library/title-progress/:titleId', requireProfile, (ctx) => ({
+    items: library.progressRows(ctx.profile.id).filter((p) => p.titleId === ctx.params.titleId).map(({ episode, ...p }) => p),
+  }));
+
   app.put('/api/library/progress', requireProfile, rateLimit('progress', { max: 240, windowMs: 60_000, by: 'account' }), async (ctx) => {
     const body = v.parse(progressSchema, await ctx.body());
     return library.saveProgress(ctx.profile, body);
