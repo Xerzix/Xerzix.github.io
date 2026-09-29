@@ -1,0 +1,13 @@
+/* View-level styles. Each feature area appends its own section below. */
+
+/* ─── Home ─── */
+.lm-home__rows {
+  position: relative;
+  z-index: var(--lm-z-content);
+  margin-top: calc(-1 * clamp(40px, 8vh, 110px));
+  padding-bottom: var(--lm-space-8);
+}
+
+.lm-home__rows > .lm-row:first-child {
+  margin-top: 0;
+}

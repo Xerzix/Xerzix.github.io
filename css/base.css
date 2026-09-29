@@ -1,0 +1,346 @@
+/* Lumina base: reset, typography, accessibility primitives and layout helpers. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: calc(var(--lm-header-h) + 16px);
+  background: var(--lm-bg);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--lm-bg);
+  color: var(--lm-text);
+  font-family: var(--lm-font-ui);
+  font-size: var(--lm-fs-md);
+  line-height: var(--lm-lh);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+img {
+  height: auto;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+p a,
+.lm-prose a,
+.lm-link {
+  color: var(--lm-accent-text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--lm-accent-text) 45%, transparent);
+  text-underline-offset: 0.18em;
+  transition: text-decoration-color var(--lm-dur-2) var(--lm-ease);
+}
+
+p a:hover,
+.lm-prose a:hover,
+.lm-link:hover {
+  text-decoration-color: currentColor;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: var(--lm-weight-semibold);
+  line-height: var(--lm-lh-tight);
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+:where(ul[role='list'], ol[role='list']) {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+::selection {
+  background: var(--lm-accent);
+  color: var(--lm-text);
+}
+
+/* Visible keyboard focus everywhere, never on mouse click. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--lm-focus);
+  outline-offset: 3px;
+  border-radius: var(--lm-radius-xs);
+}
+
+.lm-skip-link {
+  position: fixed;
+  left: 16px;
+  top: 12px;
+  z-index: calc(var(--lm-z-intro) + 1);
+  padding: 10px 16px;
+  border-radius: var(--lm-radius-sm);
+  background: var(--lm-button);
+  color: var(--lm-button-text);
+  font-weight: var(--lm-weight-semibold);
+  transform: translateY(-160%);
+  transition: transform var(--lm-dur-2) var(--lm-ease);
+}
+
+.lm-skip-link:focus-visible {
+  transform: none;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--lm-text) 22%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--lm-text) 18%, transparent);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ─── Typography helpers ─── */
+.lm-display {
+  font-family: var(--lm-font-display);
+  font-weight: var(--lm-weight-medium);
+  font-size: var(--lm-fs-display);
+  letter-spacing: 0.01em;
+  line-height: 1.02;
+}
+
+.lm-h1 {
+  font-family: var(--lm-font-display);
+  font-weight: var(--lm-weight-semibold);
+  font-size: var(--lm-fs-3xl);
+  letter-spacing: 0.01em;
+}
+
+.lm-h2 {
+  font-family: var(--lm-font-display);
+  font-weight: var(--lm-weight-semibold);
+  font-size: var(--lm-fs-2xl);
+  letter-spacing: 0.01em;
+}
+
+.lm-h3 {
+  font-size: var(--lm-fs-lg);
+  font-weight: var(--lm-weight-semibold);
+}
+
+.lm-eyebrow {
+  font-size: var(--lm-fs-xs);
+  font-weight: var(--lm-weight-semibold);
+  letter-spacing: var(--lm-tracking-wide);
+  text-transform: uppercase;
+  color: var(--lm-gold);
+}
+
+.lm-muted {
+  color: var(--lm-text-2);
+}
+
+.lm-small {
+  font-size: var(--lm-fs-sm);
+}
+
+.lm-xsmall {
+  font-size: var(--lm-fs-xs);
+}
+
+.lm-jp {
+  font-family: var(--lm-font-jp);
+}
+
+.lm-prose {
+  max-width: var(--lm-maxw-text);
+  color: var(--lm-text-2);
+}
+
+.lm-prose h2,
+.lm-prose h3 {
+  color: var(--lm-text);
+  margin: 2em 0 0.6em;
+}
+
+.lm-prose h2 {
+  font-family: var(--lm-font-display);
+  font-size: var(--lm-fs-2xl);
+}
+
+.lm-prose h3 {
+  font-size: var(--lm-fs-lg);
+}
+
+.lm-prose p,
+.lm-prose ul,
+.lm-prose ol {
+  margin: 0 0 1em;
+}
+
+.lm-prose li + li {
+  margin-top: 0.35em;
+}
+
+.lm-prose strong {
+  color: var(--lm-text);
+}
+
+/* Decorative gold rule used under section headings */
+.lm-rule {
+  display: block;
+  width: 44px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--lm-gold), transparent);
+  margin-top: var(--lm-space-2);
+}
+
+/* ─── Layout helpers ─── */
+.lm-container {
+  width: 100%;
+  max-width: var(--lm-maxw);
+  margin-inline: auto;
+  padding-inline: var(--lm-gutter);
+}
+
+.lm-page {
+  position: relative;
+  z-index: var(--lm-z-content);
+  padding-top: calc(var(--lm-header-h) + var(--lm-space-8));
+  padding-bottom: calc(var(--lm-space-16) + var(--lm-bottom-nav-h));
+  min-height: 70vh;
+}
+
+.lm-page--flush {
+  padding-top: 0;
+}
+
+.lm-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--lm-space-4);
+  margin-bottom: var(--lm-space-8);
+}
+
+.lm-page-header p {
+  color: var(--lm-text-2);
+  margin-top: var(--lm-space-2);
+  max-width: 60ch;
+}
+
+.lm-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lm-space-4);
+}
+
+.lm-stack--sm { gap: var(--lm-space-2); }
+.lm-stack--lg { gap: var(--lm-space-8); }
+
+.lm-cluster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lm-space-3);
+}
+
+.lm-cluster--sm { gap: var(--lm-space-2); }
+.lm-spacer { flex: 1; }
+
+.lm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--lm-card-w), 1fr));
+  gap: var(--lm-space-6) var(--lm-row-gap);
+}
+
+.lm-grid--landscape {
+  grid-template-columns: repeat(auto-fill, minmax(var(--lm-card-w-landscape), 1fr));
+}
+
+.lm-two-col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--lm-space-8);
+}
+
+@media (min-width: 960px) {
+  .lm-two-col {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

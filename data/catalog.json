@@ -1,0 +1,1004 @@
+{
+ "version": 1,
+ "generatedAt": "2026-09-29T03:12:34.881Z",
+ "titles": [
+  {
+   "id": "hanami",
+   "type": "movie",
+   "title": "Hanami",
+   "originalTitle": "花見",
+   "tagline": "The first petals of the season.",
+   "synopsis": "Lumina's opening ident, extended. A temple emerges from the dark, lanterns wake along the water and the first petals of the season drift through the garden at dusk. Rendered for the platform at 3840 × 2160 as a reference for 4K playback.",
+   "year": 2026,
+   "releaseDate": "2026-09-29",
+   "runtimeMin": 1,
+   "ageRating": "TV-G",
+   "ratingSource": "advisory",
+   "minAge": 0,
+   "genres": [
+    "Ambient",
+    "Short"
+   ],
+   "tags": [
+    "lumina-original"
+   ],
+   "moods": [
+    "relaxing",
+    "meditative",
+    "beautiful-cinematography",
+    "no-dialogue",
+    "family-friendly"
+   ],
+   "keywords": [
+    "cherry blossom",
+    "sakura",
+    "temple",
+    "garden",
+    "lantern",
+    "4k"
+   ],
+   "countries": [],
+   "originalLanguage": "zxx",
+   "directors": [],
+   "cast": [],
+   "awards": [],
+   "poster": "assets/art/hanami-poster.svg",
+   "backdrop": "assets/art/hanami-backdrop.svg",
+   "palette": [
+    "#781B32",
+    "#F4B6C7",
+    "#C6A46A",
+    "#1A0F14"
+   ],
+   "resolutions": [],
+   "quality": null,
+   "hdr": null,
+   "audioLanguages": [],
+   "subtitleLanguages": [],
+   "hasSubtitles": false,
+   "audioFormats": [],
+   "seasonCount": null,
+   "episodeCount": null,
+   "playable": true,
+   "hasTrailer": false,
+   "memberRating": null,
+   "featured": true,
+   "editorialRank": 5,
+   "status": "published",
+   "addedAt": "2026-09-29T02:52:25.394Z",
+   "publishedAt": "2026-09-29T02:52:25.394Z",
+   "credits": {
+    "directors": [],
+    "cast": [],
+    "crew": [
+     {
+      "name": "Lumina Studio",
+      "job": "Production"
+     }
+    ]
+   },
+   "license": {
+    "name": "Lumina Original",
+    "attribution": "© Lumina"
+   },
+   "trailerMediaId": null,
+   "creator": null,
+   "seasons": []
+  },
+  {
+   "id": "sintel",
+   "type": "movie",
+   "title": "Sintel",
+   "originalTitle": null,
+   "tagline": "She would search the whole world for him.",
+   "synopsis": "A lonely young woman named Sintel rescues a wounded baby dragon and names him Scales. When a grown dragon snatches him away, she sets out alone across snow, desert and mountain, and her search leads her to a truth she never expected.",
+   "year": 2010,
+   "releaseDate": "2010-09-27",
+   "runtimeMin": 15,
+   "ageRating": "TV-14",
+   "ratingSource": "advisory",
+   "minAge": 14,
+   "genres": [
+    "Animation",
+    "Fantasy",
+    "Adventure",
+    "Drama",
+    "Short"
+   ],
+   "tags": [
+    "open-movie"
+   ],
+   "moods": [
+    "emotional",
+    "epic",
+    "bittersweet",
+    "beautiful-cinematography",
+    "notable-soundtrack"
+   ],
+   "keywords": [
+    "dragon",
+    "quest",
+    "loss",
+    "snow",
+    "friendship",
+    "blender"
+   ],
+   "countries": [
+    "NL"
+   ],
+   "originalLanguage": "en",
+   "directors": [
+    "Colin Levy"
+   ],
+   "cast": [
+    "Halina Reijn",
+    "Thom Hoffman"
+   ],
+   "awards": [],
+   "poster": "assets/art/sintel-poster.svg",
+   "backdrop": "assets/art/sintel-backdrop.svg",
+   "palette": [
+    "#8FA9B8",
+    "#4E5D6C",
+    "#C4462E",
+    "#E8D8B8"
+   ],
+   "resolutions": [],
+   "quality": null,
+   "hdr": null,
+   "audioLanguages": [
+    "en"
+   ],
+   "subtitleLanguages": [],
+   "hasSubtitles": false,
+   "audioFormats": [],
+   "seasonCount": null,
+   "episodeCount": null,
+   "playable": true,
+   "hasTrailer": false,
+   "memberRating": null,
+   "featured": true,
+   "editorialRank": 10,
+   "status": "published",
+   "addedAt": "2026-09-29T02:52:25.393Z",
+   "publishedAt": "2026-09-29T02:52:25.393Z",
+   "credits": {
+    "directors": [
+     "Colin Levy"
+    ],
+    "cast": [
+     {
+      "name": "Halina Reijn",
+      "role": "Sintel"
+     },
+     {
+      "name": "Thom Hoffman",
+      "role": "Shaman"
+     }
+    ],
+    "crew": [
+     {
+      "name": "Esther Wouda",
+      "job": "Writer"
+     },
+     {
+      "name": "Jan Morgenstern",
+      "job": "Music"
+     },
+     {
+      "name": "Ton Roosendaal",
+      "job": "Producer"
+     }
+    ]
+   },
+   "license": {
+    "name": "CC BY 3.0",
+    "url": "https://creativecommons.org/licenses/by/3.0/",
+    "attribution": "© copyright Blender Foundation | durian.blender.org",
+    "source": "https://durian.blender.org/"
+   },
+   "trailerMediaId": null,
+   "creator": null,
+   "seasons": []
+  },
+  {
+   "id": "garden-hours",
+   "type": "series",
+   "title": "Garden Hours",
+   "originalTitle": null,
+   "tagline": "Slow television from the Lumina gardens.",
+   "synopsis": "Each short episode keeps a fixed camera on one corner of the grounds as the light, the weather and the season change. Made for background calm, for winding down, or for a quiet moment between films.",
+   "year": 2026,
+   "releaseDate": "2026-09-29",
+   "runtimeMin": 1,
+   "ageRating": "TV-G",
+   "ratingSource": "advisory",
+   "minAge": 0,
+   "genres": [
+    "Ambient",
+    "Nature"
+   ],
+   "tags": [
+    "lumina-original"
+   ],
+   "moods": [
+    "relaxing",
+    "meditative",
+    "beautiful-cinematography",
+    "no-dialogue",
+    "family-friendly"
+   ],
+   "keywords": [
+    "slow tv",
+    "garden",
+    "seasons",
+    "snow",
+    "lanterns",
+    "moon"
+   ],
+   "countries": [],
+   "originalLanguage": "zxx",
+   "directors": [],
+   "cast": [],
+   "awards": [],
+   "poster": "assets/art/garden-hours-poster.svg",
+   "backdrop": "assets/art/garden-hours-backdrop.svg",
+   "palette": [
+    "#2B3A55",
+    "#F4B6C7",
+    "#E8C07D",
+    "#0B0E14"
+   ],
+   "resolutions": [],
+   "quality": null,
+   "hdr": null,
+   "audioLanguages": [],
+   "subtitleLanguages": [],
+   "hasSubtitles": false,
+   "audioFormats": [],
+   "seasonCount": 2,
+   "episodeCount": 4,
+   "playable": true,
+   "hasTrailer": false,
+   "memberRating": null,
+   "featured": true,
+   "editorialRank": 15,
+   "status": "published",
+   "addedAt": "2026-09-29T02:52:25.394Z",
+   "publishedAt": "2026-09-29T02:52:25.394Z",
+   "credits": {
+    "directors": [],
+    "cast": [],
+    "crew": [
+     {
+      "name": "Lumina Studio",
+      "job": "Production"
+     }
+    ]
+   },
+   "license": {
+    "name": "Lumina Original",
+    "attribution": "© Lumina"
+   },
+   "trailerMediaId": null,
+   "creator": null,
+   "seasons": [
+    {
+     "number": 1,
+     "name": "Blossom Season",
+     "synopsis": "Spring evenings in the cherry garden.",
+     "year": 2026,
+     "episodes": [
+      {
+       "id": "garden-hours-s1e1",
+       "seasonNumber": 1,
+       "number": 1,
+       "name": "Dawn Petals",
+       "synopsis": "First light reaches the temple roof while the cherry trees shed their petals into the pond.",
+       "runtimeMin": 1,
+       "still": "assets/art/garden-hours-s1e1-still.svg",
+       "airDate": null,
+       "hasMedia": true
+      },
+      {
+       "id": "garden-hours-s1e2",
+       "seasonNumber": 1,
+       "number": 2,
+       "name": "Moonrise",
+       "synopsis": "The moon clears the ridge and fireflies drift over the still water.",
+       "runtimeMin": 1,
+       "still": "assets/art/garden-hours-s1e2-still.svg",
+       "airDate": null,
+       "hasMedia": true
+      }
+     ]
+    },
+    {
+     "number": 2,
+     "name": "Winter Lights",
+     "synopsis": "Cold nights, soft snow and lantern light.",
+     "year": 2026,
+     "episodes": [
+      {
+       "id": "garden-hours-s2e1",
+       "seasonNumber": 2,
+       "number": 1,
+       "name": "First Snow",
+       "synopsis": "The season's first snow settles on the pavilion roofs and the stone lanterns.",
+       "runtimeMin": 1,
+       "still": "assets/art/garden-hours-s2e1-still.svg",
+       "airDate": null,
+       "hasMedia": true
+      },
+      {
+       "id": "garden-hours-s2e2",
+       "seasonNumber": 2,
+       "number": 2,
+       "name": "Lantern Walk",
+       "synopsis": "Lanterns glow along the courtyard path as embers rise into the night.",
+       "runtimeMin": 1,
+       "still": "assets/art/garden-hours-s2e2-still.svg",
+       "airDate": null,
+       "hasMedia": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "big-buck-bunny",
+   "type": "movie",
+   "title": "Big Buck Bunny",
+   "originalTitle": null,
+   "tagline": "One gentle giant. Three bullies. No more Mr Nice Bunny.",
+   "synopsis": "A lazy spring day in the forest turns sour when three mischievous rodents torment a gentle giant of a rabbit and destroy the butterflies he loves. Big Buck Bunny's patience finally runs out, and he sets about an elaborate, slapstick revenge.",
+   "year": 2008,
+   "releaseDate": "2008-05-30",
+   "runtimeMin": 10,
+   "ageRating": "TV-G",
+   "ratingSource": "advisory",
+   "minAge": 0,
+   "genres": [
+    "Animation",
+    "Comedy",
+    "Family",
+    "Short"
+   ],
+   "tags": [
+    "open-movie",
+    "family"
+   ],
+   "moods": [
+    "lighthearted",
+    "slapstick",
+    "colorful",
+    "no-dialogue",
+    "family-friendly",
+    "relaxing"
+   ],
+   "keywords": [
+    "rabbit",
+    "revenge",
+    "forest",
+    "butterfly",
+    "squirrels",
+    "blender"
+   ],
+   "countries": [
+    "NL"
+   ],
+   "originalLanguage": "zxx",
+   "directors": [
+    "Sacha Goedegebure"
+   ],
+   "cast": [],
+   "awards": [],
+   "poster": "assets/art/big-buck-bunny-poster.svg",
+   "backdrop": "assets/art/big-buck-bunny-backdrop.svg",
+   "palette": [
+    "#7DA453",
+    "#F2C14E",
+    "#3F6E2A",
+    "#A7D3F2"
+   ],
+   "resolutions": [],
+   "quality": null,
+   "hdr": null,
+   "audioLanguages": [
+    "zxx"
+   ],
+   "subtitleLanguages": [],
+   "hasSubtitles": false,
+   "audioFormats": [],
+   "seasonCount": null,
+   "episodeCount": null,
+   "playable": true,
+   "hasTrailer": false,
+   "memberRating": null,
+   "featured": true,
+   "editorialRank": 20,
+   "status": "published",
+   "addedAt": "2026-09-29T02:52:25.394Z",
+   "publishedAt": "2026-09-29T02:52:25.394Z",
+   "credits": {
+    "directors": [
+     "Sacha Goedegebure"
+    ],
+    "cast": [],
+    "crew": [
+     {
+      "name": "Jan Morgenstern",
+      "job": "Music"
+     },
+     {
+      "name": "Ton Roosendaal",
+      "job": "Producer"
+     }
+    ]
+   },
+   "license": {
+    "name": "CC BY 3.0",
+    "url": "https://creativecommons.org/licenses/by/3.0/",
+    "attribution": "© copyright 2008, Blender Foundation | www.bigbuckbunny.org",
+    "source": "https://peach.blender.org/"
+   },
+   "trailerMediaId": null,
+   "creator": null,
+   "seasons": []
+  },
+  {
+   "id": "tears-of-steel",
+   "type": "movie",
+   "title": "Tears of Steel",
+   "originalTitle": null,
+   "tagline": "To save the future, they have to break a heart all over again.",
+   "synopsis": "In a near-future Amsterdam overrun by rogue robots, a small band of scientists and soldiers attempts a desperate experiment: return to the moment a young man broke up with the woman who would go on to build the machines, and change how it ends.",
+   "year": 2012,
+   "releaseDate": "2012-09-26",
+   "runtimeMin": 12,
+   "ageRating": "TV-14",
+   "ratingSource": "advisory",
+   "minAge": 14,
+   "genres": [
+    "Science Fiction",
+    "Action",
+    "Short"
+   ],
+   "tags": [
+    "open-movie"
+   ],
+   "moods": [
+    "action-packed",
+    "visual-effects",
+    "complex-plot",
+    "romantic"
+   ],
+   "keywords": [
+    "robots",
+    "time",
+    "amsterdam",
+    "memory",
+    "breakup",
+    "blender",
+    "live action"
+   ],
+   "countries": [
+    "NL"
+   ],
+   "originalLanguage": "en",
+   "directors": [
+    "Ian Hubert"
+   ],
+   "cast": [
+    "Derek de Lint",
+    "Sergio Hasselbaink",
+    "Vanja Rukavina",
+    "Denise Rebergen",
+    "Rogier Schippers"
+   ],
+   "awards": [],
+   "poster": "assets/art/tears-of-steel-poster.svg",
+   "backdrop": "assets/art/tears-of-steel-backdrop.svg",
+   "palette": [
+    "#2E6F8E",
+    "#1C2A33",
+    "#D96A2B",
+    "#9BB7C4"
+   ],
+   "resolutions": [],
+   "quality": null,
+   "hdr": null,
+   "audioLanguages": [
+    "en"
+   ],
+   "subtitleLanguages": [],
+   "hasSubtitles": false,
+   "audioFormats": [],
+   "seasonCount": null,
+   "episodeCount": null,
+   "playable": true,
+   "hasTrailer": false,
+   "memberRating": null,
+   "featured": true,
+   "editorialRank": 30,
+   "status": "published",
+   "addedAt": "2026-09-29T02:52:25.394Z",
+   "publishedAt": "2026-09-29T02:52:25.394Z",
+   "credits": {
+    "directors": [
+     "Ian Hubert"
+    ],
+    "cast": [
+     {
+      "name": "Derek de Lint"
+     },
+     {
+      "name": "Sergio Hasselbaink"
+     },
+     {
+      "name": "Vanja Rukavina"
+     },
+     {
+      "name": "Denise Rebergen"
+     },
+     {
+      "name": "Rogier Schippers"
+     }
+    ],
+    "crew": [
+     {
+      "name": "Ton Roosendaal",
+      "job": "Producer"
+     }
+    ]
+   },
+   "license": {
+    "name": "CC BY 3.0",
+    "url": "https://creativecommons.org/licenses/by/3.0/",
+    "attribution": "(CC) Blender Foundation | mango.blender.org",
+    "source": "https://mango.blender.org/"
+   },
+   "trailerMediaId": null,
+   "creator": null,
+   "seasons": []
+  },
+  {
+   "id": "elephants-dream",
+   "type": "movie",
+   "title": "Elephants Dream",
+   "originalTitle": null,
+   "tagline": "The machine is not what it seems.",
+   "synopsis": "Deep inside a vast, living machine, the elderly Proog guides the young Emo through rooms of cables, bells and impossible architecture. But the world Proog insists is real is not the world Emo sees, and their clash of imaginations turns the journey into something dangerous.",
+   "year": 2006,
+   "releaseDate": "2006-03-24",
+   "runtimeMin": 11,
+   "ageRating": "TV-PG",
+   "ratingSource": "advisory",
+   "minAge": 8,
+   "genres": [
+    "Animation",
+    "Science Fiction",
+    "Fantasy",
+    "Short"
+   ],
+   "tags": [
+    "open-movie",
+    "hidden-gem"
+   ],
+   "moods": [
+    "surreal",
+    "mysterious",
+    "complex-plot",
+    "atmospheric",
+    "thought-provoking"
+   ],
+   "keywords": [
+    "machine",
+    "dream",
+    "imagination",
+    "mentor",
+    "blender"
+   ],
+   "countries": [
+    "NL"
+   ],
+   "originalLanguage": "en",
+   "directors": [
+    "Bassam Kurdali"
+   ],
+   "cast": [
+    "Tygo Gernandt",
+    "Cas Jansen"
+   ],
+   "awards": [],
+   "poster": "assets/art/elephants-dream-poster.svg",
+   "backdrop": "assets/art/elephants-dream-backdrop.svg",
+   "palette": [
+    "#C9772E",
+    "#5A3A22",
+    "#2B1E16",
+    "#E8B26A"
+   ],
+   "resolutions": [],
+   "quality": null,
+   "hdr": null,
+   "audioLanguages": [
+    "en"
+   ],
+   "subtitleLanguages": [],
+   "hasSubtitles": false,
+   "audioFormats": [],
+   "seasonCount": null,
+   "episodeCount": null,
+   "playable": true,
+   "hasTrailer": false,
+   "memberRating": null,
+   "featured": false,
+   "editorialRank": 40,
+   "status": "published",
+   "addedAt": "2026-09-29T02:52:25.394Z",
+   "publishedAt": "2026-09-29T02:52:25.394Z",
+   "credits": {
+    "directors": [
+     "Bassam Kurdali"
+    ],
+    "cast": [
+     {
+      "name": "Tygo Gernandt",
+      "role": "Proog"
+     },
+     {
+      "name": "Cas Jansen",
+      "role": "Emo"
+     }
+    ],
+    "crew": [
+     {
+      "name": "Jan Morgenstern",
+      "job": "Music"
+     },
+     {
+      "name": "Ton Roosendaal",
+      "job": "Producer"
+     }
+    ]
+   },
+   "license": {
+    "name": "CC BY 2.5",
+    "url": "https://creativecommons.org/licenses/by/2.5/",
+    "attribution": "© copyright 2006, Blender Foundation | Netherlands Media Art Institute | www.elephantsdream.org",
+    "source": "https://orange.blender.org/"
+   },
+   "trailerMediaId": null,
+   "creator": null,
+   "seasons": []
+  },
+  {
+   "id": "koyo-autumn-pavilion",
+   "type": "movie",
+   "title": "Kōyō: Autumn Pavilion",
+   "originalTitle": "紅葉",
+   "tagline": "An afternoon that turns to gold.",
+   "synopsis": "Maple leaves turn and fall around a lakeside pavilion as the afternoon light goes gold. An ambient Lumina Original for quiet evenings.",
+   "year": 2026,
+   "releaseDate": "2026-09-29",
+   "runtimeMin": 1,
+   "ageRating": "TV-G",
+   "ratingSource": "advisory",
+   "minAge": 0,
+   "genres": [
+    "Ambient",
+    "Short"
+   ],
+   "tags": [
+    "lumina-original"
+   ],
+   "moods": [
+    "relaxing",
+    "meditative",
+    "beautiful-cinematography",
+    "no-dialogue",
+    "family-friendly"
+   ],
+   "keywords": [
+    "autumn",
+    "maple",
+    "pavilion",
+    "garden",
+    "lake"
+   ],
+   "countries": [],
+   "originalLanguage": "zxx",
+   "directors": [],
+   "cast": [],
+   "awards": [],
+   "poster": "assets/art/koyo-autumn-pavilion-poster.svg",
+   "backdrop": "assets/art/koyo-autumn-pavilion-backdrop.svg",
+   "palette": [
+    "#B5432A",
+    "#E39B3B",
+    "#5A2A1C",
+    "#1A120C"
+   ],
+   "resolutions": [],
+   "quality": null,
+   "hdr": null,
+   "audioLanguages": [],
+   "subtitleLanguages": [],
+   "hasSubtitles": false,
+   "audioFormats": [],
+   "seasonCount": null,
+   "episodeCount": null,
+   "playable": true,
+   "hasTrailer": false,
+   "memberRating": null,
+   "featured": false,
+   "editorialRank": 50,
+   "status": "published",
+   "addedAt": "2026-09-29T02:52:25.394Z",
+   "publishedAt": "2026-09-29T02:52:25.394Z",
+   "credits": {
+    "directors": [],
+    "cast": [],
+    "crew": [
+     {
+      "name": "Lumina Studio",
+      "job": "Production"
+     }
+    ]
+   },
+   "license": {
+    "name": "Lumina Original",
+    "attribution": "© Lumina"
+   },
+   "trailerMediaId": null,
+   "creator": null,
+   "seasons": []
+  }
+ ],
+ "media": {
+  "med_sintel": {
+   "id": "med_sintel",
+   "titleId": "sintel",
+   "episodeId": null,
+   "role": "main",
+   "kind": "hls",
+   "src": "https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8",
+   "fallbacks": [
+    {
+     "kind": "progressive",
+     "src": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
+    }
+   ],
+   "variants": [],
+   "resolutions": [],
+   "verified": false,
+   "audioTracks": [
+    {
+     "lang": "en",
+     "label": "English",
+     "kind": "main",
+     "default": true
+    }
+   ],
+   "subtitleTracks": [],
+   "audioFormats": [],
+   "hdr": null,
+   "durationS": null,
+   "introStart": null,
+   "introEnd": null,
+   "creditsStart": null
+  },
+  "med_big-buck-bunny": {
+   "id": "med_big-buck-bunny",
+   "titleId": "big-buck-bunny",
+   "episodeId": null,
+   "role": "main",
+   "kind": "hls",
+   "src": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+   "fallbacks": [
+    {
+     "kind": "progressive",
+     "src": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+    }
+   ],
+   "variants": [],
+   "resolutions": [],
+   "verified": false,
+   "audioTracks": [
+    {
+     "lang": "zxx",
+     "label": "No dialogue (music and effects)",
+     "kind": "main",
+     "default": true
+    }
+   ],
+   "subtitleTracks": [],
+   "audioFormats": [],
+   "hdr": null,
+   "durationS": null,
+   "introStart": null,
+   "introEnd": null,
+   "creditsStart": null
+  },
+  "med_tears-of-steel": {
+   "id": "med_tears-of-steel",
+   "titleId": "tears-of-steel",
+   "episodeId": null,
+   "role": "main",
+   "kind": "hls",
+   "src": "https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8",
+   "fallbacks": [
+    {
+     "kind": "progressive",
+     "src": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+    }
+   ],
+   "variants": [],
+   "resolutions": [],
+   "verified": false,
+   "audioTracks": [
+    {
+     "lang": "en",
+     "label": "English",
+     "kind": "main",
+     "default": true
+    }
+   ],
+   "subtitleTracks": [],
+   "audioFormats": [],
+   "hdr": null,
+   "durationS": null,
+   "introStart": null,
+   "introEnd": null,
+   "creditsStart": null
+  },
+  "med_elephants-dream": {
+   "id": "med_elephants-dream",
+   "titleId": "elephants-dream",
+   "episodeId": null,
+   "role": "main",
+   "kind": "progressive",
+   "src": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+   "fallbacks": [],
+   "variants": [],
+   "resolutions": [],
+   "verified": false,
+   "audioTracks": [
+    {
+     "lang": "en",
+     "label": "English",
+     "kind": "main",
+     "default": true
+    }
+   ],
+   "subtitleTracks": [],
+   "audioFormats": [],
+   "hdr": null,
+   "durationS": null,
+   "introStart": null,
+   "introEnd": null,
+   "creditsStart": null
+  },
+  "med_hanami": {
+   "id": "med_hanami",
+   "titleId": "hanami",
+   "episodeId": null,
+   "role": "main",
+   "kind": "hls",
+   "src": "media/originals/hanami/master.m3u8",
+   "fallbacks": [],
+   "variants": [],
+   "resolutions": [],
+   "verified": false,
+   "audioTracks": [],
+   "subtitleTracks": [],
+   "audioFormats": [],
+   "hdr": null,
+   "durationS": null,
+   "introStart": null,
+   "introEnd": null,
+   "creditsStart": null
+  },
+  "med_koyo-autumn-pavilion": {
+   "id": "med_koyo-autumn-pavilion",
+   "titleId": "koyo-autumn-pavilion",
+   "episodeId": null,
+   "role": "main",
+   "kind": "hls",
+   "src": "media/originals/koyo-autumn-pavilion/master.m3u8",
+   "fallbacks": [],
+   "variants": [],
+   "resolutions": [],
+   "verified": false,
+   "audioTracks": [],
+   "subtitleTracks": [],
+   "audioFormats": [],
+   "hdr": null,
+   "durationS": null,
+   "introStart": null,
+   "introEnd": null,
+   "creditsStart": null
+  },
+  "med_garden-hours-s1e1": {
+   "id": "med_garden-hours-s1e1",
+   "titleId": "garden-hours",
+   "episodeId": "garden-hours-s1e1",
+   "role": "main",
+   "kind": "hls",
+   "src": "media/originals/garden-hours-s1e1/master.m3u8",
+   "fallbacks": [],
+   "variants": [],
+   "resolutions": [],
+   "verified": false,
+   "audioTracks": [],
+   "subtitleTracks": [],
+   "audioFormats": [],
+   "hdr": null,
+   "durationS": null,
+   "introStart": null,
+   "introEnd": null,
+   "creditsStart": null
+  },
+  "med_garden-hours-s1e2": {
+   "id": "med_garden-hours-s1e2",
+   "titleId": "garden-hours",
+   "episodeId": "garden-hours-s1e2",
+   "role": "main",
+   "kind": "hls",
+   "src": "media/originals/garden-hours-s1e2/master.m3u8",
+   "fallbacks": [],
+   "variants": [],
+   "resolutions": [],
+   "verified": false,
+   "audioTracks": [],
+   "subtitleTracks": [],
+   "audioFormats": [],
+   "hdr": null,
+   "durationS": null,
+   "introStart": null,
+   "introEnd": null,
+   "creditsStart": null
+  },
+  "med_garden-hours-s2e1": {
+   "id": "med_garden-hours-s2e1",
+   "titleId": "garden-hours",
+   "episodeId": "garden-hours-s2e1",
+   "role": "main",
+   "kind": "hls",
+   "src": "media/originals/garden-hours-s2e1/master.m3u8",
+   "fallbacks": [],
+   "variants": [],
+   "resolutions": [],
+   "verified": false,
+   "audioTracks": [],
+   "subtitleTracks": [],
+   "audioFormats": [],
+   "hdr": null,
+   "durationS": null,
+   "introStart": null,
+   "introEnd": null,
+   "creditsStart": null
+  },
+  "med_garden-hours-s2e2": {
+   "id": "med_garden-hours-s2e2",
+   "titleId": "garden-hours",
+   "episodeId": "garden-hours-s2e2",
+   "role": "main",
+   "kind": "hls",
+   "src": "media/originals/garden-hours-s2e2/master.m3u8",
+   "fallbacks": [],
+   "variants": [],
+   "resolutions": [],
+   "verified": false,
+   "audioTracks": [],
+   "subtitleTracks": [],
+   "audioFormats": [],
+   "hdr": null,
+   "durationS": null,
+   "introStart": null,
+   "introEnd": null,
+   "creditsStart": null
+  }
+ }
+}

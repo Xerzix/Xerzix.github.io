@@ -1,0 +1,175 @@
+/* ──────────────────────────────────────────────────────────────────────────────
+   Lumina design tokens
+   Every colour, size, radius, shadow and motion value used by the interface lives here.
+   Theme presets and custom themes (js/theme.js) override the palette variables at
+   runtime; everything else derives from them.
+   ────────────────────────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+
+  /* Palette — "Original Velvet Garden" */
+  --lm-bg: #080808;            /* midnight black */
+  --lm-bg-2: #141414;          /* deep charcoal */
+  --lm-surface: #121011;       /* cards and panels */
+  --lm-accent: #781b32;        /* velvet red */
+  --lm-accent-strong: #b52b49; /* crimson */
+  --lm-accent-text: #e26d86;   /* accent that stays readable as text on --lm-bg */
+  --lm-button: #781b32;
+  --lm-button-text: #f8f5f2;
+  --lm-text: #f8f5f2;          /* warm white */
+  --lm-text-2: #b8b3b4;        /* muted silver */
+  --lm-gold: #c6a46a;          /* champagne gold */
+
+  --lm-danger: #e5484d;
+  --lm-success: #4cae7a;
+  --lm-warning: #d9a441;
+  --lm-info: #7fa4d9;
+
+  /* Derived colours */
+  --lm-text-3: color-mix(in srgb, var(--lm-text-2) 78%, var(--lm-bg));
+  --lm-line: color-mix(in srgb, var(--lm-text) 9%, transparent);
+  --lm-line-strong: color-mix(in srgb, var(--lm-text) 18%, transparent);
+  --lm-surface-2: color-mix(in srgb, var(--lm-surface), var(--lm-text) 5%);
+  --lm-surface-3: color-mix(in srgb, var(--lm-surface), var(--lm-text) 10%);
+  --lm-glass: color-mix(in srgb, var(--lm-bg-2) 74%, transparent);
+  --lm-glass-strong: color-mix(in srgb, var(--lm-bg-2) 90%, transparent);
+  --lm-scrim: color-mix(in srgb, var(--lm-bg) 72%, transparent);
+  --lm-accent-soft: color-mix(in srgb, var(--lm-accent) 22%, transparent);
+  --lm-accent-glow: color-mix(in srgb, var(--lm-accent-strong) 45%, transparent);
+  --lm-gold-soft: color-mix(in srgb, var(--lm-gold) 18%, transparent);
+  --lm-focus: var(--lm-gold);
+
+  /* Typography */
+  --lm-font-display: 'Cormorant Garamond', 'Shippori Mincho', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --lm-font-ui: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --lm-font-jp: 'Shippori Mincho', 'Hiragino Mincho ProN', 'Yu Mincho', 'Noto Serif JP', serif;
+  --lm-font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  --lm-fs-2xs: 0.6875rem;
+  --lm-fs-xs: 0.75rem;
+  --lm-fs-sm: 0.875rem;
+  --lm-fs-md: 1rem;
+  --lm-fs-lg: 1.125rem;
+  --lm-fs-xl: 1.375rem;
+  --lm-fs-2xl: clamp(1.5rem, 1.25rem + 1vw, 1.875rem);
+  --lm-fs-3xl: clamp(2rem, 1.5rem + 2vw, 2.75rem);
+  --lm-fs-display: clamp(2.5rem, 1.6rem + 4vw, 4.75rem);
+  --lm-lh-tight: 1.12;
+  --lm-lh-snug: 1.3;
+  --lm-lh: 1.6;
+  --lm-tracking-wide: 0.14em;
+  --lm-tracking-logo: 0.42em;
+  --lm-weight-regular: 400;
+  --lm-weight-medium: 500;
+  --lm-weight-semibold: 600;
+  --lm-weight-bold: 700;
+
+  /* Spacing — 4 px base, scaled by interface density */
+  --lm-density: 1;
+  --lm-space-1: calc(0.25rem * var(--lm-density));
+  --lm-space-2: calc(0.5rem * var(--lm-density));
+  --lm-space-3: calc(0.75rem * var(--lm-density));
+  --lm-space-4: calc(1rem * var(--lm-density));
+  --lm-space-5: calc(1.25rem * var(--lm-density));
+  --lm-space-6: calc(1.5rem * var(--lm-density));
+  --lm-space-8: calc(2rem * var(--lm-density));
+  --lm-space-10: calc(2.5rem * var(--lm-density));
+  --lm-space-12: calc(3rem * var(--lm-density));
+  --lm-space-16: calc(4rem * var(--lm-density));
+
+  /* Radii */
+  --lm-radius-xs: 4px;
+  --lm-radius-sm: 6px;
+  --lm-radius-md: 10px;
+  --lm-radius-lg: 16px;
+  --lm-radius-xl: 24px;
+  --lm-radius-pill: 999px;
+
+  /* Borders & shadows */
+  --lm-border: 1px solid var(--lm-line);
+  --lm-border-strong: 1px solid var(--lm-line-strong);
+  --lm-shadow-1: 0 1px 2px rgb(0 0 0 / 0.45);
+  --lm-shadow-2: 0 10px 28px rgb(0 0 0 / 0.5);
+  --lm-shadow-3: 0 28px 70px rgb(0 0 0 / 0.65);
+  --lm-shadow-glow: 0 0 0 1px color-mix(in srgb, var(--lm-accent-strong) 55%, transparent), 0 12px 40px var(--lm-accent-glow);
+  --lm-inner-highlight: inset 0 1px 0 color-mix(in srgb, var(--lm-text) 8%, transparent);
+
+  /* Motion */
+  --lm-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --lm-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --lm-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --lm-dur-1: 120ms;
+  --lm-dur-2: 200ms;
+  --lm-dur-3: 320ms;
+  --lm-dur-4: 520ms;
+  --lm-dur-5: 900ms;
+
+  /* Layering */
+  --lm-z-garden: 0;
+  --lm-z-petals-back: 1;
+  --lm-z-content: 2;
+  --lm-z-sticky: 40;
+  --lm-z-header: 50;
+  --lm-z-popover: 60;
+  --lm-z-petals-front: 70;
+  --lm-z-player: 80;
+  --lm-z-modal: 90;
+  --lm-z-toast: 95;
+  --lm-z-intro: 100;
+
+  /* Layout */
+  --lm-gutter: clamp(16px, 4vw, 56px);
+  --lm-header-h: 68px;
+  --lm-bottom-nav-h: 0px;
+  --lm-maxw: 1680px;
+  --lm-maxw-text: 72ch;
+  --lm-card-w: clamp(128px, 13.5vw, 212px);
+  --lm-card-w-landscape: clamp(232px, 24vw, 360px);
+  --lm-row-gap: calc(clamp(8px, 0.9vw, 14px) * var(--lm-density));
+
+  /* Garden environment (overridden per environment by js/fx/garden.js) */
+  --env-sky-top: #1a0b12;
+  --env-sky-mid: #2a1220;
+  --env-sky-low: #0c0709;
+  --env-mountain-far: #1c1219;
+  --env-mountain-near: #120b10;
+  --env-structure: #0a0608;
+  --env-foliage: #e89bb2;
+  --env-foliage-2: #c9607f;
+  --env-water: #0f0a0d;
+  --env-light: #f3c98b;
+  --env-mist: rgb(236 214 222 / 0.08);
+  --env-moon: #f4efe4;
+  --env-brightness: 0.62;
+}
+
+@media (max-width: 720px) {
+  :root {
+    --lm-header-h: 60px;
+    --lm-bottom-nav-h: 64px;
+    --lm-card-w: clamp(112px, 30vw, 150px);
+    --lm-card-w-landscape: clamp(220px, 72vw, 300px);
+  }
+}
+
+/* Interface density preference */
+:root[data-density='compact'] { --lm-density: 0.82; }
+:root[data-density='spacious'] { --lm-density: 1.18; }
+
+/* Reduced motion: from the OS, or chosen in Settings → Appearance */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='full']) {
+    --lm-dur-1: 1ms;
+    --lm-dur-2: 1ms;
+    --lm-dur-3: 1ms;
+    --lm-dur-4: 1ms;
+    --lm-dur-5: 1ms;
+  }
+}
+:root[data-motion='reduced'] {
+  --lm-dur-1: 1ms;
+  --lm-dur-2: 1ms;
+  --lm-dur-3: 1ms;
+  --lm-dur-4: 1ms;
+  --lm-dur-5: 1ms;
+}
