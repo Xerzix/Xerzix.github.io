@@ -11,3 +11,9 @@
 .lm-home__rows > .lm-row:first-child {
   margin-top: 0;
 }
+
+@media (max-width: 720px) {
+  .lm-home__rows {
+    margin-top: 0;
+  }
+}

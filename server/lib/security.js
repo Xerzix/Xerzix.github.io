@@ -8,8 +8,8 @@ export function buildCsp() {
     "default-src 'self'",
     "script-src 'self'",
     // Inline style attributes are used by a few components for computed geometry.
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com data:",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data:",
     `img-src 'self' data: blob: ${media}`,
     `media-src 'self' blob: ${media}`,
     `connect-src 'self' ${media}`,

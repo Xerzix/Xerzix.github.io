@@ -14,6 +14,7 @@ function loadDotEnv(file) {
     if (!m || line.trim().startsWith('#')) continue;
     let value = m[2];
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    else value = value.startsWith('#') ? '' : value.replace(/\s+#.*$/, '').trim(); // inline comments on unquoted values
     if (process.env[m[1]] === undefined) process.env[m[1]] = value;
   }
 }

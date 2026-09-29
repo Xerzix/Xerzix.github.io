@@ -25,5 +25,8 @@
   "devDependencies": {
     "hls.js": "1.7.3",
     "playwright": "1.56.1"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": "^0.129.0"
   }
 }

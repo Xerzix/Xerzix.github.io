@@ -124,7 +124,9 @@
   gap: 6px;
   padding: 12px;
   border-radius: var(--lm-radius-md);
-  background: linear-gradient(180deg, transparent 20%, color-mix(in srgb, var(--lm-bg) 70%, transparent) 55%, color-mix(in srgb, var(--lm-bg) 96%, transparent));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--lm-bg) 10%, transparent) 0%, color-mix(in srgb, var(--lm-bg) 78%, transparent) 38%, color-mix(in srgb, var(--lm-bg) 97%, transparent) 62%);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
   opacity: 0;
   visibility: hidden;
   transition: opacity var(--lm-dur-3) var(--lm-ease), visibility 0s linear var(--lm-dur-3);
@@ -551,6 +553,9 @@
 @media (max-width: 720px) {
   .lm-hero {
     min-height: 78vh;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: stretch;
   }
 
   .lm-hero__shade {
@@ -561,11 +566,21 @@
 
   .lm-hero__controls {
     position: static;
-    margin-top: var(--lm-space-5);
+    padding: 0 var(--lm-gutter) var(--lm-space-2);
   }
 
   .lm-hero__content {
-    padding-bottom: var(--lm-space-8);
+    padding-bottom: var(--lm-space-6);
+  }
+
+  .lm-hero__synopsis {
+    -webkit-line-clamp: 2;
+  }
+
+  .lm-hero__actions .lm-btn--lg {
+    min-height: 46px;
+    padding: 0 1.1em;
+    font-size: var(--lm-fs-sm);
   }
 }
 

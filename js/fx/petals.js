@@ -50,25 +50,19 @@ function makeSprite(kind, color, size, blur = 0) {
     g.lineTo(0, -s * 0.4);
     g.stroke();
   } else if (kind === 'leaf') {
-    // Five-lobed maple leaf.
+    // Five-lobed maple leaf with a short stem.
     const s = size;
+    const pts = [[0, -1], [0.16, -0.62], [0.44, -0.78], [0.36, -0.38], [0.84, -0.5], [0.66, -0.14], [0.96, 0.04], [0.5, 0.22], [0.56, 0.5], [0.14, 0.34], [0.05, 0.58], [0.03, 0.98], [-0.03, 0.98], [-0.05, 0.58], [-0.14, 0.34], [-0.56, 0.5], [-0.5, 0.22], [-0.96, 0.04], [-0.66, -0.14], [-0.84, -0.5], [-0.36, -0.38], [-0.44, -0.78], [-0.16, -0.62]];
     g.fillStyle = color;
     g.beginPath();
-    for (let i = 0; i <= 10; i++) {
-      const a = -Math.PI / 2 + (i / 10) * TAU;
-      const r = i % 2 === 0 ? s : s * 0.45;
-      const x = Math.cos(a) * r;
-      const y = Math.sin(a) * r * 0.95;
-      if (i === 0) g.moveTo(x, y);
-      else g.lineTo(x, y);
-    }
+    pts.forEach(([x, y], i) => (i ? g.lineTo(x * s, y * s) : g.moveTo(x * s, y * s)));
     g.closePath();
     g.fill();
-    g.strokeStyle = 'rgba(60,20,10,.45)';
+    g.strokeStyle = 'rgba(60,20,10,.4)';
     g.lineWidth = 1;
     g.beginPath();
-    g.moveTo(0, s * 1.2);
-    g.lineTo(0, -s * 0.6);
+    g.moveTo(0, s * 0.9);
+    g.lineTo(0, -s * 0.55);
     g.stroke();
   } else if (kind === 'snow') {
     const grad = g.createRadialGradient(0, 0, 0, 0, 0, size);
