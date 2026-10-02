@@ -1,0 +1,66 @@
+<aside data-notice="warn">
+  <p><strong>Draft for legal review — not yet in effect.</strong> This statement describes Lumina’s accessibility target and the features that are implemented today. It has not been reviewed by a lawyer and is not a claim of conformance: Lumina has not yet been independently audited. Text in square brackets must be completed before publication.</p>
+</aside>
+
+<p><strong>Prepared:</strong> [Date of statement] · <strong>Feedback:</strong> [Accessibility contact email]</p>
+
+<h2 id="commitment">1. Our commitment and target</h2>
+<p>We want everyone to be able to find, watch and talk about films on Lumina, whatever device, input method or assistive technology they use. Our target is the <a href="https://www.w3.org/TR/WCAG22/">Web Content Accessibility Guidelines (WCAG) 2.2</a> at level AA for the Lumina website, the video player and the administration dashboard.</p>
+<p><strong>Status:</strong> partially conformant — we work to the target, but not every page and title meets it yet, and no formal audit has been completed. [Update after an audit: auditor, date, scope and result.]</p>
+
+<h2 id="features">2. What is implemented</h2>
+<h3>2.1 Keyboard and focus</h3>
+<ul>
+  <li>Every control is a real button or link and can be reached and operated with the keyboard.</li>
+  <li>A visible, high-contrast focus ring (champagne gold) shows where you are.</li>
+  <li>A “Skip to content” link is the first item on every page, and focus moves to the main heading when you change page.</li>
+  <li>Menus support the arrow keys and Esc. Dialogs keep focus inside while they are open, close with Esc, and return focus to where you were.</li>
+  <li>Tabs, rating inputs and switches use the matching ARIA roles and keyboard patterns.</li>
+  <li>The video player has keyboard shortcuts for play and pause, seeking, volume, subtitles and full screen.</li>
+</ul>
+<h3>2.2 Screen readers</h3>
+<ul>
+  <li>Each page has one main heading and a logical heading structure; navigation regions and forms are labelled.</li>
+  <li>Icon-only buttons have text labels, and decorative imagery (the garden scenery and particles) is hidden from assistive technology.</li>
+  <li>Changes that happen without a page load — saved settings, search results, notifications, toasts — are announced.</li>
+  <li>Form errors are shown as text next to each field and linked to it, and focus moves to the first field that needs attention.</li>
+</ul>
+<h3>2.3 Motion</h3>
+<ul>
+  <li>Lumina follows your device’s “reduce motion” setting, and Settings → Accessibility lets you choose reduced or full motion regardless of the device.</li>
+  <li>The animated petals and other particles, the parallax effect and the rotating featured banner can each be turned off. With reduced motion, the opening sequence goes straight to its final screen and the banner stops rotating.</li>
+</ul>
+<h3>2.4 Captions and subtitles</h3>
+<ul>
+  <li>Where a title provides subtitles or captions, you can choose them in the player, set a preferred language, and turn them on by default for every title.</li>
+  <li>You can change the subtitle size, background (none, shadow or box) and position (raised above on-screen text).</li>
+  <li>Title pages list the audio and subtitle languages that are actually available, so you can check before you press play.</li>
+</ul>
+<h3>2.5 Colour, contrast and reading comfort</h3>
+<ul>
+  <li>Text colours are chosen to meet WCAG contrast ratios on Lumina’s dark backgrounds. When you choose a custom accent colour, Lumina calculates text and button colours that keep sufficient contrast.</li>
+  <li>“Translucent surfaces” can be turned off for solid panels with stronger contrast behind text, and the interface density can be made more spacious.</li>
+  <li>Pages can be zoomed to at least 200% and reflow to a single column on narrow screens; zoom is never disabled.</li>
+  <li>Information is never conveyed by colour alone; for example quality and status badges always include text.</li>
+</ul>
+
+<h2 id="limitations">3. Known limitations</h2>
+<ul>
+  <li><strong>Captions are not available for every title.</strong> Some openly licensed films come with subtitles in only a few languages or none, and audio description is not yet available for any title. Title pages show what each title has.</li>
+  <li><strong>Third-party streams.</strong> Some open films are streamed from third-party hosts; if a host is unavailable, the title cannot play and we cannot offer an alternative format.</li>
+  <li><strong>Watch-party chat</strong> updates live; screen-reader announcements of new messages may be frequent in busy parties.</li>
+  <li><strong>Velvia Suggestions</strong> replies arrive in a live region; long replies with several recommendations can be lengthy to listen to.</li>
+  <li><strong>Creator uploads</strong> offer drag and drop, but it is never the only way: the file picker button works with the keyboard, and finished and failed uploads are announced. Progress in between is shown visually only.</li>
+  <li>[Add any issues found in testing or by audit, with the date by which they will be fixed.]</li>
+</ul>
+
+<h2 id="testing">4. How we test</h2>
+<p>We test with keyboard-only navigation, browser zoom and reflow, reduced-motion settings and automated checks during development. [Add the screen readers and browsers used for testing, e.g. NVDA with Firefox, VoiceOver with Safari, TalkBack with Chrome, once testing has been completed with them.]</p>
+
+<h2 id="feedback">5. Feedback and help</h2>
+<p>If something on Lumina is hard to use, or you need content in another format, please tell us. Include the page address, what you were trying to do and the device and assistive technology you use.</p>
+<ul>
+  <li>Email: [Accessibility contact email]</li>
+  <li>Post: [Postal address]</li>
+</ul>
+<p>We aim to reply within [Response period]. If you are not satisfied with our response, you can contact [Enforcement body for [Jurisdiction], if applicable].</p>

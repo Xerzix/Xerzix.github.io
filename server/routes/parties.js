@@ -15,6 +15,7 @@ import { HttpError } from '../lib/errors.js';
 import { v } from '../lib/validate.js';
 import { rateLimit } from '../lib/security.js';
 import { PartyService, CODE_PATTERN } from '../services/parties.js';
+import { declareSettingConsumer, readPlatformSettings } from '../services/admin/settings.js';
 
 const HEARTBEAT_MS = 20_000;
 
@@ -34,8 +35,10 @@ const settingsSchema = v.object({ allowGuestControl: v.boolean() });
 // Length is re-checked (after whitespace folding) by the service.
 const chatSchema = v.object({ text: v.string().max(2000) });
 
-export default function register(app, { services, config }) {
+export default function register(app, { db, services, config }) {
   services.parties ??= new PartyService();
+  // The admin "Watch parties" switch stops new parties; rooms already open run to their end.
+  declareSettingConsumer('watchPartiesEnabled');
   const { parties, catalog } = services;
 
   const enabled = () => {
@@ -49,6 +52,7 @@ export default function register(app, { services, config }) {
   const guard = [requireProfile, enabled];
 
   app.post('/api/parties', ...guard, rateLimit('party-create', { max: 12, windowMs: 3600_000, by: 'account' }), async (ctx) => {
+    if (!readPlatformSettings(db).watchPartiesEnabled) throw new HttpError(403, 'FEATURE_DISABLED', 'New watch parties are paused on this Lumina server.');
     const { titleId, episodeId } = v.parse(createSchema, await ctx.body());
     // Checks visibility, parental limits, entitlement and that there is something to play.
     const playback = catalog.playback(titleId, episodeId || null, { profile: ctx.profile, account: ctx.account });

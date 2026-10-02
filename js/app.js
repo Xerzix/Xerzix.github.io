@@ -139,6 +139,11 @@ export async function boot() {
     document.getElementById('lm-header').after(h('div', { class: 'lm-preview-banner', role: 'note' },
       h('strong', null, 'Preview'),
       h('span', null, 'Browsing the open catalog on static hosting. Your list and progress stay on this device; accounts, reviews and uploads need the Lumina server.')));
+  } else if (session.notice?.message) {
+    // Set by staff in the admin dashboard (Settings → Maintenance message).
+    document.getElementById('lm-header').after(h('div', { class: 'lm-preview-banner', role: 'status' },
+      h('strong', null, 'Notice'),
+      h('span', null, session.notice.message)));
   }
 
   // Particles pause entirely while the player is open and gust on navigation.

@@ -6,6 +6,7 @@ import { now, parseJson } from '../db/index.js';
 import { HttpError } from '../lib/errors.js';
 import { decryptField, newId, randomToken, sha256, verifyPassword, verifyTotp } from '../lib/crypto.js';
 import { log } from '../lib/log.js';
+import { readPlatformSettings } from './admin/settings.js';
 import { accountDto, profileDto } from './dto.js';
 import { planSummary } from './entitlements.js';
 import { notificationPrefs } from './notifications.js';
@@ -54,6 +55,7 @@ export function assertTotp(account, code, field = 'totp') {
  */
 export function sessionPayload(db, ctx) {
   const profileCount = ctx.account ? db.get('SELECT COUNT(*) AS n FROM profiles WHERE account_id = ?', ctx.account.id).n : 0;
+  const platform = readPlatformSettings(db);
   return {
     mode: 'server',
     account: accountDto(ctx.account),
@@ -62,14 +64,15 @@ export function sessionPayload(db, ctx) {
     elevated: isElevated(ctx),
     plan: ctx.account ? planSummary(ctx.account) : null,
     features: {
-      registration: config.auth.allowRegistration,
+      registration: platform.registrationOpen,
       reviewComments: config.features.communityComments,
-      watchParties: config.features.watchParties,
+      watchParties: platform.watchPartiesEnabled,
       sharedCollections: config.features.sharedCollections,
       requireSigninToPlay: config.features.requireSigninToPlay,
       velviaProvider: config.velvia.provider,
     },
     limits: { maxProfiles: ctx.account?.max_profiles ?? config.profiles.maxPerAccount },
+    notice: platform.maintenanceMessage ? { message: platform.maintenanceMessage } : null,
   };
 }
 

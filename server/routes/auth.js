@@ -8,6 +8,7 @@ import { log } from '../lib/log.js';
 import { rateLimit } from '../lib/security.js';
 import { v } from '../lib/validate.js';
 import { AccountService, assertAccountPassword, assertTotp, normalizeEmail, sessionPayload, totpMatches } from '../services/accounts.js';
+import { declareSettingConsumer, readPlatformSettings } from '../services/admin/settings.js';
 import { audit } from '../services/audit.js';
 import { sendMail } from '../services/mailer.js';
 import { notify } from '../services/notifications.js';
@@ -46,10 +47,12 @@ function adoptSession(ctx, db, account, sessionId, profileId) {
 
 export default function register(app, { db, services, config }) {
   const accounts = (services.accounts ??= new AccountService(db));
+  // The admin "New registrations open" switch (it can only narrow ALLOW_REGISTRATION).
+  declareSettingConsumer('registrationOpen');
 
   // ── Register ──
   app.post('/api/auth/register', rateLimit('register', { max: 5, windowMs: 60 * MIN }), async (ctx) => {
-    if (!config.auth.allowRegistration) throw forbidden('New registrations are closed on this Lumina server.', 'REGISTRATION_CLOSED');
+    if (!readPlatformSettings(db).registrationOpen) throw forbidden('New registrations are closed on this Lumina server.', 'REGISTRATION_CLOSED');
     const raw = await ctx.body();
     // Collect every field problem at once so the form can show them together.
     const errors = {};

@@ -7,6 +7,7 @@ import { config as defaultConfig } from '../config.js';
 import { now, placeholders } from '../db/index.js';
 import { newId } from '../lib/crypto.js';
 import { conflict, forbidden, HttpError, notFound } from '../lib/errors.js';
+import { readPlatformSettings } from './admin/settings.js';
 import { audit } from './audit.js';
 import { assessSpam, BURST_WINDOW_MS, holdNote, normalizeForCompare } from './moderation.js';
 import { notify } from './notifications.js';
@@ -282,6 +283,8 @@ export class ReviewService {
 
   addComment(ctx, reviewId, body) {
     if (!this.commentsEnabled()) throw forbidden('Replies are turned off on this Lumina server.', 'FEATURE_DISABLED');
+    // Staff can pause new replies from the dashboard; existing replies stay readable.
+    if (!readPlatformSettings(this.db).reviewCommentsEnabled) throw forbidden('New replies are paused on this Lumina server.', 'FEATURE_DISABLED');
     this.assertCanPost(ctx);
     const { review, title } = this.reviewForReplies(ctx, reviewId);
     if (review.status !== 'visible') throw conflict('Replies open once your review has been approved.', 'REVIEW_NOT_VISIBLE');

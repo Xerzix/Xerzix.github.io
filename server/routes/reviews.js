@@ -2,6 +2,7 @@
 import { requireAuth, requireProfile } from '../auth/session.js';
 import { rateLimit } from '../lib/security.js';
 import { v } from '../lib/validate.js';
+import { declareSettingConsumer } from '../services/admin/settings.js';
 import { COMMENT_BODY_MAX, REPORT_REASONS, REVIEW_BODY_MAX, ReviewService } from '../services/reviews.js';
 
 const reviewCreate = v.object({
@@ -32,6 +33,8 @@ const byAccount = 'account';
 export default function register(app, { db, services, config }) {
   services.reviews ??= new ReviewService(db, services.catalog, config);
   const reviews = services.reviews;
+  // ReviewService.addComment honours the admin "Comments on reviews" switch.
+  declareSettingConsumer('reviewCommentsEnabled');
 
   app.get('/api/titles/:id/reviews', rateLimit('reviews:list', { max: 240, windowMs: 60_000 }), (ctx) => reviews.list(ctx, ctx.params.id, ctx.query));
 

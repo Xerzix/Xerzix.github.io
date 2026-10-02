@@ -12,6 +12,7 @@ export const session = {
   features: {},
   limits: { maxProfiles: 5 },
   plan: null,
+  notice: null,
   get isServer() {
     return this.mode === 'server';
   },
@@ -37,6 +38,7 @@ export async function refreshSession() {
     features: s.features || {},
     limits: s.limits || session.limits,
     plan: s.plan,
+    notice: s.notice || null,
   });
   bus.emit('session:changed', session);
   await refreshLibrary();

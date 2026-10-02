@@ -1,0 +1,127 @@
+<aside data-notice="warn">
+  <p><strong>Draft for legal review — not yet in effect.</strong> This Privacy Policy was written from the Lumina source code so that it describes what the software actually collects and does. It has not been reviewed by a lawyer. Text in square brackets, such as [Operator legal name] or [Privacy contact email], must be completed, and the legal bases and retention periods marked for review must be confirmed, before publication.</p>
+</aside>
+
+<p><strong>Effective date:</strong> [Effective date] · <strong>Controller:</strong> [Operator legal name], [Registered address] · <strong>Privacy contact:</strong> [Privacy contact email] · <strong>Data protection officer:</strong> [DPO name and contact, if appointed]</p>
+
+<h2 id="summary">1. Summary</h2>
+<ul>
+  <li>We collect what is needed to run your account and profiles, remember what you watch, show community features and keep the service secure.</li>
+  <li>We do not sell personal data. Lumina has no advertising, no analytics service and no tracking pixels, and it sets a single cookie that is needed to keep you signed in.</li>
+  <li>Fonts, icons and the video player library are served from this site. Your browser contacts other hosts only when you play one of the openly licensed films that are streamed from third-party hosts (see <a href="#third-parties">section 6</a>).</li>
+  <li>You can download your data and delete your account yourself in Account settings.</li>
+  <li>In Preview mode (static hosting) there are no accounts: everything you save stays in your browser on that device.</li>
+</ul>
+
+<h2 id="collect">2. What we collect and why</h2>
+<p>The table lists the personal data the Lumina server stores, where it comes from and what it is used for. The legal bases are a draft for review: [confirm legal bases for [Jurisdiction]].</p>
+<table>
+  <caption>Personal data stored by the Lumina server</caption>
+  <thead>
+    <tr><th scope="col">Data</th><th scope="col">Purpose</th><th scope="col">Legal basis (draft)</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Account: email address, display name, password (stored only as a salted scrypt hash), role, creator status, account status, time you accepted the terms, last sign-in time</td><td>Creating and securing your account, signing in, password resets, important account notices</td><td>Contract</td></tr>
+    <tr><td>Two-factor authentication secret (encrypted with AES-256-GCM) if you turn it on; counts of failed sign-ins and temporary locks</td><td>Protecting your account against takeover</td><td>Contract; legitimate interests (security)</td></tr>
+    <tr><td>Profiles: name, avatar, kids setting and age limit, PIN (stored only as a hash), language, subtitle, playback, appearance and privacy preferences</td><td>Personalising Lumina for each person in your household; parental controls</td><td>Contract</td></tr>
+    <tr><td>Library: My List, viewing progress, viewing history (title, time and seconds watched), collections, follows of series, genres and creators</td><td>Resuming playback, Continue Watching, history, statistics and recommendations, notifications about things you follow</td><td>Contract</td></tr>
+    <tr><td>Community: reviews and ratings, replies, “helpful” votes, reports you file, authors you block</td><td>Showing reviews and member ratings; moderation</td><td>Contract; legitimate interests (a safe community)</td></tr>
+    <tr><td>Notifications you receive and whether you have read or dismissed them; your notification preferences</td><td>The notification centre</td><td>Contract</td></tr>
+    <tr><td>Creator applications: legal name, contact email, company, website, portfolio, country, biography; staff decisions and notes</td><td>Reviewing applications to submit work</td><td>Contract; steps before entering a contract</td></tr>
+    <tr><td>Submissions: project details, rights information and attestation (with the time and the IP address it was given from), uploaded files and their technical details (size, SHA-256 checksum, media analysis, malware-scan result), messages with staff</td><td>Human review of submitted work, rights verification, preparing approved work for streaming</td><td>Contract; legitimate interests (verifying rights); legal obligation where applicable</td></tr>
+    <tr><td>Sessions: a hash of your session token, when the session was created and last used, its expiry, the IP address and browser user agent</td><td>Keeping you signed in, letting you review and revoke your sessions, detecting misuse</td><td>Contract; legitimate interests (security)</td></tr>
+    <tr><td>Password-reset requests: a hash of the one-time token, its expiry and the IP address of the request</td><td>Resetting a forgotten password securely</td><td>Contract; legitimate interests (security)</td></tr>
+    <tr><td>Player measurements (“telemetry”): per viewing session, the title and media watched, seconds watched, start-up time, rebuffering, average bitrate, highest resolution, dropped frames, an estimate of data transferred and error count — linked to your account when you are signed in. Playback errors: error code and message, technical details and the browser user agent.</td><td>Measuring and improving streaming quality; estimating bandwidth use; diagnosing errors</td><td>Legitimate interests (service quality)</td></tr>
+    <tr><td>Quality reports you send from the player: category, description, device, connection speed, selected resolution, and the player diagnostics only if you choose to attach them</td><td>Investigating playback problems you report</td><td>Legitimate interests; your request</td></tr>
+    <tr><td>Audit log: security and administrative events (for example registration, password and email changes, data exports, account deletion, staff actions), with the acting account, its email address and the IP address</td><td>Accountability for privileged actions, security investigations</td><td>Legitimate interests (security and accountability); legal obligation where applicable</td></tr>
+    <tr><td>Server logs: technical records of requests and errors (no passwords, tokens or request bodies)</td><td>Operating and securing the service</td><td>Legitimate interests</td></tr>
+  </tbody>
+</table>
+<p>We do not ask for payment details, your date of birth, your location or your contacts. Lumina does not use your data for automated decisions that have legal or similarly significant effects on you. An automatic spam filter can hold a review or reply for a person to look at; it never deletes or publishes anything on its own.</p>
+
+<h2 id="velvia">3. Velvia Suggestions</h2>
+<p>Velvia Suggestions recommends titles from this catalog in conversation. How your messages are handled depends on how the operator has configured it:</p>
+<ul>
+  <li><strong>Built-in engine (default).</strong> Your messages are processed on the Lumina server only. They are not stored on the server.</li>
+  <li><strong>External AI provider (only if configured).</strong> If the operator connects an external AI provider ([AI provider name, if configured]), the text of your current conversation and catalog information about the titles being discussed (titles, synopses, genres, credits, ratings and similar metadata) are sent to that provider to generate a reply. If the profile’s “Use viewing history for recommendations” setting is on, the names of up to ten titles that profile recently watched are also sent, along with which candidate titles it has already watched. This setting is on by default; you can turn it off in Settings → Privacy &amp; data, or for a single conversation in Velvia. Your email address, account details and profile name are never sent. [Describe the provider’s data processing terms and location.]</li>
+</ul>
+<p>The conversation is kept in your browser’s session storage for the current tab so you can continue it, and is cleared when the tab is closed.</p>
+
+<h2 id="public">4. What other people can see</h2>
+<ul>
+  <li>Reviews and replies are public on title pages, under your profile name and avatar. Your email address is never shown.</li>
+  <li>Collections are private unless you make them “unlisted”, in which case anyone with the link can see the collection and your profile name.</li>
+  <li>In a watch party, other members see your profile name, avatar and chat messages. Party chat is kept only in the server’s memory while the party exists (up to the last 50 messages) and is not saved to the database.</li>
+  <li>Lumina staff (moderators and administrators) can see account and moderation information needed for their role. Their access requires a recent password confirmation and every privileged action is recorded in the audit log.</li>
+</ul>
+
+<h2 id="preview">5. Preview mode (static hosting)</h2>
+<p>When Lumina runs in Preview mode — for example a copy published on a static web host — there is no Lumina server and no accounts. Your list, progress, history, collections and preferences are stored only in your browser’s local storage on that device, and you can clear them in Settings → Privacy &amp; data. The static host that serves the files receives ordinary web request information (such as your IP address and browser) under its own privacy policy: [Static hosting provider and policy link].</p>
+
+<h2 id="third-parties">6. Service providers and third parties</h2>
+<p>We share personal data only as described here. [Operator to complete with the providers actually used.]</p>
+<ul>
+  <li><strong>Hosting:</strong> [Hosting provider], which stores the database and uploaded files on our behalf in [Hosting location].</li>
+  <li><strong>Email delivery:</strong> if a mail provider is configured ([Mail provider]), it receives your email address and the content of account emails (for example password-reset links and the confirmation that your account was deleted). Without one, the server does not send email.</li>
+  <li><strong>AI provider:</strong> only if configured for Velvia Suggestions — see <a href="#velvia">section 3</a>.</li>
+  <li><strong>Malware scanning:</strong> uploaded creator files may be checked by a scanning tool configured by the operator ([Scanning tool or service, if any]).</li>
+  <li><strong>Media hosts for open films:</strong> some openly licensed films are streamed directly from third-party hosts. When you play them, your browser connects to the host to fetch the video, which means that host receives your IP address, browser user agent and the addresses of the video files requested. The hosts currently used by the catalog are <code>bitdash-a.akamaihd.net</code>, <code>test-streams.mux.dev</code>, <code>demo.unified-streaming.com</code> and <code>commondatastorage.googleapis.com</code>. Lumina Originals and other titles hosted on this server do not involve third-party hosts.</li>
+  <li><strong>Metadata services:</strong> staff may look up film and series information from a metadata service (TMDB) on the server. No member data is sent in those requests.</li>
+  <li><strong>Fonts and code:</strong> typefaces (served from this site under the SIL Open Font License) and the video player library are self-hosted. Lumina makes no requests to font services or content-delivery networks for them.</li>
+  <li><strong>Legal requirements:</strong> we may disclose data when required by law or to protect the rights and safety of members, creators or the public. [Describe the process for law-enforcement requests.]</li>
+</ul>
+<p>[International transfers: describe where data is processed and the safeguards used if it leaves [Jurisdiction].]</p>
+
+<h2 id="retention">7. How long we keep data</h2>
+<table>
+  <caption>Retention as implemented in the software</caption>
+  <thead>
+    <tr><th scope="col">Data</th><th scope="col">How long</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Account, profiles, library, reviews, replies, collections, notifications</td><td>Until you delete them or delete your account. Account deletion removes them immediately.</td></tr>
+    <tr><td>Sessions</td><td>A session ends when you sign out, when you or staff revoke it, or when it expires (at most 30 days after it was last renewed). Suspending or deleting an account removes all its sessions.</td></tr>
+    <tr><td>Password-reset links</td><td>Valid for 60 minutes and usable once. [Retention of used or expired reset records to be confirmed.]</td></tr>
+    <tr><td>Incomplete uploads</td><td>Unfinished uploads expire after 72 hours without progress and their partial files are deleted.</td></tr>
+    <tr><td>Creator submissions and files</td><td>For as long as the submission is under review or the resulting title is in the catalog, and until you delete the draft or your account. [Retention of files after rejection or account deletion to be confirmed — see the reviewer note below.]</td></tr>
+    <tr><td>Player measurements</td><td>Viewing-session measurements are deleted after 400 days; playback-error records after 180 days.</td></tr>
+    <tr><td>Quality reports and reports you filed</td><td>Kept to investigate problems and abuse. When you delete your account, they are kept without the link to your account. [Retention period to be confirmed.]</td></tr>
+    <tr><td>Audit log</td><td>Kept for accountability and security; entries are not deleted automatically. [Retention period to be confirmed.]</td></tr>
+    <tr><td>Server logs</td><td>The dashboard keeps the most recent 2,000 log entries in memory only; they are lost when the server restarts. Logs written to the server’s output are kept according to the hosting setup: [Log retention period].</td></tr>
+    <tr><td>Velvia conversations</td><td>Not stored on the server; kept in your browser tab until it is closed.</td></tr>
+  </tbody>
+</table>
+<aside data-notice="info">
+  <p><strong>Note for reviewers.</strong> In the current software, deleting an account removes the database records of its submissions and uploads, but the operator must confirm how the underlying files in private storage are removed. Expired session and password-reset records that are never presented again are not purged automatically yet. Both points should be resolved, or described, before publication.</p>
+</aside>
+
+<h2 id="rights">8. Your rights and choices</h2>
+<p>Depending on where you live, you may have the right to access, correct, delete, restrict or object to the use of your personal data, to receive it in a portable format and to withdraw consent. Lumina implements the most common requests directly:</p>
+<ul>
+  <li><strong>Access and portability:</strong> Account settings → “Download your data” gives you a JSON file with your account, profiles, library, collections, reviews, replies, reports, notifications, quality reports, creator applications and submissions.</li>
+  <li><strong>Deletion:</strong> Account settings → “Delete account…” deletes your account and personal data immediately, except the records described in <a href="#retention">section 7</a>. You can also delete individual history entries, reviews, replies, collections and notifications at any time.</li>
+  <li><strong>Correction:</strong> change your display name, email address, profiles and preferences in Account settings and Settings.</li>
+  <li><strong>Choices:</strong> turn off history-based recommendations and viewing statistics per profile, switch off optional notification types, stop saving watch progress, and clear search history and data stored on this device.</li>
+  <li><strong>Other requests</strong> (for example objection or restriction) can be sent to [Privacy contact email]. We will respond within [Response period].</li>
+</ul>
+<p>You may also complain to a data protection authority: [Supervisory authority and contact details].</p>
+
+<h2 id="security">9. Security</h2>
+<ul>
+  <li>Passwords and profile PINs are stored only as salted scrypt hashes; two-factor secrets are encrypted at rest.</li>
+  <li>The session cookie is HttpOnly and SameSite, is marked Secure when the service runs over HTTPS, and only a hash of its token is stored.</li>
+  <li>Requests that change data are protected against cross-site request forgery; sign-in, reporting and similar actions are rate limited.</li>
+  <li>Uploaded files are stored outside the public web folder, checked by their content (not just their name) and served to staff only through short-lived signed links.</li>
+  <li>Staff tools require a recent password confirmation (and two-factor authentication when the operator requires it), and every privileged action is recorded.</li>
+  <li>The site uses a strict Content Security Policy and builds its pages without inserting untrusted HTML.</li>
+</ul>
+<p>No system is perfectly secure. If you discover a vulnerability, please tell us at [Security contact email]. If a breach affects your personal data we will notify you and the authorities as required by law.</p>
+
+<h2 id="children">10. Children</h2>
+<p>Lumina accounts are for adults. We do not knowingly create accounts for children under [Minimum age]. A parent or guardian can create kids profiles inside their own account, set an age limit and protect profiles with a PIN. Data about a kids profile (such as its list and viewing history) belongs to the parent’s account and is managed, exported and deleted by the account holder. Reviews and replies are turned off on kids profiles. If you believe a child has created an account, contact [Privacy contact email] and we will delete it.</p>
+
+<h2 id="changes">11. Changes to this policy</h2>
+<p>We will update this policy when the service changes how it uses personal data. We will announce significant changes in the service, for example through a platform announcement in your notifications, before they take effect.</p>
+
+<h2 id="contact">12. Contact</h2>
+<p>[Operator legal name], [Registered address]. Privacy questions and requests: [Privacy contact email]. See also the <a href="#/legal/cookies">Cookie Policy</a> and <a href="#/legal/contact">Contact &amp; Support</a>.</p>
