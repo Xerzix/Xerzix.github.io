@@ -106,7 +106,9 @@ JSON over HTTPS, same-origin, cookie session. The browser client lives in `js/ap
 | POST | `/api/reports` `{targetType:'review'|'comment'|'collection', targetId, reason, details?}` | account, rate limited | `{ok}` |
 | GET / POST / DELETE | `/api/blocks` `{reviewId}` · `/api/blocks/:id` | account | blocked authors are hidden from your review lists |
 
-Review: `{ id, titleId, rating, body, containsSpoilers, status, author: {name, avatar}, isMine, helpfulCount, votedHelpful, commentCount, createdAt, updatedAt, edited }`
+Review: `{ id, titleId, rating, body, containsSpoilers, status, author: {name, avatar}, isMine, fromYourAccount, helpfulCount, votedHelpful, commentCount, createdAt, updatedAt, edited, editedAt }` (`fromYourAccount`: written by another profile of the viewer's account — no helpful votes, reports or blocks). The list also returns `sort` and `commentsEnabled`.
+
+Moderation: reviews and replies are scored by spam heuristics (links, shouting, repeated characters, blocklist, the same text reused by the account, more than 5 posts in 10 minutes); a held post has `status: 'pending'`, is visible only to its author and is audited as `moderation.auto_hold`. A target with 3 distinct open reports is hidden pending moderator review (`moderation.auto_hide`).
 
 ## Playback quality & telemetry
 | POST | `/api/quality-reports` `{titleId, episodeId?, category, description?, device?, connectionMbps?, selectedResolution?, diagnostics?}` | account, rate limited |
@@ -123,6 +125,7 @@ Review: `{ id, titleId, rating, body, containsSpoilers, status, author: {name, a
 ## Creators & uploads
 | GET | `/api/creators/me` | account | `{isCreator, application|null}` |
 |---|---|---|---|
+| GET | `/api/creators/requirements` | public | `{uploads: {maxVideoBytes, maxImageBytes, maxDocumentBytes, maxSubtitleBytes, chunkBytes, maxChunkBytes, expireHours}, roles, extensions, transcoding: {available}}` |
 | POST | `/api/creators/applications` `{legalName, contactEmail, company?, website?, portfolio?, country?, bio}` | account | `{application}` |
 | GET / POST | `/api/creators/submissions` | creator | `{items}` / `{submission}` (draft) |
 | GET / PATCH / DELETE | `/api/creators/submissions/:id` | owner (admins use the admin API) | `{submission, files, events}` |
@@ -130,10 +133,11 @@ Review: `{ id, titleId, rating, body, containsSpoilers, status, author: {name, a
 | POST | `/api/creators/submissions/:id/submit` · `/respond {message}` | owner | `{submission}` |
 | DELETE | `/api/creators/submissions/:id/files/:fileId` | owner (draft or info_required) | 204 |
 | GET | `/api/creators/titles` | creator | published titles from the creator's submissions, with stats |
-| POST | `/api/uploads` `{filename, size, mime, purpose:'submission', submissionId, role}` | creator | `{id, offset: 0, chunkSize, expiresAt}` |
-| HEAD / GET | `/api/uploads/:id` | owner | `Upload-Offset` header / `{offset, size, status}` |
-| PATCH | `/api/uploads/:id` (`Content-Type: application/offset+octet-stream`, `Upload-Offset`) | owner | 204 + `Upload-Offset`. When complete, the file is validated (type, size, magic bytes, media probe) and attached. |
-| DELETE | `/api/uploads/:id` | owner | 204 |
+| POST | `/api/uploads` `{filename, size, mime?, purpose:'submission'|'artwork', submissionId?, role}` | creator (submission, own draft/info_required) · staff (artwork) | `{id, offset: 0, size, chunkSize, maxChunkSize, expiresAt}` · 413 `FILE_TOO_LARGE` · 422 `UNSUPPORTED_FILE_TYPE` · 409 `SUBMISSION_LOCKED` / `TOO_MANY_UPLOADS` |
+| HEAD / GET | `/api/uploads/:id` | owner | `Upload-Offset` + `Upload-Length` headers / `{id, purpose, submissionId, role, filename, size, offset, status: in_progress|processing|complete|rejected|aborted|expired, error, fileId?, url?, width?, height?}` |
+| PATCH | `/api/uploads/:id` (`Content-Type: application/offset+octet-stream`, `Upload-Offset`) | owner | 204 + `Upload-Offset`. 409 `OFFSET_MISMATCH` (`error.offset` = the server offset), 413 `CHUNK_TOO_LARGE`, 409 `UPLOAD_BUSY` while another chunk or the final check runs. When the last byte arrives the file is validated by content (magic bytes), hashed (SHA-256), probed and scanned, then attached; refusals are 422 `UPLOAD_REJECTED` / `UPLOAD_INFECTED` / `DUPLICATE_FILE`. An empty PATCH at the final offset re-runs an interrupted check. |
+| DELETE | `/api/uploads/:id` | owner | 204 · 409 `UPLOAD_COMPLETE` / `UPLOAD_BUSY` (final check running) |
+| GET | `/media/art/:file` | public | staff-uploaded artwork from storage `public/art/` only (`upl_<id>.png|jpg|webp`), cached immutable |
 
 Submission statuses: `draft → uploading → submitted → under_review → info_required ↔ submitted → approved → published`, or `rejected`. Only the admin API moves a submission past `submitted`. Nothing is published automatically.
 
