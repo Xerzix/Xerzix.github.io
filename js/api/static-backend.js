@@ -356,8 +356,9 @@ export async function createStaticBackend() {
       status: async () => ({ provider: 'local', available: true, grounded: true, model: null, preview: true }),
       chat: async (payload) => {
         const { respond } = await import('../core/velvia-engine.js');
-        const s = signals();
-        return respond(titles, payload, { history: payload?.options?.useHistory === false ? [] : s.history, watchlist: s.watchlist, ratings: {} });
+        // The engine honours options.useHistory and the profile's privacy preference
+        // (signals().useHistory), and skips completed films using progress.
+        return respond(titles, payload, signals());
       },
     },
     creators: new Proxy({}, { get: () => notInPreview('Creator submissions') }),

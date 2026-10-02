@@ -118,7 +118,7 @@ Review: `{ id, titleId, rating, body, containsSpoilers, status, author: {name, a
 ## Velvia Suggestions
 | GET | `/api/velvia/status` | `{provider, available, model, grounded: true}` |
 |---|---|---|
-| POST | `/api/velvia/chat` `{messages: [{role:'user'|'assistant', content}], context: {titleId?, compareIds?[]}, options: {useHistory: bool}}` | `{reply, recommendations: [{titleId, reason, title: TitleSummary}], clarifyingQuestion?, suggestions: string[], provider, fallback: bool}`. Only catalog titles can be recommended; the server drops any id that is not in the catalog. |
+| POST | `/api/velvia/chat` `{messages: [{role:'user'|'assistant', content}] (1–20, ≤ 2000 chars each, last from the user), context: {titleId?, compareIds?[] (≤ 3)}, options: {useHistory: bool}}` | public (a profile personalises), rate limited 20/min per account or IP. `{reply, recommendations: [{titleId, reason, title: TitleSummary, closest?}], clarifyingQuestion, suggestions: string[], provider: 'local'|'anthropic'|'openai-compatible' (the one that answered), fallback: bool, notice? (when fallback), intent, comparison?: {titleIds, titles, rows: [{key, label, values}]}, notInCatalog?: string[]}`. Only catalog titles the profile may see can be recommended; the server drops any other id. `closest: true` marks a labelled closest option when nothing matches exactly. |
 
 ## Creators & uploads
 | GET | `/api/creators/me` | account | `{isCreator, application|null}` |
