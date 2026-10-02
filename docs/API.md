@@ -151,10 +151,11 @@ Submission statuses: `draft → uploading → submitted → under_review → inf
 ## Watch parties (profile; single-instance, in-memory)
 | POST | `/api/parties` `{titleId, episodeId?}` | `{code, party}` |
 |---|---|---|
-| GET | `/api/parties/:code` · POST `/join` · POST `/leave` · DELETE (host ends) | `{party: {code, host, titleId, episodeId, state: {playing, position, updatedAt}, members: [{name, avatar}], allowGuestControl}}` |
-| POST | `/api/parties/:code/control` `{action:'play'|'pause'|'seek'|'episode', position, episodeId?}` | host, or guests when allowed |
-| POST | `/api/parties/:code/chat` `{text}` | member |
-| GET | `/api/parties/:code/events` | Server-Sent Events: `state`, `chat`, `members`, `ended` |
+| GET | `/api/parties/:code` · POST `/join` · POST `/leave` (→ `{ok, ended}`) · DELETE (host ends) | `{party: {code, host, titleId, episodeId, state: {playing, position, updatedAt, episodeId, serverTime}, members: [{name, avatar, isHost, online, isYou}], memberCount, maxMembers, allowGuestControl, you: {isMember, isHost, canControl}, createdAt}}` |
+| PATCH | `/api/parties/:code` `{allowGuestControl}` | host only → `{party}` |
+| POST | `/api/parties/:code/control` `{action:'play'|'pause'|'seek'|'episode', position, episodeId?}` | host, or guests when allowed → `{state}` |
+| POST | `/api/parties/:code/chat` `{text}` (≤ 500 chars, 5 per 10 s, 20 per minute) | member → `{message}` |
+| GET | `/api/parties/:code/events` | member. Server-Sent Events: `state`, `chat` (recent history first, flagged `history: true`), `members`, `ended` `{reason}`; heartbeat comment every 20 s |
 
 ## Administration (staff; admin-only rows are marked)
 All admin routes are under `/api/admin/*`. Every mutation writes an audit log entry.

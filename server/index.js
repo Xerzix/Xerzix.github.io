@@ -26,6 +26,9 @@ server.listen(config.port, config.host, () => {
 function shutdown(signal) {
   log.info('shutting down', { signal });
   worker?.stop?.();
+  // Watch parties live in memory: tell members the party ended and close their event
+  // streams, otherwise open Server-Sent-Event connections hold server.close() open.
+  app.services.parties?.stop?.();
   server.close(() => {
     db.close();
     process.exit(0);

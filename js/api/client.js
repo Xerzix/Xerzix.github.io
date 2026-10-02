@@ -220,6 +220,7 @@ export function createServerBackend() {
       create: (d) => post('/api/parties', d),
       get: (code) => get(`/api/parties/${enc(code)}`),
       join: (code) => post(`/api/parties/${enc(code)}/join`),
+      update: (code, d) => patch(`/api/parties/${enc(code)}`, d),
       control: (code, d) => post(`/api/parties/${enc(code)}/control`, d),
       chat: (code, text) => post(`/api/parties/${enc(code)}/chat`, { text }),
       leave: (code) => post(`/api/parties/${enc(code)}/leave`),

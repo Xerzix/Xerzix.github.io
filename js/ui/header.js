@@ -330,6 +330,7 @@ function profileMenu() {
     menuItem(t('nav.stats', 'Viewing statistics'), { icon: 'chart', href: '#/stats' }),
     menuItem(t('nav.creators', 'Creators'), { icon: 'clapper', href: '#/creators' }),
   );
+  if (session.isServer && p && session.features?.watchParties) items.push(menuItem(t('nav.joinParty', 'Join a watch party'), { icon: 'message', href: '#/party/join' }));
   if (session.isStaff) items.push(menuItem(t('nav.admin', 'Admin dashboard'), { icon: 'shield', href: 'admin.html' }));
   if (session.isServer) {
     items.push(h('div', { class: 'lm-menu__sep' }), menuItem(t('nav.signout', 'Sign out'), {
