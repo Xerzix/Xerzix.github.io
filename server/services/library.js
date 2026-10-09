@@ -104,7 +104,12 @@ export class LibraryService {
   }
 
   unmarkWatched(profileId, titleId) {
-    this.db.run('DELETE FROM progress WHERE profile_id = ? AND title_id = ?', profileId, titleId);
+    this.db.tx(() => {
+      this.db.run('DELETE FROM progress WHERE profile_id = ? AND title_id = ?', profileId, titleId);
+      // "Mark as watched" leaves a zero-second history row; undoing the mark removes it too, so
+      // statistics stop counting the title as watched. Time actually spent watching is kept.
+      this.db.run('DELETE FROM history WHERE profile_id = ? AND title_id = ? AND seconds = 0', profileId, titleId);
+    });
   }
 
   /** Progress rows for the profile, newest first, with episode info for series. */
@@ -151,7 +156,7 @@ export class LibraryService {
 
   history(profileId, { page = 1, pageSize = 50 } = {}) {
     const total = this.db.get('SELECT COUNT(*) AS n FROM history WHERE profile_id = ?', profileId).n;
-    const rows = this.db.all('SELECT * FROM history WHERE profile_id = ? ORDER BY watched_at DESC LIMIT ? OFFSET ?', profileId, pageSize, (page - 1) * pageSize);
+    const rows = this.db.all('SELECT * FROM history WHERE profile_id = ? ORDER BY watched_at DESC, id DESC LIMIT ? OFFSET ?', profileId, pageSize, (page - 1) * pageSize);
     return { total, page, pageSize, rows };
   }
 

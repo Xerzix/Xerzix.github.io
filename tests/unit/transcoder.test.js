@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  audioBitrate, buildHlsArgs, h264Level, parseMasterPlaylist, parseMediaPlaylist, planLadder, transcodeToHls,
+  audioBitrate, buildHlsArgs, displayRotation, h264Level, inspectWithFfmpeg, parseMasterPlaylist, parseMediaPlaylist, planLadder, transcodeToHls,
 } from '../../server/services/media/transcoder.js';
 import { inspectTsSegment } from '../../server/services/media/probe.js';
 
@@ -90,7 +90,10 @@ test('ffmpeg arguments align keyframes and map every rung', () => {
   assert.equal(after('-ac'), '2');
   assert.equal(after('-b:a:0'), '128k');
   assert.ok(!args.includes('-b:a:1'));
-  assert.equal(after('-filter:v:0'), 'scale=1920:1080:flags=bicubic,setsar=1');
+  // The height is fixed and the width follows the decoded picture, so the aspect ratio is kept
+  // (a rotated phone clip is decoded upright and must not be squeezed into a landscape box).
+  assert.equal(after('-filter:v:0'), 'scale=-2:1080:flags=bicubic,setsar=1');
+  assert.equal(after('-filter:v:3'), 'scale=-2:360:flags=bicubic,setsar=1');
   assert.equal(args.filter((a) => a === '0:a:0').length, 1);
   assert.equal(args.filter((a) => a === '0:v:0').length, 4);
   assert.equal(after('-hls_segment_filename'), '/out/%v/seg_%05d.ts');
@@ -272,5 +275,34 @@ test('queue + worker: a transcode publishes verified renditions to the media row
     await worker.stop();
     h.db.close();
     rmSync(h.dir, { recursive: true, force: true });
+  }
+});
+
+test('displayRotation reads the display matrix and the legacy rotate tag as clockwise turns', () => {
+  assert.equal(displayRotation('      Side data:\n        displaymatrix: rotation of -90.00 degrees\n'), 90);
+  assert.equal(displayRotation('      Side data:\n        displaymatrix: rotation of 90.00 degrees\n'), 270);
+  assert.equal(displayRotation('    Metadata:\n      rotate          : 90\n'), 90);
+  assert.equal(displayRotation('    Metadata:\n      handler_name    : VideoHandler\n'), 0);
+});
+
+test('a rotated phone clip is planned and encoded upright, never squashed', { skip: noFfmpeg, timeout: 120_000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'lumina-rot-'));
+  try {
+    const flat = makeSource(dir, { size: '640x360', audio: false, seconds: 1, name: 'flat.mp4' });
+    const rotated = join(dir, 'rotated.mp4');
+    // Same frames, plus a display matrix saying "turn a quarter" (what phones record for portrait).
+    execFileSync(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-y', '-display_rotation', '90', '-i', flat, '-c', 'copy', rotated]);
+    const src = await inspectWithFfmpeg(FFMPEG, rotated);
+    assert.deepEqual([src.width, src.height, src.rotation], [360, 640, 270]);
+    const result = await transcodeToHls({ input: rotated, outDir: join(dir, 'hls'), ffmpegPath: FFMPEG, segmentSeconds: 1 });
+    assert.deepEqual(result.renditions.map((r) => r.height), [480, 360]);
+    for (const r of result.renditions) {
+      assert.ok(r.width < r.height, `${r.width}x${r.height} is portrait`);
+      assert.ok(Math.abs(r.width / r.height - 360 / 640) < 0.02, `${r.width}x${r.height} keeps the 9:16 aspect ratio`);
+    }
+    const master = parseMasterPlaylist(readFileSync(result.masterPath, 'utf8'));
+    assert.deepEqual(master.variants.map((v) => `${v.width}x${v.height}`), result.renditions.map((r) => `${r.width}x${r.height}`));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -310,6 +310,82 @@ test('server: phone layout has no horizontal overflow', async () => {
   await page.context().close();
 });
 
+test('server: the history switch follows the profile’s privacy setting', async () => {
+  const user = await app.userClient({ displayName: 'Mio' });
+  const put = await user.put(`/api/profiles/${user.profileId}/preferences`, { preferences: { privacy: { useHistoryForRecommendations: false } } });
+  assert.equal(put.status, 200);
+  const page = await newPage(browser, { base: app.base, cookies: [sessionCookie(user)] });
+  // A choice stored in this tab before the setting was turned off doesn't count.
+  await page.addInitScript((pid) => sessionStorage.setItem(`lumina.velvia.history.${pid}`, 'true'), user.profileId);
+  await openVelvia(page, app.base);
+  const sw = '.lm-velvia__history .lm-switch';
+  assert.ok(await page.isDisabled(sw), 'the switch cannot be turned on here');
+  assert.equal(await page.getAttribute(sw, 'aria-checked'), 'false');
+  assert.match(await page.textContent('#velvia-history-hint'), /Turned off in Settings › Privacy/);
+  assert.equal(await page.getAttribute('#velvia-history-hint a', 'href'), '#/settings/privacy');
+  const sent = page.waitForRequest((r) => r.url().endsWith('/api/velvia/chat'));
+  await ask(page, 'Something calm');
+  assert.equal(JSON.parse((await sent).postData()).options.useHistory, false);
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});
+
+test('server: a panel answer is dropped, not announced, when the viewer leaves the page', async () => {
+  const page = await newPage(browser, { base: app.base });
+  let failed = 0;
+  page.on('requestfailed', (r) => { if (r.url().endsWith('/api/velvia/chat')) failed += 1; });
+  await page.route('**/api/velvia/chat', async (route) => {
+    await new Promise((r) => setTimeout(r, 1500));
+    await route.continue().catch(() => {});
+  });
+  await page.goto(`${app.base}/#/title/sintel`);
+  await page.waitForSelector('#velvia');
+  await page.click('#velvia .lm-chip--velvia >> text=Soundtrack');
+  await page.evaluate(() => { location.hash = '#/genres'; });
+  await page.waitForFunction(() => !document.querySelector('#velvia'));
+  await page.waitForTimeout(2500);
+  assert.equal(failed, 1, 'the request was cancelled');
+  const live = await page.evaluate(() => [...document.querySelectorAll('[aria-live]')].map((n) => n.textContent).join(' | '));
+  assert.doesNotMatch(live, /Velvia:|Jan Morgenstern/);
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});
+
+test('server: on a phone every Velvia control is a 44px touch target and the compare tray stays compact', async () => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, ignoreHTTPSErrors: true });
+  await context.addInitScript(() => localStorage.setItem('lumina.introSeen', '1'));
+  await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
+  const page = await context.newPage();
+  await openVelvia(page, app.base);
+  const reply = await ask(page, 'What should I watch tonight?');
+  await reply.locator('.lm-vrec').first().waitFor();
+  const compare = reply.locator('.lm-vrec__actions button[aria-label^="Compare "]');
+  for (let i = 0; i < 3; i++) await compare.nth(i).tap();
+  await reply.locator('.lm-vrec__actions button[aria-label^="Ask about this"]').first().tap();
+  await page.waitForSelector('.lm-velvia__context:not([hidden])');
+  const small = await page.evaluate(() => {
+    const out = [];
+    const sel = '.lm-vrec__actions .lm-btn, .lm-chip--velvia, .lm-velvia__tray-remove, .lm-velvia__context-clear, .lm-velvia__tray-actions .lm-btn';
+    for (const el of document.querySelectorAll(sel)) {
+      const r = el.getBoundingClientRect();
+      if (r.width && (r.width < 44 || r.height < 44)) out.push(`${el.className} ${Math.round(r.width)}x${Math.round(r.height)}`);
+    }
+    // The switch keeps its look; its touch area reaches 44px.
+    const swEl = document.querySelector('.lm-velvia__history .lm-switch');
+    swEl.scrollIntoView({ block: 'center', behavior: 'instant' });
+    const sw = swEl.getBoundingClientRect();
+    for (const [x, y] of [[sw.left + sw.width / 2, sw.top - 7], [sw.left + sw.width / 2, sw.bottom + 7]]) {
+      if (!document.elementFromPoint(x, y)?.closest('.lm-switch')) out.push(`switch area misses ${Math.round(x)},${Math.round(y)}`);
+    }
+    return out;
+  });
+  assert.deepEqual(small, []);
+  const tray = await page.locator('.lm-velvia__tray').boundingBox();
+  assert.ok(tray.height <= 120, `the tray is ${Math.round(tray.height)}px tall`);
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth));
+  await context.close();
+});
+
 // ───────────────────────── Preview mode ─────────────────────────
 
 test('Preview: the Velvia page and both panels run on the built-in engine in the page', async () => {

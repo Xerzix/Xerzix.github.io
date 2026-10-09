@@ -170,6 +170,61 @@ test('a PIN-locked profile asks for its PIN before switching', async () => {
   await page.context().close();
 });
 
+test('a kids profile keeps account settings locked; a grown-up’s password covers one change, then it locks again', async () => {
+  const page = await newPage(browser, { base: app.base, reducedMotion: 'reduce' });
+  const email = newEmail();
+  await registerThroughUi(page, email, 'Mariko');
+  const parent = (await apiFromPage(page, 'GET', '/api/session')).body.profile;
+  assert.equal((await apiFromPage(page, 'PUT', `/api/profiles/${parent.id}/pin`, { pin: '4321' })).status, 200);
+  const kid = (await apiFromPage(page, 'POST', '/api/profiles', { name: 'Hana', avatar: 'fox', isKids: true, maxAge: 7 })).body.profile;
+  // A confirmation made before handing the device over does not carry into the kids profile.
+  await apiFromPage(page, 'POST', '/api/auth/elevate', { password: PW });
+  assert.equal((await apiFromPage(page, 'POST', `/api/profiles/${kid.id}/select`, {})).status, 200);
+
+  await page.goto(`${app.base}/#/account`);
+  await page.reload(); // the switch happened through the API; load the new session
+  await page.waitForSelector('#account-locked');
+  const locked = await page.textContent('.lm-account');
+  assert.ok(!locked.includes(email), 'the account email is not shown');
+  assert.doesNotMatch(locked, /Download a copy|Sign out everywhere else/);
+
+  await page.click('#account-locked .lm-btn--primary');
+  await page.fill('dialog input[type=password]', PW);
+  await page.click('dialog .lm-modal__foot .lm-btn--primary');
+  await page.waitForSelector('.lm-account__parental');
+  assert.match(await page.textContent('.lm-account__parental'), /Unlocked for a grown-up/);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.click('#account-data .lm-btn--glass')]);
+  assert.match(download.suggestedFilename(), /^lumina-data-.*\.json$/);
+  await page.waitForFunction(() => /has been used/.test(document.querySelector('.lm-account__parental')?.textContent || ''));
+  // The next change asks again.
+  await page.click('#account-data .lm-btn--glass');
+  await page.waitForSelector('dialog input[type=password]');
+  assert.match(await page.textContent('dialog'), /Hana has parental controls/);
+  await page.click('dialog .lm-modal__foot .lm-btn--ghost');
+  await page.click('.lm-account__parental .lm-btn');
+  await page.waitForSelector('#account-locked');
+
+  // Manage profiles: locked, unlock, one change, locked again.
+  await page.goto(`${app.base}/#/profiles/manage`);
+  await page.waitForFunction(() => /profile changes are locked/.test(document.querySelector('.lm-profiles__notice')?.textContent || ''));
+  await page.click('.lm-profiles__notice .lm-link');
+  await page.fill('dialog input[type=password]', PW);
+  await page.click('dialog .lm-modal__foot .lm-btn--primary');
+  await page.waitForFunction(() => /Unlocked for a grown-up/.test(document.querySelector('.lm-profiles__notice')?.textContent || ''));
+  await page.click('.lm-profile-tile[aria-label="Edit Hana"]');
+  await page.waitForSelector('dialog select[name=maxAge]');
+  await page.selectOption('dialog select[name=maxAge]', '8');
+  await page.click('dialog .lm-modal__foot .lm-btn--primary');
+  await page.waitForSelector('dialog .lm-profile-form', { state: 'detached' });
+  await page.waitForFunction(() => /profile changes are locked/.test(document.querySelector('.lm-profiles__notice')?.textContent || ''));
+  const after = (await apiFromPage(page, 'GET', '/api/session')).body;
+  assert.equal(after.profile.maxAge, 8);
+  assert.equal(after.elevated, false);
+  assert.equal((await apiFromPage(page, 'PUT', `/api/profiles/${parent.id}/pin`, { pin: null })).body.error.code, 'PARENTAL_CONTROL');
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});
+
 test('an appearance preset persists across reloads and, for a profile, on the server', async () => {
   const email = newEmail();
   const page = await newPage(browser, { base: app.base, reducedMotion: 'reduce' });
@@ -232,10 +287,24 @@ test('a custom colour with poor contrast shows a readable warning; the fix and D
   assert.equal(await page.$eval('.lm-custom-editor', (el) => getComputedStyle(el).color), 'rgb(248, 245, 242)');
   assert.ok(await page.isVisible('.lm-savebar'));
 
+  // The report is not one big live region; only changes in the result are announced.
+  assert.equal(await page.$eval('.lm-contrast', (el) => el.getAttribute('aria-live')), null);
   await page.click('.lm-contrast .lm-btn--primary');
   await page.waitForSelector('.lm-contrast .lm-notice--ok');
-  assert.equal((await page.$$('.lm-contrast__item[data-severity="fail"]')).length, 0);
+  assert.equal((await page.$$('.lm-contrast__item:not([data-severity="ok"])')).length, 0);
   await page.waitForFunction(() => document.documentElement.style.getPropertyValue('--lm-text') !== '#333333');
+  await page.waitForFunction(() => /Every text check now passes/.test(document.getElementById('lm-live')?.textContent || ''));
+  assert.ok(await page.isHidden('.lm-contrast .lm-btn--primary'), 'nothing left to fix');
+
+  // A background no text colour can read on: the fix also moves the background, and only
+  // then says that every check passes.
+  const secondary = page.locator('.lm-colour', { hasText: 'Secondary background' }).locator('input.lm-input');
+  await secondary.fill('#009944');
+  await page.waitForSelector('.lm-contrast .lm-btn--primary:visible');
+  await page.click('.lm-contrast .lm-btn--primary');
+  await page.waitForSelector('.lm-contrast .lm-notice--ok');
+  assert.equal((await page.$$('.lm-contrast__item:not([data-severity="ok"])')).length, 0);
+  await page.waitForFunction(() => /Adjusted the .*secondary background.*Every text check now passes/.test(document.getElementById('lm-live')?.textContent || ''));
 
   // Leaving with unsaved changes asks first, and discarding restores the saved theme.
   await page.click('.lm-settings__nav a[href="#/settings/playback"]');

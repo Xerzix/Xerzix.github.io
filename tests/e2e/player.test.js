@@ -428,3 +428,103 @@ async function expectInSync(a, b, timeout = 6000) {
   }
   assert.fail(`players drifted apart: ${JSON.stringify(last)}`);
 }
+
+test('keyboard focus keeps the controls up; the series control bar fits a 360 px phone', async () => {
+  const user = await app.userClient({ displayName: 'Rin' });
+  const page = await open('/#/watch/garden-hours', { user });
+  await waitPlaying(page, 0.3);
+  // The mouse rests over the picture while a keyboard user tabs onto a bottom-bar control.
+  await wake(page);
+  for (let i = 0; i < 20 && !(await page.evaluate(() => !!document.activeElement?.closest('.lm-player__bottom'))); i++) await page.keyboard.press('Tab');
+  const focused = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'));
+  assert.ok(await page.evaluate(() => !!document.activeElement?.closest('.lm-player__bottom')), 'Tab reaches the bottom bar');
+  await page.waitForTimeout(4500); // past the 3 s auto-hide
+  assert.equal((await video(page)).paused, false);
+  assert.equal(await page.getAttribute('.lm-player', 'data-controls'), 'visible', `controls stay up while “${focused}” has keyboard focus`);
+  // Esc puts them away; Tab brings them back.
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.lm-player[data-controls="hidden"]');
+  await page.keyboard.press('Tab');
+  await page.waitForSelector('.lm-player[data-controls="visible"]');
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+
+  // 360 × 640: a series shows Next episode and Episodes as well. Nothing may overlap or
+  // leave the screen, and every button stays at least 40 px.
+  const phone = await open('/#/watch/garden-hours', { user, viewport: { width: 360, height: 640 } });
+  await phone.waitForSelector('.lm-player__bar [aria-label^="Next episode"]:not([hidden])');
+  await phone.waitForSelector('.lm-player__bar [aria-label="Episodes"]:not([hidden])');
+  const rects = await phone.$$eval('.lm-player__bar button', (els) => els
+    .filter((b) => b.offsetParent !== null)
+    .map((b) => { const r = b.getBoundingClientRect(); return { label: b.getAttribute('aria-label'), left: r.left, right: r.right, height: r.height }; })
+    .sort((a, b) => a.left - b.left));
+  assert.ok(rects.length >= 7, JSON.stringify(rects));
+  for (const r of rects) {
+    assert.ok(r.left >= 0 && r.right <= 360, `${r.label} is on screen: ${r.left}–${r.right}`);
+    assert.ok(r.height >= 40, `${r.label} is at least 40 px tall`);
+  }
+  for (let i = 1; i < rects.length; i++) assert.ok(rects[i].left >= rects[i - 1].right - 0.5, `${rects[i - 1].label} and ${rects[i].label} do not overlap`);
+  const time = await phone.locator('.lm-player__time').boundingBox();
+  assert.ok(time.height >= 40, `time toggle is ${time.height} px tall`);
+  await phone.context().close();
+});
+
+/** A further profile on an existing account, signed in with its own session. */
+async function profileClient(accountId, { name, kids = false }) {
+  const { newId, randomToken, sha256 } = await import('../../server/lib/crypto.js');
+  const ts = new Date().toISOString();
+  const profileId = newId('prf');
+  app.db.run('INSERT INTO profiles (id, account_id, name, avatar, max_age, is_kids, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', profileId, accountId, name, 'sakura', kids ? 7 : null, kids ? 1 : 0, ts, ts);
+  const token = randomToken(32);
+  app.db.run(
+    `INSERT INTO sessions (id, account_id, token_hash, profile_id, created_at, last_seen_at, expires_at, elevated_until, user_agent, ip) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'test', '127.0.0.1')`,
+    newId('ses'), accountId, sha256(token), profileId, ts, ts, new Date(Date.now() + 86_400_000).toISOString(),
+  );
+  const c = app.client();
+  c.jar.set('lumina_sid', token);
+  return c;
+}
+
+test('paused new parties keep running rooms joinable; kids profiles watch without chat', async () => {
+  const kid = await app.userClient({ maxAge: 7, displayName: 'Hana' });
+  const parent = await profileClient(kid.accountId, { name: 'Mother' });
+  const friend = await app.userClient({ displayName: 'Daichi' });
+  const created = await parent.post('/api/parties', { titleId: 'hanami' });
+  assert.equal(created.status, 200, JSON.stringify(created.body));
+  const { code } = created.body;
+  const setPaused = (paused) => app.db.run(
+    `INSERT INTO platform_settings (key, value, updated_at) VALUES ('watchPartiesEnabled', ?, ?)
+     ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    JSON.stringify(!paused), new Date().toISOString(),
+  );
+  setPaused(true);
+  try {
+    // An invite to a running party still works while new parties are paused.
+    const guest = await open(`/#/party/${code}`, { user: friend });
+    await guest.waitForSelector(`.lm-party-gate:has-text("Watch party · ${code}")`);
+    await guest.click('.lm-party-gate button:has-text("Join the party")');
+    await guest.waitForSelector('.lm-party .lm-player');
+    assert.ok(await guest.isVisible('.lm-party__form input'));
+    // Speed is fixed in parties, so the shortcuts list leaves the speed keys out.
+    await guest.keyboard.press('?');
+    await guest.waitForSelector('.lm-player__dialog:has-text("Keyboard shortcuts")');
+    assert.doesNotMatch(await guest.textContent('.lm-player__dialog'), /Faster|Slower/);
+    await guest.keyboard.press('Escape');
+    // The join form says why no new party can be started, and still accepts codes.
+    await guest.goto(`${app.base}/#/party/join`);
+    await guest.waitForSelector('.lm-party-gate__note:has-text("New watch parties are paused")');
+    assert.ok(await guest.isVisible('.lm-party-gate__form input'));
+    assert.deepEqual(guest.errors, []);
+    await guest.context().close();
+
+    // The kids profile joins its own account's party and watches without chat.
+    const child = await open(`/#/party/${code}`, { user: kid });
+    await child.click('.lm-party-gate button:has-text("Join the party")');
+    await child.waitForSelector('.lm-party__chat-off:has-text("Chat is turned off on kids profiles")');
+    assert.equal(await child.isVisible('.lm-party__form'), false);
+    assert.deepEqual(child.errors, []);
+    await child.context().close();
+  } finally {
+    setPaused(false);
+  }
+});

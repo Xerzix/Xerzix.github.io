@@ -31,6 +31,7 @@ const ENDED_REASONS = {
   empty: 'Everyone left, so the party closed.',
   shutdown: 'The Lumina server restarted. Watch parties do not survive a restart.',
   not_found: 'The party has ended, or the code is no longer valid.',
+  restricted: 'Someone outside your account became the host, so this kids profile left the party.',
 };
 
 const normalizeCode = (value) => String(value || '').toUpperCase().replace(/[\s-]+/g, '');
@@ -39,12 +40,15 @@ export default async function render(ctx) {
   const root = h('div', { class: 'lm-party-view' });
   const code = normalizeCode(ctx.params.code);
 
-  if (session.features?.watchParties === false) {
-    root.append(disabledGate());
-    return root;
-  }
+  // `session.features.watchParties` is false both when this server has watch parties turned
+  // off and when an administrator has only paused new ones; parties already running can
+  // still be joined in the second case. Only the API knows which, so a party code always goes
+  // to the API (its FEATURE_DISABLED answer shows the gate), and the join form asks it too.
   if (!CODE_RE.test(code)) {
-    root.append(joinGate(ctx, { invalid: code && code !== 'JOIN' ? ctx.params.code : null }));
+    const availability = session.features?.watchParties === false ? await partiesAvailability() : 'on';
+    if (ctx.signal.aborted) return root;
+    if (availability === 'off') root.append(disabledGate());
+    else root.append(joinGate(ctx, { invalid: code && code !== 'JOIN' ? ctx.params.code : null, paused: availability === 'paused' }));
     return root;
   }
 
@@ -107,6 +111,20 @@ function focusHeading(el) {
   requestAnimationFrame(() => el.querySelector('h1')?.focus({ preventScroll: true }));
 }
 
+/**
+ * 'off' when the server has watch parties turned off, else 'paused' (new parties are paused
+ * but running ones can be joined). Asks for a code that can never exist: the server answers
+ * FEATURE_DISABLED when parties are off and PARTY_NOT_FOUND otherwise.
+ */
+async function partiesAvailability() {
+  try {
+    await api.parties.get('JOIN');
+    return 'paused';
+  } catch (err) {
+    return err?.code === 'FEATURE_DISABLED' ? 'off' : 'paused';
+  }
+}
+
 function disabledGate() {
   return gate({
     title: 'Watch parties are turned off',
@@ -162,13 +180,16 @@ function joinForm(ctx, { autofocus = true } = {}) {
   return form;
 }
 
-function joinGate(ctx, { invalid } = {}) {
+function joinGate(ctx, { invalid, paused = false } = {}) {
   return gate({
     title: 'Join a watch party',
     message: invalid
       ? `“${String(invalid).slice(0, 24)}” is not a valid party code. Check the invite and try again.`
       : 'Watch together in sync and chat while you watch. Enter the code from your host’s invite.',
-    extra: [joinForm(ctx)],
+    extra: [
+      paused ? h('p', { class: 'lm-party-gate__note', role: 'note' }, icon('info'), h('span', null, 'New watch parties are paused on this Lumina server. Parties that are already running can still be joined with their code.')) : null,
+      joinForm(ctx),
+    ].filter(Boolean),
     actions: [linkButton('Back to browsing', '#/', { variant: 'ghost', icon: 'arrowLeft' })],
   });
 }
@@ -210,7 +231,7 @@ function inviteGate(ctx, party, detail, enter) {
       const res = await api.parties.join(party.code);
       enter(res.party, { focus: true });
     } catch (err) {
-      join.disabled = err?.code === 'PARTY_FULL' || err?.status === 404;
+      join.disabled = err?.code === 'PARTY_FULL' || err?.code === 'PROFILE_RESTRICTED' || err?.status === 404;
       join.classList.remove('is-busy');
       status.textContent = err?.message || 'You could not join right now. Please try again.';
       if (err?.status === 404) ctx.navigate(`/party/${party.code}`, { replace: true });
@@ -245,6 +266,7 @@ function mountRoom(ctx, root, initial, detailIn) {
   let myName = members.find((m) => m.isYou)?.name || session.profile?.name || '';
   let membersSeen = false;
   let es = null;
+  let detached = false; // this tab's stream was replaced by newer tabs of the same member
   let ended = false;
   let leaving = false;
   let retry = 0;
@@ -327,6 +349,8 @@ function mountRoom(ctx, root, initial, detailIn) {
   const chatError = h('p', { class: 'lm-party__chat-error', role: 'alert', hidden: true });
   const sendBtn = button('', { variant: 'primary', icon: 'send', type: 'submit', ariaLabel: 'Send message', attrs: { title: 'Send' } });
   const chatForm = h('form', { class: 'lm-party__form', novalidate: true }, chatInput, sendBtn);
+  // Kids profiles watch along without chat (user-to-user text is off on kids profiles).
+  const chatOff = h('p', { class: 'lm-party__chat-off', hidden: true }, icon('lock'), h('span', null, 'Chat is turned off on kids profiles. You still watch in sync with everyone in the party.'));
   chatInput.addEventListener('input', () => {
     const n = chatInput.value.length;
     counter.textContent = `${n} / ${CHAT_MAX}`;
@@ -355,7 +379,8 @@ function mountRoom(ctx, root, initial, detailIn) {
       log,
       chatError,
       counter,
-      chatForm),
+      chatForm,
+      chatOff),
     footer);
 
   const stage = h('div', { class: 'lm-party__stage' }, player.el);
@@ -372,7 +397,7 @@ function mountRoom(ctx, root, initial, detailIn) {
       paintUnread();
       scrollLog(true);
     }
-    if (focus) (open ? chatInput : panelToggle).focus({ preventScroll: true });
+    if (focus) (open && !chatForm.hidden ? chatInput : open ? panel.querySelector('.lm-party__close') : panelToggle)?.focus({ preventScroll: true });
   }
 
   function paintUnread() {
@@ -390,6 +415,11 @@ function mountRoom(ctx, root, initial, detailIn) {
     status.replaceChildren(icon(you.canControl ? 'play' : 'users'), h('span', null, text));
     guestRow.hidden = !you.isHost;
     guestSwitch.setChecked(allowGuestControl);
+    const canChat = you.canChat !== false;
+    chatForm.hidden = !canChat;
+    counter.hidden = !canChat;
+    chatOff.hidden = canChat;
+    emptyChat.textContent = canChat ? 'Say hello — messages are seen by everyone in the party.' : 'Messages from the party appear here.';
     const leaveBtn = button(you.isHost && others ? 'Leave' : 'Leave party', { variant: 'glass', icon: 'logout', onClick: () => leave() });
     const endBtn = you.isHost ? button('End party', { variant: 'danger', icon: 'close', onClick: () => endParty() }) : null;
     footer.replaceChildren(...[leaveBtn, endBtn].filter(Boolean));
@@ -556,7 +586,7 @@ function mountRoom(ctx, root, initial, detailIn) {
 
   // The host is the reference clock; everyone else follows the timeline.
   const driftTimer = setInterval(() => {
-    if (ended || player.errorShown || !inStep()) return;
+    if (ended || detached || player.errorShown || !inStep()) return;
     const v = player.video;
     if (you.isHost && you.canControl) {
       if (state.playing && !v.paused && !v.ended && !v.seeking && !seekTimer && needsResync(v.currentTime, expected())) {
@@ -755,8 +785,27 @@ function mountRoom(ctx, root, initial, detailIn) {
     conn.replaceChildren(...(text ? [spinner('Reconnecting'), h('span', null, text)] : []));
   }
 
+  /** The server keeps a few streams per member; a newer tab took this one's place. */
+  function detach() {
+    detached = true;
+    es?.close();
+    es = null;
+    clearTimeout(retryTimer);
+    conn.hidden = false;
+    conn.replaceChildren(
+      icon('info'),
+      h('span', null, 'This party is open in other tabs or on other devices, so this tab stopped following it.'),
+      button('Follow here', { variant: 'glass', size: 'sm', icon: 'refresh', onClick: () => {
+        detached = false;
+        retry = 0;
+        setConn('Reconnecting to the party…');
+        connect();
+      } }));
+    player.notify('This party is now followed in another tab', 'info', 4000);
+  }
+
   function connect() {
-    if (ended) return;
+    if (ended || detached) return;
     es?.close();
     const source = new EventSource(api.parties.eventsUrl(code));
     es = source;
@@ -778,6 +827,9 @@ function mountRoom(ctx, root, initial, detailIn) {
     source.addEventListener('members', parse((m) => applyMembers(m)));
     source.addEventListener('chat', parse((m) => addChat(m)));
     source.addEventListener('ended', parse((d) => end(d.reason)));
+    source.addEventListener('replaced', () => {
+      if (source === es) detach();
+    });
     source.addEventListener('error', () => {
       if (source !== es || ended || leaving) return;
       if (source.readyState === EventSource.CLOSED) {
@@ -793,15 +845,18 @@ function mountRoom(ctx, root, initial, detailIn) {
   async function recover() {
     clearTimeout(retryTimer);
     const ok = await refreshParty();
-    if (ended) return;
-    if (ok) {
+    if (ended || detached) return;
+    // The first refusal reconnects at once (membership may just have been restored). After
+    // that the stream itself keeps being refused (rate limit, server busy): back off.
+    const first = retry === 0;
+    const delay = RECONNECT_DELAYS[Math.min(retry, RECONNECT_DELAYS.length - 1)];
+    retry += 1;
+    if (ok && first) {
       connect();
       return;
     }
-    const delay = RECONNECT_DELAYS[Math.min(retry, RECONNECT_DELAYS.length - 1)];
-    retry += 1;
     setConn(`Connection lost. Trying again in ${Math.round(delay / 1000)} s…`);
-    retryTimer = setTimeout(recover, delay);
+    retryTimer = setTimeout(ok ? connect : recover, delay);
   }
 
   // ── Start ──

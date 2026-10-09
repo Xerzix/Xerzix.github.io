@@ -9,7 +9,7 @@
 //   PATCH  /api/parties/:code           (host) {allowGuestControl}        → {party}
 //   POST   /api/parties/:code/control   {action, position?, episodeId?}   → {state}
 //   POST   /api/parties/:code/chat      {text}                            → {message}
-//   GET    /api/parties/:code/events    Server-Sent Events: state, members, chat, ended
+//   GET    /api/parties/:code/events    Server-Sent Events: state, members, chat, ended, replaced
 import { requireProfile } from '../auth/session.js';
 import { HttpError } from '../lib/errors.js';
 import { v } from '../lib/validate.js';
@@ -110,10 +110,14 @@ export default function register(app, { db, services, config }) {
   });
 
   // Server-Sent Events. EventSource sends same-origin cookies, so the session guard applies.
-  app.get('/api/parties/:code/events', ...guard, (ctx) => {
+  // Each stream holds a socket open: opening them is rate limited, a member keeps at most a
+  // few (the service replaces the oldest) and the server caps the total.
+  app.get('/api/parties/:code/events', ...guard, rateLimit('party-events', { max: 30, windowMs: 60_000, by: 'account' }), (ctx) => {
     const code = codeParam(ctx);
     const room = parties.require(code);
     parties.requireMember(room, ctx.profile.id);
+    // Checked before the 200 headers go out, so a refusal is a normal JSON error.
+    parties.assertStreamCapacity();
 
     const res = ctx.res;
     ctx.writeHead(200, {

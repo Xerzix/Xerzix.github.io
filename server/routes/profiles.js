@@ -6,26 +6,22 @@
 //  • PIN-protected profiles need their PIN to be selected, edited, deleted or re-PINned. The
 //    active profile may change its own everyday settings without re-entering the PIN, but
 //    never its maturity settings.
-//  • While a kids profile is active, the session cannot add or delete profiles, set PINs,
-//    edit other profiles or change maturity settings. Re-entering the account password
-//    (POST /api/auth/elevate) lifts this, which is also how a forgotten PIN is reset.
+//  • While a restricted profile is active (a kids profile, or any profile with a maturity
+//    limit), the session cannot add or delete profiles, set PINs, edit other profiles or
+//    change any maturity setting — not even with that profile's own PIN, which its viewer
+//    knows. A grown-up re-entering the account password (POST /api/auth/elevate) allows one
+//    such change; the confirmation then ends (see parentalGuard). This is also how a
+//    forgotten PIN is reset.
 import { requireAuth } from '../auth/session.js';
 import { hashPassword, verifyPassword } from '../lib/crypto.js';
-import { HttpError } from '../lib/errors.js';
 import { rateLimit } from '../lib/security.js';
 import { patterns, v } from '../lib/validate.js';
 import { isElevated } from '../services/accounts.js';
 import { audit } from '../services/audit.js';
 import { profileDto } from '../services/dto.js';
-import { createProfileSchema, pinError, preferencesSchema, ProfileService, updateProfileSchema } from '../services/profiles.js';
+import { createProfileSchema, parentalGuard, pinError, preferencesSchema, ProfileService, updateProfileSchema } from '../services/profiles.js';
 
 const pinAttempts = (profileId) => rateLimit('profile-pin', { max: 5, windowMs: 5 * 60_000, by: () => profileId });
-
-function kidsGuard(ctx) {
-  if (ctx.profile?.is_kids && !isElevated(ctx)) {
-    throw new HttpError(403, 'PARENTAL_CONTROL', 'Profiles can only be managed from an adult profile. Switch profile, or confirm the account password to continue.');
-  }
-}
 
 /**
  * Enforces a profile's PIN. `allowActive`: the session's active profile (entered with its PIN)
@@ -45,6 +41,7 @@ async function checkPin(ctx, profile, pin, { allowActive = false, allowElevated 
 export default function register(app, { db, services }) {
   const profiles = (services.profiles ??= new ProfileService(db));
   const dto = (p) => ({ profile: profileDto(p) });
+  const guard = (ctx) => parentalGuard(db, ctx, { message: 'Profiles can only be managed by a grown-up while this profile is active. Switch to a grown-up profile, or confirm the account password to continue.' });
 
   app.get('/api/profiles', requireAuth, (ctx) => ({
     profiles: profiles.list(ctx.account.id).map(profileDto),
@@ -52,8 +49,8 @@ export default function register(app, { db, services }) {
   }));
 
   app.post('/api/profiles', requireAuth, async (ctx) => {
-    kidsGuard(ctx);
     const data = v.parse(createProfileSchema, await ctx.body());
+    guard(ctx);
     const profile = profiles.create(ctx.account, data);
     audit(db, ctx, 'profile.create', { targetType: 'profile', targetId: profile.id, details: { isKids: !!profile.is_kids, maxAge: profile.max_age } });
     return dto(profile);
@@ -64,7 +61,7 @@ export default function register(app, { db, services }) {
     const data = v.parse(updateProfileSchema, await ctx.body());
     const maturityChange = (data.isKids !== undefined && data.isKids !== !!profile.is_kids)
       || (data.maxAge !== undefined && data.maxAge !== profile.max_age);
-    if (profile.id !== ctx.profile?.id || maturityChange) kidsGuard(ctx);
+    if (profile.id !== ctx.profile?.id || maturityChange) guard(ctx);
     await checkPin(ctx, profile, data.pin, { allowActive: !maturityChange });
     delete data.pin;
     const updated = profiles.update(ctx.account.id, profile, data);
@@ -75,9 +72,9 @@ export default function register(app, { db, services }) {
   });
 
   app.delete('/api/profiles/:id', requireAuth, async (ctx) => {
-    kidsGuard(ctx);
     const profile = profiles.get(ctx.account.id, ctx.params.id);
     const { pin } = v.parse(v.object({ pin: v.string().max(12).optional() }), await ctx.body());
+    guard(ctx);
     await checkPin(ctx, profile, pin);
     profiles.remove(ctx.account.id, profile);
     audit(db, ctx, 'profile.delete', { targetType: 'profile', targetId: profile.id });
@@ -88,18 +85,18 @@ export default function register(app, { db, services }) {
     const { pin } = v.parse(v.object({ pin: v.string().max(12).optional() }), await ctx.body());
     // Entering a locked profile always needs its PIN, even for the account owner.
     await checkPin(ctx, profile, pin, { allowActive: true, allowElevated: false });
-    profiles.select(ctx.session.id, profile.id);
+    profiles.select(ctx.session.id, profile);
     ctx.session.profileId = profile.id;
     return dto(profile);
   });
 
   app.put('/api/profiles/:id/pin', requireAuth, async (ctx) => {
-    kidsGuard(ctx);
     const profile = profiles.get(ctx.account.id, ctx.params.id);
     const body = v.parse(v.object({
       pin: v.string().pattern(patterns.pin, 'Use exactly 4 digits.').nullable(),
       currentPin: v.string().max(12).optional(),
     }), await ctx.body());
+    guard(ctx);
     await checkPin(ctx, profile, body.currentPin, { field: 'currentPin' });
     const updated = profiles.setPinHash(ctx.account.id, profile.id, body.pin ? await hashPassword(body.pin) : null);
     audit(db, ctx, body.pin ? 'profile.pin_set' : 'profile.pin_remove', { targetType: 'profile', targetId: profile.id });
@@ -111,7 +108,7 @@ export default function register(app, { db, services }) {
     const raw = await ctx.body();
     const { preferences } = v.parse(preferencesSchema, raw);
     const { pin } = v.parse(v.object({ pin: v.string().max(12).optional() }), raw);
-    if (profile.id !== ctx.profile?.id) kidsGuard(ctx);
+    if (profile.id !== ctx.profile?.id) guard(ctx);
     await checkPin(ctx, profile, pin, { allowActive: true });
     return dto(profiles.updatePreferences(ctx.account.id, profile, preferences));
   });

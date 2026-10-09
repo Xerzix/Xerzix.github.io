@@ -4,7 +4,7 @@
 import { config } from '../config.js';
 import { now, parseJson } from '../db/index.js';
 import { HttpError } from '../lib/errors.js';
-import { decryptField, newId, randomToken, sha256, verifyPassword, verifyTotp } from '../lib/crypto.js';
+import { decryptField, newId, randomToken, safeEqual, sha256, totp, verifyPassword } from '../lib/crypto.js';
 import { log } from '../lib/log.js';
 import { readPlatformSettings } from './admin/settings.js';
 import { accountDto, profileDto } from './dto.js';
@@ -26,27 +26,60 @@ export async function assertAccountPassword(account, password, field = 'password
   if (!ok) throw new HttpError(403, 'INVALID_PASSWORD', 'That password is not correct.', { fields: { [field]: 'That password is not correct.' } });
 }
 
-/** True when `code` is a valid current TOTP for the account (false if 2FA is not configured). */
-export function totpMatches(account, code) {
-  if (!account.totp_secret) return false;
+const TOTP_STEP_MS = 30_000;
+
+/** The 30-second time step `code` belongs to (±1 step of clock drift), or null when it matches none. */
+function totpStep(account, code) {
+  if (!account.totp_secret) return null;
+  const clean = String(code || '').replace(/\s+/g, '');
+  if (!/^\d{6}$/.test(clean)) return null;
   let secret;
   try {
     secret = decryptField(account.totp_secret);
   } catch (err) {
     log.error('totp secret could not be decrypted', { account: account.id, err });
-    return false;
+    return null;
   }
-  return verifyTotp(secret, String(code || '').replace(/\s+/g, ''));
+  const at = Date.now();
+  for (let w = -1; w <= 1; w++) {
+    const t = at + w * TOTP_STEP_MS;
+    if (safeEqual(totp(secret, t), clean)) return Math.floor(t / TOTP_STEP_MS);
+  }
+  return null;
+}
+
+/**
+ * Checks a TOTP code and records it as used, so the same code can never be accepted twice
+ * (RFC 6238 §5.2). Returns 'ok', 'reused' (valid but already accepted once) or 'invalid'.
+ * The conditional UPDATE is atomic, so two parallel requests with one code cannot both pass.
+ */
+export function consumeTotp(db, account, code) {
+  const step = totpStep(account, code);
+  if (step === null) return 'invalid';
+  const accepted = db.run(
+    'UPDATE accounts SET totp_last_step = ? WHERE id = ? AND (totp_last_step IS NULL OR totp_last_step < ?)',
+    step, account.id, step,
+  ).changes;
+  return accepted ? 'ok' : 'reused';
+}
+
+/** The INVALID_TOTP error for a consumeTotp() result other than 'ok'. */
+export function totpError(result, status, field) {
+  const message = result === 'reused'
+    ? 'That code has already been used. Wait for the next code from your authenticator app.'
+    : 'That code did not match. Check your authenticator app and try again.';
+  return new HttpError(status, 'INVALID_TOTP', message, { reused: result === 'reused', fields: { [field]: result === 'reused' ? 'That code was already used. Wait for the next one.' : 'That code did not match.' } });
 }
 
 /**
  * For re-authentication inside a signed-in session: requires a TOTP when 2FA is on.
  * (Sign-in itself uses 401 per the API; here the caller is authenticated, so 403.)
  */
-export function assertTotp(account, code, field = 'totp') {
+export function assertTotp(db, account, code, field = 'totp') {
   if (!account.totp_enabled) return;
   if (!code) throw new HttpError(403, 'TOTP_REQUIRED', 'Enter the 6-digit code from your authenticator app.', { fields: { [field]: 'Enter the 6-digit code.' } });
-  if (!totpMatches(account, code)) throw new HttpError(403, 'INVALID_TOTP', 'That code did not match. Check your authenticator app and try again.', { fields: { [field]: 'That code did not match.' } });
+  const result = consumeTotp(db, account, code);
+  if (result !== 'ok') throw totpError(result, 403, field);
 }
 
 /**
@@ -108,16 +141,31 @@ export class AccountService {
     return { account: this.byId(accountId), profile: this.db.get('SELECT * FROM profiles WHERE id = ?', profileId) };
   }
 
-  /** Records a failed sign-in; locks the account once the limit is reached. Returns the lock expiry or null. */
+  /**
+   * Records a failed sign-in; locks the account once the limit is reached. Returns the lock
+   * expiry or null. The count is incremented in the database in one statement (never from the
+   * row read before the slow password check), so parallel wrong guesses all count.
+   */
   recordFailedLogin(account) {
-    const failures = (account.failed_logins || 0) + 1;
-    if (failures >= config.auth.maxFailedLogins) {
-      const until = minutesFromNow(config.auth.lockMinutes);
-      this.db.run('UPDATE accounts SET failed_logins = 0, locked_until = ?, updated_at = ? WHERE id = ?', until, now(), account.id);
-      return until;
-    }
-    this.db.run('UPDATE accounts SET failed_logins = ?, updated_at = ? WHERE id = ?', failures, now(), account.id);
-    return null;
+    const max = config.auth.maxFailedLogins;
+    const until = minutesFromNow(config.auth.lockMinutes);
+    // SQLite evaluates every SET expression against the old row, so both CASEs see the same count.
+    const row = this.db.get(
+      `UPDATE accounts
+          SET failed_logins = CASE WHEN failed_logins + 1 >= ? THEN 0 ELSE failed_logins + 1 END,
+              locked_until  = CASE WHEN failed_logins + 1 >= ? THEN ? ELSE locked_until END,
+              updated_at = ?
+        WHERE id = ?
+        RETURNING locked_until`,
+      max, max, until, now(), account.id,
+    );
+    return row?.locked_until === until ? until : null;
+  }
+
+  /** The lock expiry when the account is locked right now (read fresh, not from a cached row). */
+  lockedUntil(accountId) {
+    const row = this.db.get('SELECT locked_until FROM accounts WHERE id = ?', accountId);
+    return row?.locked_until && row.locked_until > now() ? row.locked_until : null;
   }
 
   recordSuccessfulLogin(accountId) {
@@ -193,8 +241,8 @@ export class AccountService {
     return this.db.run('DELETE FROM sessions WHERE account_id = ? AND id != ?', accountId, keepSessionId || '').changes;
   }
 
-  elevate(sessionId) {
-    const until = minutesFromNow(config.session.elevatedMinutes);
+  elevate(sessionId, minutes = config.session.elevatedMinutes) {
+    const until = minutesFromNow(minutes);
     this.db.run('UPDATE sessions SET elevated_until = ? WHERE id = ?', until, sessionId);
     return until;
   }

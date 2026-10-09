@@ -209,7 +209,7 @@ function soundEntryChannels(b, entry, entryEnd) {
 }
 
 function parseTrak(b, trak) {
-  const t = { handler: null, codec: null, fourcc: null, lang: 'und', durationS: null, width: null, height: null, channels: null, sampleRate: null };
+  const t = { handler: null, codec: null, fourcc: null, lang: 'und', durationS: null, width: null, height: null, rotation: 0, channels: null, sampleRate: null };
   const tkhd = child(b, trak, 'tkhd');
   if (tkhd && tkhd.end - tkhd.data >= 84) {
     const v = b[tkhd.data];
@@ -217,6 +217,12 @@ function parseTrak(b, trak) {
     if (off + 8 <= tkhd.end) {
       t.width = Math.round(b.readUInt32BE(off) / 65536) || null;
       t.height = Math.round(b.readUInt32BE(off + 4) / 65536) || null;
+      // The display matrix (a b u / c d v / x y w) sits just before the size; phones record
+      // portrait video as a landscape frame plus a quarter-turn here.
+      const m = off - 36;
+      const a = b.readInt32BE(m) / 65536;
+      const bb = b.readInt32BE(m + 4) / 65536;
+      if (a || bb) t.rotation = quarterTurns((Math.atan2(bb, a) * 180) / Math.PI);
     }
   }
   const mdia = child(b, trak, 'mdia');
@@ -303,8 +309,7 @@ export function parseMp4(input) {
   if (out.brand || out.hasMoov) out.container = out.brand && out.brand !== 'qt  ' ? 'mp4' : 'mov';
   const video = out.tracks.find((t) => t.handler === 'vide');
   if (video) {
-    out.width = video.width;
-    out.height = video.height;
+    Object.assign(out, displayed(video.width, video.height, video.rotation));
     out.videoCodec = video.codec;
   }
   const audio = out.tracks.filter((t) => t.handler === 'soun');
@@ -568,7 +573,11 @@ function run(cmd, args, { timeoutMs = 60_000, maxBytes = 8 * 1024 * 1024 } = {})
     proc.on('close', (code, signal) => {
       clearTimeout(timer);
       if (code === 0) resolve(Buffer.concat(out).toString('utf8'));
-      else reject(new Error(`${cmd.split('/').pop()} failed (${signal || `exit ${code}`}): ${err.trim().split('\n').pop() || 'no output'}`));
+      else {
+        const e = new Error(`${cmd.split('/').pop()} failed (${signal || `exit ${code}`}): ${err.trim().split('\n').pop() || 'no output'}`);
+        e.exitCode = signal ? null : code; // a non-zero exit means ffprobe ran and could not read the input
+        reject(e);
+      }
     });
   });
 }
@@ -579,6 +588,29 @@ const parseRate = (r) => {
   const v = b ? a / b : a;
   return Number.isFinite(v) && v > 0 ? Math.round(v * 1000) / 1000 : null;
 };
+
+/** Normalises a rotation to clockwise degrees in [0, 360), to the nearest quarter turn. */
+function quarterTurns(deg) {
+  if (!Number.isFinite(deg)) return 0;
+  return ((Math.round(deg / 90) * 90) % 360 + 360) % 360;
+}
+
+/**
+ * Clockwise display rotation of an ffprobe video stream: the display matrix side data
+ * (counter-clockwise degrees, newer ffmpeg) or the legacy `rotate` tag (clockwise).
+ */
+export function ffprobeRotation(stream) {
+  const matrix = (stream?.side_data_list || []).find((d) => d && Number.isFinite(Number(d.rotation)) && (d.side_data_type === 'Display Matrix' || 'displaymatrix' in d));
+  if (matrix) return quarterTurns(-Number(matrix.rotation));
+  if (stream?.tags?.rotate !== undefined) return quarterTurns(Number(stream.tags.rotate));
+  return 0;
+}
+
+/** Width and height as the picture is displayed (swapped for a quarter-turn rotation). */
+function displayed(width, height, rotation) {
+  const turned = rotation === 90 || rotation === 270;
+  return turned ? { width: height, height: width, rotation, codedWidth: width, codedHeight: height } : { width, height, rotation };
+}
 
 function fromFfprobe(json, sniffed) {
   const streams = json.streams || [];
@@ -594,8 +626,7 @@ function fromFfprobe(json, sniffed) {
   return {
     container,
     durationS: duration ? Math.round(duration * 1000) / 1000 : null,
-    width: video?.width ?? null,
-    height: video?.height ?? null,
+    ...displayed(video?.width ?? null, video?.height ?? null, video ? ffprobeRotation(video) : 0),
     videoCodec: video?.codec_name ?? null,
     audioCodec: audio[0]?.codec_name ?? null,
     audioTracks: audio.map((s) => ({ lang: normalizeLang(s.tags?.language), channels: s.channels ?? null, codec: s.codec_name ?? null })),
@@ -605,6 +636,16 @@ function fromFfprobe(json, sniffed) {
     hdr: transfer === 'smpte2084' ? 'HDR10' : transfer === 'arib-std-b67' ? 'HLG' : null,
     source: 'ffprobe',
   };
+}
+
+/**
+ * Removes server paths from a tool's message (it is stored with the file and shown to its
+ * owner): each [path, label] pair is replaced by its label, and any other absolute path by "…".
+ */
+export function redactPaths(message, replacements = []) {
+  let out = String(message || '');
+  for (const [path, label] of replacements) if (path) out = out.split(path).join(label);
+  return out.replace(/(?:[A-Za-z]:)?(?:[\\/][\w.@+-]+){2,}/g, '…');
 }
 
 async function readHead(path, bytes) {
@@ -633,22 +674,27 @@ export async function probeFile(path, { ffprobePath = '', timeoutMs = 60_000 } =
     audioTracks: [], subtitleTracks: [], bitrateKbps: null, sizeBytes: info.size,
   };
   let ffprobeError = null;
+  let ffprobeUnreadable = false;
   if (ffprobePath && sniffed?.kind === 'video') {
     try {
       const text = await run(ffprobePath, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', path], { timeoutMs });
       return { ...base, ...fromFfprobe(JSON.parse(text), sniffed?.type) };
     } catch (err) {
-      ffprobeError = err.message.slice(0, 300);
+      ffprobeError = redactPaths(err.message, [[path, 'the file'], [ffprobePath, 'ffprobe']]).slice(0, 300);
+      // ffprobe ran to completion and said no: the file is not readable media (as opposed to
+      // ffprobe missing, crashing on a signal or timing out, which says nothing about the file).
+      ffprobeUnreadable = Number.isInteger(err.exitCode) && err.exitCode !== 0;
     }
   }
-  const extra = ffprobeError ? { ffprobeError } : {};
+  const extra = ffprobeError ? { ffprobeError, ...(ffprobeUnreadable ? { ffprobeUnreadable } : {}) } : {};
   if (sniffed?.type === 'mp4' || sniffed?.type === 'mov') {
     try {
       const parsed = parseMp4(await readMp4Header(path, info.size));
       if (parsed.hasMoov) {
         const bitrateKbps = parsed.durationS ? Math.round((info.size * 8) / parsed.durationS / 1000) : null;
-        const { container, durationS, width, height, videoCodec, audioCodec, audioTracks, subtitleTracks, fragmented } = parsed;
-        return { ...base, container: container || sniffed.type, durationS, width, height, videoCodec, audioCodec, audioTracks, subtitleTracks, bitrateKbps, fragmented, source: 'mp4-parser', ...extra };
+        const { container, durationS, width, height, videoCodec, audioCodec, audioTracks, subtitleTracks, fragmented, rotation, codedWidth, codedHeight } = parsed;
+        const turned = codedWidth ? { codedWidth, codedHeight } : {};
+        return { ...base, container: container || sniffed.type, durationS, width, height, rotation: rotation || 0, ...turned, videoCodec, audioCodec, audioTracks, subtitleTracks, bitrateKbps, fragmented, source: 'mp4-parser', ...extra };
       }
       return { ...base, source: 'basic', error: 'No movie header (moov) was found.', ...extra };
     } catch (err) {

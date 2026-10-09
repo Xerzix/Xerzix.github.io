@@ -223,7 +223,7 @@ async function ownerView(ctx) {
     if (!col.items.length) {
       body.replaceChildren(emptyState({
         title: 'Nothing in this collection yet',
-        message: 'Add films and series from the catalog. You can also add titles from any title page.',
+        message: 'Choose Add titles to search the catalog and pick the films and series that belong here.',
         actions: [button('Add titles', { variant: 'primary', icon: 'plus', onClick: openPicker })],
       }));
       return;
@@ -279,7 +279,8 @@ async function ownerView(ctx) {
       }
       save.classList.add('is-busy');
       try {
-        const res = await api.collections.update(col.id, { name: values.name.trim(), description: values.description.trim() || null });
+        // An empty description clears it (on the server and in Preview mode alike).
+        const res = await api.collections.update(col.id, { name: values.name.trim(), description: values.description.trim() });
         col = { ...col, ...res.collection, items: col.items };
         paintMeta();
         ctx.setTitle(col.name);

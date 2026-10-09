@@ -86,5 +86,6 @@ export default async function render(ctx) {
 }
 
 function canStartParty(trailer) {
-  return !trailer && session.isServer && !!session.account && !!session.profile && session.features?.watchParties !== false && !!session.features?.watchParties;
+  // Kids profiles cannot start parties (the server refuses with PROFILE_RESTRICTED).
+  return !trailer && session.isServer && !!session.account && !!session.profile && !session.profile.isKids && !!session.features?.watchParties;
 }

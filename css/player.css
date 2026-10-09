@@ -1758,6 +1758,39 @@
   }
 }
 
+/* Phones and touch screens: every control is at least 40 px tall. */
+@media (max-width: 720px), (pointer: coarse) {
+  .lm-player__time,
+  .lm-player__party-start,
+  .lm-party__panel-toggle {
+    min-height: 40px;
+  }
+
+  .lm-player__time {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+}
+
+/* Narrow phones (360–400 px): a series shows Next and Episodes too, so the bar has eight
+   buttons. 40 px buttons without gaps fit in 336 px; the left group never shrinks (its
+   buttons would slide under the right group), and the right group scrolls if it must. */
+@media (max-width: 400px) {
+  .lm-player__bar .lm-player__btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .lm-player__bar .lm-player__group {
+    gap: 0;
+  }
+
+  .lm-player__bar > .lm-player__group:not(.lm-player__group--end) {
+    flex: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lm-player__flash.is-on,
   .lm-player__ripple.is-on,
@@ -2110,6 +2143,56 @@
 
 .lm-party__conn[hidden] {
   display: none;
+}
+
+.lm-party__conn {
+  flex-wrap: wrap;
+}
+
+.lm-party__conn > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.lm-party__conn > span {
+  flex: 1 1 12rem;
+}
+
+.lm-party__chat-off {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lm-space-2);
+  margin: 0;
+  padding: var(--lm-space-3) var(--lm-space-4) max(var(--lm-space-4), env(safe-area-inset-bottom));
+  border-top: var(--lm-border);
+  font-size: var(--lm-fs-sm);
+  color: var(--lm-text-2);
+}
+
+.lm-party__chat-off svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 2px;
+  color: var(--lm-accent-text);
+}
+
+.lm-party-gate__note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lm-space-2);
+  max-width: 34rem;
+  font-size: var(--lm-fs-sm);
+  color: var(--lm-text-2);
+  text-align: left;
+}
+
+.lm-party-gate__note svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-top: 2px;
 }
 
 .lm-party__conn .lm-spinner {

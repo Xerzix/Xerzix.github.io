@@ -11,8 +11,15 @@ import { QualityService, QUALITY_CATEGORIES } from '../services/quality.js';
 const id = () => v.string().max(80).pattern(/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/, 'Invalid identifier.');
 const num = (max) => v.number().min(0).max(max);
 
+const openSchema = v.object({
+  mediaId: id(),
+  titleId: id(),
+  episodeId: id().optional(),
+});
+
 const sessionSchema = v.object({
-  sessionId: v.string().pattern(/^[A-Za-z0-9-]{8,64}$/, 'Invalid session id.'),
+  // Issued by POST /api/playback/sessions/open; the service verifies its signature.
+  sessionId: v.string().max(80).pattern(/^[A-Za-z0-9_.-]{8,80}$/, 'Invalid session id.'),
   mediaId: id(),
   titleId: id(),
   episodeId: id().optional(),
@@ -88,7 +95,13 @@ export default function register(app, { db, services }) {
   const { telemetry, quality, catalog } = services;
   telemetry.onChange((titleId) => quality.invalidate(titleId));
 
-  // Measured playback session (cumulative totals, upserted by the client's session id).
+  // A player opens one viewing session per media it loads; only issued ids are accepted below.
+  app.post('/api/playback/sessions/open', rateLimit('playback-open', { max: 30, windowMs: 60_000 }), async (ctx) => {
+    const body = v.parse(openSchema, await ctx.body(4 * 1024));
+    return telemetry.openSession({ account: ctx.account }, body);
+  });
+
+  // Measured playback session (cumulative totals, upserted by the issued session id).
   app.post('/api/playback/sessions', rateLimit('playback-session', { max: 90, windowMs: 60_000 }), async (ctx) => {
     const body = v.parse(sessionSchema, await ctx.body(16 * 1024));
     return telemetry.recordSession({ account: ctx.account }, body);

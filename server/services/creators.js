@@ -317,6 +317,11 @@ export class CreatorService {
   respond(ctx, id, message) {
     const s = this.own(ctx, id);
     if (s.status !== 'info_required') throw conflict('The Lumina team has not asked for more information on this submission.', 'SUBMISSION_LOCKED', { status: s.status });
+    // Responding locks the submission, so a file still on its way would be refused at the end.
+    const active = this.db.get(`SELECT COUNT(*) AS n FROM uploads WHERE submission_id = ? AND status = 'in_progress'`, id).n;
+    if (active) {
+      throw conflict(`Wait for your ${active === 1 ? 'upload' : `${active} uploads`} to finish (or cancel ${active === 1 ? 'it' : 'them'}) before you send your response.`, 'UPLOADS_IN_PROGRESS', { uploads: active });
+    }
     const ts = now();
     this.db.tx(() => {
       const r = this.db.run(`UPDATE submissions SET status = 'submitted', updated_at = ? WHERE id = ? AND account_id = ? AND status = 'info_required'`, ts, id, ctx.account.id);

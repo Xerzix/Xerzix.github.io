@@ -570,6 +570,7 @@
 
 .lm-detail__more .lm-btn[aria-pressed='true'] {
   --btn-border: transparent;
+  --btn-fg: var(--lm-gold);
 }
 
 .lm-detail__velvia {
@@ -836,12 +837,22 @@ a.lm-episode__link:focus-visible .lm-episode__play,
   }
 }
 
+/* Motion follows the in-app Appearance setting first: "Reduced" always stills the title
+   header, "Full" keeps it moving, and "System" follows the operating-system preference. */
 @media (prefers-reduced-motion: reduce) {
-  .lm-detail__backdrop img,
-  .lm-detail__poster,
-  .lm-detail__intro {
+  :root:not([data-motion='full']) .lm-detail__backdrop img,
+  :root:not([data-motion='full']) .lm-detail__poster,
+  :root:not([data-motion='full']) .lm-detail__intro,
+  :root:not([data-motion='full']) .lm-srch__panel {
     animation: none;
   }
+}
+
+:root[data-motion='reduced'] .lm-detail__backdrop img,
+:root[data-motion='reduced'] .lm-detail__poster,
+:root[data-motion='reduced'] .lm-detail__intro,
+:root[data-motion='reduced'] .lm-srch__panel {
+  animation: none;
 }
 
 /* The router focuses each page's h1 so screen readers land in context; that programmatic
@@ -2037,5 +2048,22 @@ a.lm-episode__link:focus-visible .lm-episode__play,
 
   .lm-stats__privacy .lm-setting:has(.lm-btn) .lm-setting__text {
     flex-basis: 100%;
+  }
+}
+
+/* Touch targets: on phones and touch screens every control on these pages is at least 44px
+   (40px inside a segmented control, whose track adds 4px around each option). Cards keep
+   their own compact overlay actions. */
+@media (max-width: 720px), (pointer: coarse) {
+  :is(.lm-disc, .lm-detail, .lm-lib, .lm-srch, .lm-cmp, .lm-stats) :is(.lm-btn--sm, .lm-select--compact, .lm-chip, .lm-srch__clear-all):not(.lm-card *) {
+    min-height: 44px;
+  }
+
+  :is(.lm-disc, .lm-detail, .lm-lib, .lm-srch, .lm-cmp, .lm-stats) .lm-btn--icon.lm-btn--sm:not(.lm-card *) {
+    width: 44px;
+  }
+
+  :is(.lm-disc, .lm-detail, .lm-lib, .lm-srch, .lm-cmp, .lm-stats) .lm-segmented button {
+    min-height: 40px;
   }
 }

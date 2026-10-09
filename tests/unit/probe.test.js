@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import {
-  classifyText, imageSize, inspectTsSegment, normalizeLang, parseH264Sps, parseMp4, probeFile, sniffType, unescapeRbsp,
+  classifyText, ffprobeRotation, imageSize, inspectTsSegment, normalizeLang, parseH264Sps, parseMp4, probeFile, redactPaths, sniffType, unescapeRbsp,
 } from '../../server/services/media/probe.js';
 
 // ── Minimal ISO-BMFF builder ──
@@ -14,15 +16,23 @@ const box = (type, ...parts) => { const body = Buffer.concat(parts); return Buff
 const full = (type, version, ...parts) => box(type, Buffer.from([version, 0, 0, 0]), ...parts);
 const lang = (code) => ((code.charCodeAt(0) - 0x60) << 10) | ((code.charCodeAt(1) - 0x60) << 5) | (code.charCodeAt(2) - 0x60);
 
-function tkhd(w, h) {
-  return full('tkhd', 0, u32(0), u32(0), u32(1), u32(0), u32(0), Buffer.alloc(16), Buffer.alloc(36), u32(w * 65536), u32(h * 65536));
+const i32 = (n) => { const b = Buffer.alloc(4); b.writeInt32BE(n); return b; };
+/** tkhd display matrix for a clockwise rotation (0, 90, 180 or 270 degrees). */
+function matrix(deg) {
+  const r = (deg * Math.PI) / 180;
+  const a = Math.round(Math.cos(r)) * 65536;
+  const b = Math.round(Math.sin(r)) * 65536;
+  return Buffer.concat([i32(a), i32(b), u32(0), i32(-b), i32(a), u32(0), u32(0), u32(0), u32(0x40000000)]);
 }
-function trak({ handler, entry, w = 0, h = 0, language = 'und', timescale = 1000, duration = 0, v1 = false }) {
+function tkhd(w, h, rotation = null) {
+  return full('tkhd', 0, u32(0), u32(0), u32(1), u32(0), u32(0), Buffer.alloc(16), rotation === null ? Buffer.alloc(36) : matrix(rotation), u32(w * 65536), u32(h * 65536));
+}
+function trak({ handler, entry, w = 0, h = 0, language = 'und', timescale = 1000, duration = 0, v1 = false, rotation = null }) {
   const mdhd = v1
     ? full('mdhd', 1, Buffer.alloc(8), Buffer.alloc(8), u32(timescale), Buffer.from([0, 0, 0, 0, ...u32(duration)]), u16(lang(language)), u16(0))
     : full('mdhd', 0, u32(0), u32(0), u32(timescale), u32(duration), u16(lang(language)), u16(0));
   const hdlr = full('hdlr', 0, u32(0), Buffer.from(handler), Buffer.alloc(12), Buffer.from('h\0'));
-  return box('trak', tkhd(w, h), box('mdia', mdhd, hdlr, box('minf', box('stbl', full('stsd', 0, u32(1), entry)))));
+  return box('trak', tkhd(w, h, rotation), box('mdia', mdhd, hdlr, box('minf', box('stbl', full('stsd', 0, u32(1), entry)))));
 }
 const videoEntry = (fourcc, w, h) => box(fourcc, Buffer.alloc(6), u16(1), Buffer.alloc(16), u16(w), u16(h), Buffer.alloc(50));
 function aacEntry(channelConfig) {
@@ -184,4 +194,59 @@ test('normalizeLang maps ISO 639-2 to 639-1 and keeps unknowns honest', () => {
   assert.equal(normalizeLang('und'), 'und');
   assert.equal(normalizeLang('haw'), 'haw');
   assert.equal(normalizeLang('12'), 'und');
+});
+
+test('rotated phone video reports the displayed size (MP4 matrix and ffprobe side data)', () => {
+  const clip = (rotation) => Buffer.concat([
+    box('ftyp', Buffer.from('isom'), u32(0)),
+    box('moov', full('mvhd', 0, u32(0), u32(0), u32(1000), u32(2000), Buffer.alloc(80)),
+      trak({ handler: 'vide', entry: videoEntry('avc1', 1280, 720), w: 1280, h: 720, duration: 2000, rotation })),
+  ]);
+  for (const deg of [90, 270]) {
+    const info = parseMp4(clip(deg));
+    assert.deepEqual([info.width, info.height, info.rotation, info.codedWidth, info.codedHeight], [720, 1280, deg, 1280, 720], `${deg}°`);
+  }
+  for (const deg of [0, 180]) {
+    const info = parseMp4(clip(deg));
+    assert.deepEqual([info.width, info.height, info.rotation], [1280, 720, deg], `${deg}°`);
+    assert.equal(info.codedWidth, undefined);
+  }
+  assert.equal(parseMp4(clip(null)).rotation, 0, 'an all-zero matrix is treated as upright');
+  // ffprobe: the display matrix is counter-clockwise; the legacy rotate tag is clockwise.
+  assert.equal(ffprobeRotation({ side_data_list: [{ side_data_type: 'Display Matrix', rotation: -90 }] }), 90);
+  assert.equal(ffprobeRotation({ side_data_list: [{ side_data_type: 'Display Matrix', rotation: 90 }] }), 270);
+  assert.equal(ffprobeRotation({ side_data_list: [{ side_data_type: 'Display Matrix', rotation: 180 }] }), 180);
+  assert.equal(ffprobeRotation({ tags: { rotate: '90' } }), 90);
+  assert.equal(ffprobeRotation({}), 0);
+});
+
+test('redactPaths keeps server paths out of messages shown to creators', () => {
+  const input = '/srv/lumina/var/storage/uploads/upl_abc.part';
+  assert.equal(
+    redactPaths(`ffprobe failed (exit 1): ${input}: Invalid data found when processing input`, [[input, 'the file']]),
+    'ffprobe failed (exit 1): the file: Invalid data found when processing input',
+  );
+  assert.equal(redactPaths('spawn /opt/tools/bin/ffprobe ENOENT', [['/opt/tools/bin/ffprobe', 'ffprobe']]), 'spawn ffprobe ENOENT');
+  assert.equal(redactPaths('could not open /var/lib/other/thing.mkv here'), 'could not open … here');
+  assert.equal(redactPaths('exit 1: Invalid data'), 'exit 1: Invalid data');
+});
+
+const FFPROBE = process.env.FFPROBE_PATH || (spawnSync('ffprobe', ['-version'], { stdio: 'ignore' }).status === 0 ? 'ffprobe' : '');
+test('probeFile flags files ffprobe cannot read, without leaking their path', { skip: !FFPROBE && 'ffprobe not available (set FFPROBE_PATH)' }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'lumina-probe-'));
+  try {
+    const junk = join(dir, 'upl_junk.part');
+    writeFileSync(junk, Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), randomBytes(50_000)]));
+    const p = await probeFile(junk, { ffprobePath: FFPROBE });
+    assert.equal(p.source, 'basic');
+    assert.equal(p.ffprobeUnreadable, true);
+    assert.ok(p.ffprobeError);
+    assert.equal(p.ffprobeError.includes(dir), false);
+    // A missing ffprobe says nothing about the file: not flagged as unreadable.
+    const missing = await probeFile(junk, { ffprobePath: join(dir, 'no-such-ffprobe') });
+    assert.equal(missing.ffprobeUnreadable, undefined);
+    assert.equal(missing.ffprobeError.includes(dir), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -125,6 +125,17 @@
   color: var(--lm-text-2);
 }
 
+.lm-velvia__history-hint a {
+  color: var(--lm-gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.lm-velvia__history-hint a:hover {
+  color: var(--lm-text);
+}
+
 .lm-velvia__history .lm-switch[disabled] {
   opacity: 0.45;
   cursor: not-allowed;
@@ -984,7 +995,40 @@
     padding: var(--lm-space-5) var(--lm-space-4);
   }
 
+  /* The compare tray stays two rows: the label with the titles in one sideways-scrolling
+     row, then the actions. Stacking the titles would push the conversation off screen. */
+  .lm-velvia__tray {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px var(--lm-space-2);
+    padding: 6px var(--lm-space-2);
+  }
+
+  .lm-velvia__tray-items {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    padding-right: var(--lm-space-4);
+    /* A soft edge says the row scrolls sideways. */
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+
+  .lm-velvia__tray-items::-webkit-scrollbar {
+    display: none;
+  }
+
+  .lm-velvia__tray-items > li {
+    flex: none;
+  }
+
+  .lm-velvia__tray-item {
+    white-space: nowrap;
+  }
+
   .lm-velvia__tray-actions {
+    grid-column: 1 / -1;
     width: 100%;
   }
 
@@ -1012,5 +1056,38 @@
 
   .lm-vrec__actions .lm-btn--ghost .lm-icon {
     display: none;
+  }
+}
+
+/* ─── Touch screens: every control is at least 44px for a fingertip ─── */
+@media (pointer: coarse) {
+  .lm-vrec__actions .lm-btn,
+  .lm-velvia__tray-actions .lm-btn,
+  .lm-chip--velvia,
+  .lm-velvia-chips--quiet .lm-chip--velvia {
+    min-height: 44px;
+  }
+
+  .lm-velvia__context-clear {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* The remove button keeps the chip compact: it grows outwards, not the chip. */
+  .lm-velvia__tray-remove {
+    width: 44px;
+    height: 44px;
+    margin: -7px -4px -7px -6px;
+  }
+
+  .lm-velvia__tray-items {
+    gap: var(--lm-space-2);
+  }
+
+  /* The switch keeps its look; an invisible margin makes it a 44px target. */
+  .lm-velvia__history .lm-switch::before {
+    content: '';
+    position: absolute;
+    inset: -8px -4px;
   }
 }

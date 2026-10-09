@@ -11,7 +11,8 @@ import { avatar, AVATARS } from '../ui/avatars.js';
 import { icon } from '../ui/icons.js';
 import { applyFieldErrors, button, confirmDialog, errorState, field, linkButton, notice, openModal, settingRow, toast, toastError, toggleSwitch, withBusy } from '../ui/components.js';
 import { safeNext } from './auth.js';
-import { reauth, withReauth } from './account.js';
+import { grownUpReason, isRestrictedProfile, lockAgain, reauth, withReauth } from './account.js';
+import { bus } from '../core/bus.js';
 
 /** Audio and subtitle language choices (ISO 639-1). */
 export const MEDIA_LANGUAGES = [
@@ -33,7 +34,7 @@ export function profileLimitMessage(max) {
   return `This account already has ${max} profiles, the maximum. Profiles belong to one account — they are not separate subscriptions or simultaneous streams. Delete a profile to create another.`;
 }
 
-const PARENTAL_NOTE = 'kids profiles only show titles within their maturity rating and can’t add, delete or unlock other profiles. Add a PIN to grown-up profiles so kids can’t switch into them.';
+const PARENTAL_NOTE = 'kids profiles, and any profile with a maturity rating, only show titles within that rating. While one is active, adding, deleting or unlocking profiles and changing ratings need the account password. Add a PIN to grown-up profiles so nobody else can switch into them.';
 
 const minutes = (s) => Math.max(1, Math.ceil((Number(s) || 300) / 60));
 
@@ -192,7 +193,20 @@ export default async function render(ctx) {
     data = await api.profiles.list();
     draw();
   };
-  const kidsLocked = () => !!session.profile?.isKids && !session.elevated;
+  // A kids or maturity-limited profile is active: changes need a grown-up's password.
+  const restricted = () => isRestrictedProfile(session.profile);
+  const restrictedLocked = () => restricted() && !session.elevated;
+  if (manage) {
+    // The server ends a grown-up's confirmation after one change; redraw the notice when it does.
+    let wasElevated = session.elevated;
+    const off = bus.on('session:changed', () => {
+      if (session.elevated !== wasElevated) {
+        wasElevated = session.elevated;
+        draw();
+      }
+    });
+    ctx.onDestroy?.(off);
+  }
 
   function draw() {
     const count = data.profiles.length;
@@ -218,15 +232,32 @@ export default async function render(ctx) {
         h('p', null, HOUSEHOLD_NOTE),
         h('p', null, h('strong', null, 'Parental controls: '), PARENTAL_NOTE)));
     }
-    if (manage && kidsLocked()) {
-      const unlock = h('button', { type: 'button', class: 'lm-link' }, 'confirm the account password');
-      unlock.addEventListener('click', async () => {
-        if (await reauth({ reason: 'Enter the account password to manage profiles.' })) {
-          await refreshSession();
-          draw();
-        }
-      });
-      notes.append(h('div', { class: 'lm-profiles__notice' }, notice(h('span', null, 'A kids profile is active, so profile changes are locked. Switch to a grown-up profile, or ', unlock, '.'), { type: 'warn', title: 'Parental controls' })));
+    if (manage && restricted()) {
+      const who = session.profile.isKids ? 'A kids profile' : 'A profile with a maturity rating';
+      if (!session.elevated) {
+        const unlock = h('button', { type: 'button', class: 'lm-link' }, 'confirm the account password');
+        unlock.addEventListener('click', async () => {
+          if (await reauth({ reason: grownUpReason('manage profiles') })) {
+            await refreshSession();
+            draw();
+          }
+        });
+        notes.append(h('div', { class: 'lm-profiles__notice' }, notice(h('span', null, `${who} is active, so profile changes are locked. Switch to a grown-up profile, or `, unlock, '.'), { type: 'warn', title: 'Parental controls' })));
+      } else {
+        const lock = button('Lock now', { variant: 'glass', size: 'sm', icon: 'lock' });
+        lock.addEventListener('click', () => withBusy(lock, async () => {
+          try {
+            await lockAgain();
+            announce('Profile changes locked');
+            draw();
+          } catch (err) {
+            toastError(err);
+          }
+        }));
+        notes.append(h('div', { class: 'lm-profiles__notice' }, notice(h('div', null,
+          h('p', null, `Unlocked for a grown-up while ${session.profile.name} is active. The confirmation covers one change and ends after 5 minutes.`),
+          h('div', { class: 'lm-parental-actions' }, lock)), { type: 'info', title: 'Parental controls' })));
+      }
     }
     actions.replaceChildren(manage
       ? linkButton('Done', `#/profiles${nextQ}`, { variant: 'primary', size: 'lg' })
@@ -311,6 +342,11 @@ export default async function render(ctx) {
 
   async function edit(p) {
     let pin;
+    if (restrictedLocked() && p.id !== session.profile?.id) {
+      // Editing another profile from a restricted one needs a grown-up first.
+      if (!(await reauth({ reason: grownUpReason(`edit ${p.name}`) }))) return;
+      await refreshSession().catch(() => {});
+    }
     if (p.hasPin && !session.elevated) {
       const ok = await pinPrompt({
         profile: p, title: `Edit ${p.name}`, message: 'Enter this profile’s PIN to change its settings.',
@@ -388,7 +424,7 @@ export default async function render(ctx) {
       add.addEventListener('click', async () => {
         const newPin = await choosePin({
           profile: p, title: hasPin ? `Change ${p.name}’s PIN` : `Lock ${p.name} with a PIN`,
-          submit: (value) => withReauth(() => api.profiles.setPin(p.id, { pin: value, currentPin }), { reason: 'Enter the account password to change PINs while a kids profile is active.' }),
+          submit: (value) => withReauth(() => api.profiles.setPin(p.id, { pin: value, currentPin }), { reason: grownUpReason('change PINs') }),
         });
         if (newPin) {
           currentPin = newPin;
@@ -402,7 +438,8 @@ export default async function render(ctx) {
       remove?.addEventListener('click', async () => {
         if (!(await confirmDialog({ title: 'Remove the PIN?', message: `Anyone using this account will be able to open ${p.name} and change its settings.`, confirmLabel: 'Remove PIN' }))) return;
         try {
-          await withReauth(() => api.profiles.setPin(p.id, { pin: null, currentPin }));
+          const res = await withReauth(() => api.profiles.setPin(p.id, { pin: null, currentPin }), { reason: grownUpReason('remove PINs') });
+          if (res === undefined) return;
           hasPin = false;
           currentPin = undefined;
           drawPin();
@@ -475,7 +512,7 @@ export default async function render(ctx) {
         try {
           const res = await withReauth(
             () => (creating ? api.profiles.create(payload) : api.profiles.update(p.id, { ...payload, pin: currentPin })),
-            { reason: 'Enter the account password to change profiles while a kids profile is active.' },
+            { reason: grownUpReason(creating ? 'add a profile' : p.id === session.profile?.id ? 'change this profile’s maturity rating' : `change ${p.name}`) },
           );
           if (!res) return;
           if (res.profile.id === session.profile?.id) setProfile(res.profile);
@@ -506,7 +543,7 @@ export default async function render(ctx) {
       });
       if (!ok) return;
       try {
-        const res = await withReauth(() => api.profiles.remove(p.id, { pin: currentPin }), { reason: 'Enter the account password to delete profiles while a kids profile is active.' });
+        const res = await withReauth(() => api.profiles.remove(p.id, { pin: currentPin }), { reason: grownUpReason('delete profiles') });
         if (res === undefined) return; // cancelled the password prompt
         changed = true;
         modal.close();

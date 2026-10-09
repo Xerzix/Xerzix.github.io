@@ -233,3 +233,23 @@ test('creator titles report honest stats from real activity', async () => {
   const other = await t.userClient({ isCreator: true });
   assert.deepEqual((await other.get('/api/creators/titles')).body.items, []);
 });
+
+test('a response to an information request waits for running uploads', async () => {
+  const c = await t.userClient({ isCreator: true });
+  const sub = await newSubmission(c);
+  await c.post(`/api/creators/submissions/${sub.id}/attest`, { rights: RIGHTS, confirm: true });
+  attachFile(sub.id, 'feature');
+  await c.post(`/api/creators/submissions/${sub.id}/submit`);
+  t.db.run(`UPDATE submissions SET status = 'info_required', status_reason = 'Please upload a new master.' WHERE id = ?`, sub.id);
+
+  const up = await c.post('/api/uploads', { filename: 'new-master.mp4', size: 500_000, purpose: 'submission', submissionId: sub.id, role: 'feature' });
+  assert.equal(up.status, 200);
+  const early = await c.post(`/api/creators/submissions/${sub.id}/respond`, { message: 'The new master is uploading.' });
+  assert.equal(early.status, 409);
+  assert.equal(early.body.error.code, 'UPLOADS_IN_PROGRESS');
+  assert.equal((await c.get(`/api/creators/submissions/${sub.id}`)).body.submission.status, 'info_required', 'still open for files');
+  assert.equal((await c.del(`/api/uploads/${up.body.id}`)).status, 204);
+  const resp = await c.post(`/api/creators/submissions/${sub.id}/respond`, { message: 'Sent without the new master after all.' });
+  assert.equal(resp.status, 200);
+  assert.equal(resp.body.submission.status, 'submitted');
+});

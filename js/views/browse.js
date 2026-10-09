@@ -79,9 +79,11 @@ export function pagedGrid({ fetchPage, empty, noun = ['title', 'titles'] }) {
         more.classList.add('is-busy');
         more.disabled = true;
         try {
-          page += 1;
-          const next = await fetcher(page);
+          // The page counter only advances once the page has arrived, so a failed request is
+          // retried on the next click instead of being skipped.
+          const next = await fetcher(page + 1);
           if (my !== seq) return;
+          page += 1;
           const nodes = next.items.map((t) => h('li', null, titleCard(t)));
           grid.append(...nodes);
           shown += next.items.length;
@@ -89,7 +91,9 @@ export function pagedGrid({ fetchPage, empty, noun = ['title', 'titles'] }) {
           nodes[0]?.querySelector('.lm-card__link')?.focus({ preventScroll: false });
           announce(status.textContent);
         } catch (err) {
-          status.textContent = err.message;
+          if (my !== seq) return;
+          status.textContent = `${err.message || 'Something went wrong.'} Choose “Load more” to try again.`;
+          announce(status.textContent);
         } finally {
           more.classList.remove('is-busy');
           more.disabled = false;

@@ -10,7 +10,7 @@ import { icon } from '../ui/icons.js';
 import { button, notice, stars, toggleSwitch } from '../ui/components.js';
 import { listButton, qualityBadge, ageBadge, playHref } from '../ui/card.js';
 import {
-  conversation, profileKey, historyPreference, setHistoryPreference, assistantTurn, apiMessages,
+  conversation, profileKey, historyPreference, historyAllowedByProfile, setHistoryPreference, assistantTurn, apiMessages,
   errorMessage, velviaEmblem, lengthLabel, providerLabel, slimTitle,
 } from '../ui/panels/velvia-panel.js';
 
@@ -59,15 +59,21 @@ export default async function render(ctx) {
     },
   });
   const signedIn = !!session.profile;
-  if (!signedIn) {
-    historySwitch.disabled = true;
-    historySwitch.setAttribute('aria-describedby', 'velvia-history-hint');
-  }
+  // The profile's privacy setting wins: when it keeps history out of recommendations, the
+  // switch is off and can't be turned on here (the server would ignore it anyway).
+  const blockedByProfile = signedIn && !historyAllowedByProfile();
+  const hint = !signedIn
+    ? 'Sign in to personalise'
+    : blockedByProfile
+      ? ['Turned off in ', h('a', { href: '#/settings/privacy' }, 'Settings › Privacy')]
+      : 'Only for this profile, in this tab';
+  if (!signedIn || blockedByProfile) historySwitch.disabled = true;
+  historySwitch.setAttribute('aria-describedby', 'velvia-history-hint');
   const historyRow = h('div', { class: 'lm-velvia__history' },
     historySwitch,
     h('div', null,
       h('span', { class: 'lm-velvia__history-label', 'aria-hidden': 'true' }, 'Use my viewing history'),
-      h('span', { class: 'lm-velvia__history-hint', id: 'velvia-history-hint' }, signedIn ? 'Only for this profile, in this tab' : 'Sign in to personalise')));
+      h('span', { class: 'lm-velvia__history-hint', id: 'velvia-history-hint' }, ...[hint].flat())));
   historyRow.querySelector('.lm-velvia__history-label').addEventListener('click', () => { if (!historySwitch.disabled) historySwitch.click(); });
 
   const newBtn = button('New conversation', { variant: 'ghost', size: 'sm', icon: 'refresh', onClick: () => resetConversation() });

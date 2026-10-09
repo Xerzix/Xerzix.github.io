@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { contrastRatio, ensureContrast, luminance, mix, parseHex, readableOn, toHex } from '../../js/core/contrast.js';
-import { autoFix, checkContrast, DEFAULT_APPEARANCE, presetById, PRESETS, resolveColors, THEME_KEYS, THEME_LABELS } from '../../js/theme.js';
+import { autoFix, checkContrast, DEFAULT_APPEARANCE, fixPalette, presetById, PRESETS, resolveColors, THEME_KEYS, THEME_LABELS } from '../../js/theme.js';
 import { ENVIRONMENTS } from '../../js/fx/garden.js';
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -141,6 +141,50 @@ test('button labels: autoFix leaves the button colour alone, so the Appearance e
     const failing = checkContrast(fixed).filter((c) => !c.ok);
     assert.deepEqual(failing.map((c) => `${c.id} ${c.ratio}`), [], name);
   }
+});
+
+test('fixPalette fixes problems autoFix cannot reach: backgrounds that no text colour reads on', () => {
+  // A light card background on a dark theme: no single text colour reads on both, and
+  // autoFix (text only) moves the failure to other checks instead.
+  const lightCard = { ...PRESETS[0].colors, surface: '#e8e0d8' };
+  assert.ok(checkContrast(autoFix(lightCard)).some((c) => !c.ok), 'autoFix alone cannot fix this');
+  const fixed = fixPalette(lightCard);
+  assert.deepEqual(checkContrast(fixed).filter((c) => !c.ok).map((c) => c.id), []);
+  assert.equal(fixed.bg, lightCard.bg, 'the primary background is kept');
+  assert.notEqual(fixed.surface, lightCard.surface, 'the card background moves towards it');
+  const green = { ...PRESETS[0].colors, bg2: '#009944' };
+  assert.deepEqual(checkContrast(fixPalette(green)).filter((c) => !c.ok).map((c) => c.id), []);
+  for (const [name, palette] of Object.entries(BAD_PALETTES)) {
+    const before = JSON.stringify(palette);
+    const out = fixPalette(palette);
+    assert.equal(JSON.stringify(palette), before, `${name}: input is not mutated`);
+    for (const k of THEME_KEYS) assert.match(out[k], HEX);
+    assert.deepEqual(checkContrast(out).filter((c) => !c.ok).map((c) => `${c.id} ${c.ratio}`), [], name);
+  }
+});
+
+test('fixPalette: every single-colour edit of every preset ends with all checks passing; passing palettes are untouched', () => {
+  const levels = [0x00, 0x33, 0x66, 0x99, 0xcc, 0xff];
+  const colours = [];
+  for (const r of levels) for (const g of levels) for (const b of levels) colours.push(toHex([r, g, b]));
+  let broken = 0;
+  for (const p of PRESETS) {
+    assert.deepEqual(fixPalette(p.colors), p.colors, `${p.id} is already readable`);
+    for (const k of THEME_KEYS) {
+      for (const colour of colours) {
+        const palette = { ...p.colors, [k]: colour };
+        const fixed = fixPalette(palette);
+        if (checkContrast(palette).every((c) => c.ok)) {
+          assert.deepEqual(fixed, palette, `${p.id} ${k}=${colour} passes, so nothing changes`);
+          continue;
+        }
+        broken++;
+        const failing = checkContrast(fixed).filter((c) => !c.ok);
+        assert.deepEqual(failing.map((c) => c.id), [], `${p.id} ${k}=${colour}`);
+      }
+    }
+  }
+  assert.ok(broken > 1000, `exercised ${broken} unreadable palettes`);
 });
 
 test('resolveColors: presets, custom palettes and fallbacks', () => {

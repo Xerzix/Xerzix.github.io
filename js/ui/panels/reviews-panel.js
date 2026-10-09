@@ -40,7 +40,9 @@ function countedTextarea({ label, name, value = '', max, rows = 5, placeholder, 
   const id = newUid('txt');
   const counterId = `${id}-count`;
   const hintId = hint ? `${id}-hint` : null;
-  const control = h('textarea', { id, name, class: 'lm-textarea', rows, maxlength: max, placeholder, 'aria-describedby': [hintId, counterId].filter(Boolean).join(' ') });
+  const errId = `${id}-err`;
+  const describedBy = (withError) => [hintId, counterId, withError ? errId : null].filter(Boolean).join(' ');
+  const control = h('textarea', { id, name, class: 'lm-textarea', rows, maxlength: max, placeholder, 'aria-describedby': describedBy(false) });
   control.value = value || '';
   const counter = h('span', { class: 'lm-counter', id: counterId });
   const paint = () => {
@@ -50,7 +52,8 @@ function countedTextarea({ label, name, value = '', max, rows = 5, placeholder, 
   };
   control.addEventListener('input', paint);
   paint();
-  const err = h('span', { class: 'lm-error-text', hidden: true });
+  // role="alert" reads the message out when it appears; aria-describedby ties it to the field.
+  const err = h('span', { class: 'lm-error-text', id: errId, role: 'alert', hidden: true });
   const wrap = h('div', { class: 'lm-field' },
     h('label', { class: 'lm-label', for: id }, label),
     control,
@@ -60,6 +63,7 @@ function countedTextarea({ label, name, value = '', max, rows = 5, placeholder, 
   wrap.setError = (msg) => {
     wrap.classList.toggle('has-error', !!msg);
     control.setAttribute('aria-invalid', msg ? 'true' : 'false');
+    control.setAttribute('aria-describedby', describedBy(!!msg));
     err.hidden = !msg;
     err.textContent = msg || '';
   };
@@ -177,8 +181,8 @@ export function reviewsPanel(title) {
 
   function statusNotice(review) {
     if (review.status === 'pending') return notice('Only you can see it until a moderator has looked at it. Nothing about your rating is counted until then.', { type: 'warn', title: 'Pending review' });
-    if (review.status === 'hidden') return notice('Members reported this review, so it is hidden while a moderator checks it. You can still delete it.', { type: 'warn', title: 'Hidden for moderation' });
-    if (review.status === 'removed') return notice('A moderator removed this review. You can delete it and write a new one.', { type: 'danger', title: 'Removed' });
+    if (review.status === 'hidden') return notice('This review is hidden while a moderator checks it. You can still delete it; a new review of this title from your account would also wait for a moderator.', { type: 'warn', title: 'Hidden for moderation' });
+    if (review.status === 'removed') return notice('A moderator removed this review because it did not follow the Community Guidelines. You can delete it; a new review of this title from your account will be checked by a moderator before anyone else sees it.', { type: 'danger', title: 'Removed' });
     return null;
   }
 
@@ -221,8 +225,15 @@ export function reviewsPanel(title) {
 
   function composerForm(existing) {
     let rating = existing?.rating || 0;
-    const ratingErr = h('span', { class: 'lm-error-text', hidden: true });
-    const input = starInput({ value: rating, label: 'Your rating', onChange: (v) => { rating = v; ratingErr.hidden = true; } });
+    const ratingErrId = newUid('rating-err');
+    const ratingErr = h('span', { class: 'lm-error-text', id: ratingErrId, role: 'alert', hidden: true });
+    const showRatingError = (msg) => {
+      ratingErr.textContent = msg || '';
+      ratingErr.hidden = !msg;
+      if (msg) input.setAttribute('aria-describedby', ratingErrId);
+      else input.removeAttribute('aria-describedby');
+    };
+    const input = starInput({ value: rating, label: 'Your rating', onChange: (v) => { rating = v; showRatingError(''); } });
     const body = countedTextarea({ label: 'Your review (optional)', name: 'body', value: existing?.body || '', max: BODY_MAX, rows: 5, placeholder: 'What stayed with you? Keep it kind and useful to others.', hint: 'Mark spoilers below so others can choose to reveal them.' });
     const spoiler = checkbox('This review contains spoilers', { name: 'containsSpoilers', checked: !!existing?.containsSpoilers });
     const submit = button(existing ? 'Save changes' : 'Post review', { variant: 'primary', type: 'submit', icon: existing ? 'check' : 'send' });
@@ -238,8 +249,7 @@ export function reviewsPanel(title) {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!rating) {
-        ratingErr.textContent = 'Choose a rating from 1 to 5 stars.';
-        ratingErr.hidden = false;
+        showRatingError('Choose a rating from 1 to 5 stars.');
         input.querySelector('input')?.focus();
         return;
       }
@@ -259,10 +269,8 @@ export function reviewsPanel(title) {
             return;
           }
           if (err.fields?.body) body.setError(err.fields.body);
-          else if (err.fields?.rating) {
-            ratingErr.textContent = err.fields.rating;
-            ratingErr.hidden = false;
-          } else toastError(err);
+          else if (err.fields?.rating) showRatingError(err.fields.rating);
+          else toastError(err);
         }
       });
     });
@@ -391,10 +399,16 @@ export function reviewsPanel(title) {
     // Report / block (others' reviews, signed in)
     if (!ownAccount && canInteract()) {
       const trigger = h('button', { type: 'button', class: 'lm-btn lm-btn--ghost lm-btn--sm lm-btn--icon lm-review__menu-btn', 'aria-label': `More actions for ${review.author.name}’s review` }, icon('more'));
+      // Close the menu and put focus back on its button before a dialog opens, so the dialog
+      // returns focus there (not to a hidden menu item) when it closes.
+      const fromMenu = (fn) => () => {
+        menuCtl.close(true);
+        fn();
+      };
       const menu = h('div', { class: 'lm-menu lm-menu--up' },
-        menuItem('Report review', { icon: 'flag', onClick: () => openReport('review', review.id, `${review.author.name}’s review`) }),
-        menuItem(`Block ${review.author.name}`, { icon: 'eyeOff', onClick: () => blockAuthor(review) }));
-      bindMenu(trigger, menu);
+        menuItem('Report review', { icon: 'flag', onClick: fromMenu(() => openReport('review', review.id, `${review.author.name}’s review`)) }),
+        menuItem(`Block ${review.author.name}`, { icon: 'eyeOff', onClick: fromMenu(() => blockAuthor(review, article)) }));
+      const menuCtl = bindMenu(trigger, menu);
       actions.append(h('span', { class: 'lm-spacer' }), h('div', { class: 'lm-popover-anchor' }, trigger, menu));
     }
 
@@ -460,6 +474,8 @@ export function reviewsPanel(title) {
           items = items.filter((x) => x.id !== c.id);
           paint();
           announce('Reply deleted');
+          // The deleted reply's button is gone; keep keyboard focus inside the thread.
+          (thread.querySelector('textarea') || thread.closest('article') || thread.parentElement?.querySelector('[aria-controls]'))?.focus();
         } catch (err) {
           toastError(err);
         }
@@ -557,7 +573,7 @@ export function reviewsPanel(title) {
     });
   }
 
-  async function blockAuthor(review) {
+  async function blockAuthor(review, article) {
     const ok = await confirmDialog({
       title: `Block ${review.author.name}?`,
       message: 'You will no longer see their reviews or replies. They are not notified. You can unblock them any time from “Blocked members”.',
@@ -566,9 +582,15 @@ export function reviewsPanel(title) {
     });
     if (!ok) return;
     try {
+      const index = [...list.children].indexOf(article);
       await api.reviews.block(review.id);
       toast(`${review.author.name} is blocked.`, { type: 'success' });
       await load();
+      // Their reviews are gone from the list: continue from the review that took this one's
+      // place (or the "Blocked members" button, where the block can be undone).
+      const reviews = [...list.querySelectorAll(':scope > article')];
+      const next = reviews[Math.min(Math.max(index, 0), reviews.length - 1)];
+      (next || toolbar.querySelector('button') || root.querySelector('h2'))?.focus();
     } catch (err) {
       toastError(err);
     }

@@ -1548,6 +1548,11 @@ body[data-layout='bare'] {
   border-bottom: var(--lm-border);
 }
 
+.lm-contrast__mark {
+  display: inline-flex;
+  flex: none;
+}
+
 .lm-contrast__item svg {
   flex: none;
   width: 18px;
@@ -1791,8 +1796,8 @@ body[data-layout='bare'] {
 
 .lm-swatch span {
   display: block;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: var(--sw);
   box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.3), 0 0 0 1px var(--lm-line-strong);
@@ -2000,4 +2005,44 @@ body[data-layout='bare'] {
 :root[data-motion='reduced'] .lm-auth__panel,
 :root[data-motion='reduced'] .lm-profiles__actions {
   animation: none;
+}
+
+/* Touch targets in Settings and the profile editor: at least 40px tall (44px hit areas for
+   switches), so every control is comfortable to tap on a phone. */
+.lm-settings-page .lm-segmented button,
+.lm-profile-form .lm-segmented button {
+  min-height: 40px;
+}
+
+/* The switch stays 48 × 28 visually; an invisible margin makes it a 56 × 44 target. */
+.lm-settings-page .lm-switch::before,
+.lm-profile-form .lm-switch::before {
+  content: '';
+  position: absolute;
+  inset: -8px -4px;
+}
+
+@media (max-width: 760px), (pointer: coarse) {
+  .lm-settings-page .lm-btn--sm,
+  .lm-profile-form .lm-btn--sm,
+  .lm-account .lm-btn--sm {
+    min-height: 40px;
+  }
+}
+
+/* Parental-controls banner above the account sections (and on Manage profiles). */
+.lm-account__parental {
+  margin-bottom: var(--lm-space-5);
+}
+
+.lm-parental-actions {
+  margin-top: var(--lm-space-3);
+}
+
+/* Notices colour and size every icon; buttons inside keep their own icon style. */
+.lm-notice .lm-parental-actions svg {
+  width: 16px;
+  height: 16px;
+  margin-top: 0;
+  color: currentColor;
 }

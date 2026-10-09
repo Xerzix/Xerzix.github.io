@@ -3,9 +3,10 @@
 // used whenever the server answers REAUTH_REQUIRED (also used by the profile views).
 import { h, newUid, announce } from '../core/dom.js';
 import { api } from '../api/client.js';
+import { bus } from '../core/bus.js';
 import { session, refreshSession } from '../core/session.js';
 import { date, relativeTime } from '../core/format.js';
-import { applyFieldErrors, button, confirmDialog, errorState, field, loading, notice, openModal, toast, toastError, withBusy } from '../ui/components.js';
+import { applyFieldErrors, button, confirmDialog, errorState, field, linkButton, loading, notice, openModal, toast, toastError, withBusy } from '../ui/components.js';
 import { icon } from '../ui/icons.js';
 import { passwordField, strengthMeter } from './auth.js';
 
@@ -45,7 +46,7 @@ export function reauth({ reason = 'For your security, please enter your password
       } catch (err) {
         if (err.code === 'TOTP_REQUIRED' || err.code === 'INVALID_TOTP') {
           codeF.hidden = false;
-          codeF.setError(err.code === 'TOTP_REQUIRED' ? 'Enter the 6-digit code.' : 'That code did not match.');
+          codeF.setError(err.code === 'TOTP_REQUIRED' ? 'Enter the 6-digit code.' : err.extra?.reused ? 'That code was already used. Wait for the next one.' : 'That code did not match.');
           codeF.control.focus();
         } else if (err.code === 'INVALID_PASSWORD' || err.code === 'VALIDATION_FAILED') {
           applyFieldErrors(form, err);
@@ -65,7 +66,36 @@ export async function withReauth(fn, opts) {
     if (err?.code !== 'REAUTH_REQUIRED' && err?.code !== 'PARENTAL_CONTROL') throw err;
     if (!(await reauth(opts))) return undefined;
     return fn();
+  } finally {
+    syncParentalLock();
   }
+}
+
+// ── Parental controls ─────────────────────────────────────
+/**
+ * A kids profile, or any profile with a maturity limit. While one is active, changes to
+ * profiles and to the account need a grown-up to confirm the account password, and each
+ * confirmation covers one change (the server ends it after use).
+ */
+export function isRestrictedProfile(p) {
+  return !!p && (!!p.isKids || (p.maxAge !== null && p.maxAge !== undefined));
+}
+
+/** After a change in a restricted session, re-reads whether the confirmation is still live. */
+function syncParentalLock() {
+  if (session.elevated && isRestrictedProfile(session.profile)) refreshSession().catch(() => {});
+}
+
+/** Ends a grown-up's confirmation now: re-entering a restricted profile always starts locked. */
+export async function lockAgain() {
+  if (session.profile) await api.profiles.select(session.profile.id, {});
+  await refreshSession();
+}
+
+/** The reason shown in the password prompt when a restricted profile blocks a change. */
+export function grownUpReason(what) {
+  const name = session.profile?.name || 'this profile';
+  return `${name} has parental controls. A grown-up can enter the account password to ${what}. It covers this one change.`;
 }
 
 // ── Helpers ───────────────────────────────────────────────
@@ -102,21 +132,73 @@ function downloadJson(data, filename) {
 // ── View ──────────────────────────────────────────────────
 export default async function render(ctx) {
   ctx.setTitle('Account');
-  const account = session.account;
-  const page = h('div', { class: 'lm-page lm-container lm-account' },
-    h('header', { class: 'lm-account__header' },
-      h('span', { class: 'lm-eyebrow' }, 'Your Lumina'),
-      h('h1', null, 'Account'),
-      h('p', null, `Signed in as ${account.email}. Member since ${date(account.createdAt, { year: 'numeric', month: 'long' })}.`)));
-  const sections = h('div', { class: 'lm-account__sections' },
-    detailsSection(),
-    passwordSection(),
-    sessionsSection(ctx),
-    twoFactorSection(),
-    planSection(),
-    dataSection(ctx));
-  page.append(sections);
+  const page = h('div', { class: 'lm-page lm-container lm-account' });
+  const header = (text) => h('header', { class: 'lm-account__header' },
+    h('span', { class: 'lm-eyebrow' }, 'Your Lumina'),
+    h('h1', null, 'Account'),
+    h('p', null, text));
+
+  // While a kids or maturity-limited profile is active, account settings stay closed until a
+  // grown-up confirms the account password (and close again with "Lock now").
+  function drawLocked() {
+    const p = session.profile;
+    const unlock = button('Confirm the account password', { variant: 'primary', icon: 'lock' });
+    unlock.addEventListener('click', async () => {
+      if (await reauth({ reason: 'Enter the account password to open account settings. Each change made while this profile is active asks for it again.' })) {
+        await refreshSession().catch(() => {});
+        drawOpen();
+      }
+    });
+    page.replaceChildren(
+      header('Account settings belong to the grown-ups in this household.'),
+      h('div', { class: 'lm-account__sections' },
+        section({ id: 'locked', iconName: 'shield', title: 'Account settings are locked', intro: `${p.name} ${p.isKids ? 'is a kids profile' : 'has a maturity limit'}, so devices, passwords, data downloads and account changes need a grown-up.` },
+          h('div', { class: 'lm-form-actions' }, unlock, linkButton('Switch profile', `#/profiles?next=${encodeURIComponent('/account')}`, { variant: 'glass', icon: 'users' })))));
+  }
+
+  function drawOpen() {
+    const account = session.account;
+    const restricted = isRestrictedProfile(session.profile);
+    page.replaceChildren(
+      header(`Signed in as ${account.email}. Member since ${date(account.createdAt, { year: 'numeric', month: 'long' })}.`),
+      restricted ? parentalBanner(ctx, drawLocked) : null,
+      h('div', { class: 'lm-account__sections' },
+        detailsSection(),
+        passwordSection(),
+        sessionsSection(ctx),
+        twoFactorSection(),
+        planSection(),
+        dataSection(ctx)));
+  }
+
+  if (isRestrictedProfile(session.profile) && !session.elevated) drawLocked();
+  else drawOpen();
   return page;
+}
+
+/** Shown above the account sections while a restricted profile is active. */
+function parentalBanner(ctx, onLock) {
+  const box = h('div', { class: 'lm-account__parental' });
+  const lock = button('Lock now', { variant: 'glass', size: 'sm', icon: 'lock' });
+  lock.addEventListener('click', () => withBusy(lock, async () => {
+    try {
+      await lockAgain();
+      announce('Account settings locked');
+      onLock();
+    } catch (err) {
+      toastError(err);
+    }
+  }));
+  const draw = () => {
+    const text = session.elevated
+      ? 'Unlocked for a grown-up. The confirmation covers one change and ends after 5 minutes.'
+      : 'The confirmation has been used. The next change asks for the account password again.';
+    box.replaceChildren(notice(h('div', null, h('p', null, text), h('div', { class: 'lm-parental-actions' }, lock)), { type: session.elevated ? 'info' : 'warn', title: 'Parental controls' }));
+  };
+  const off = bus.on('session:changed', draw);
+  ctx.onDestroy(off);
+  draw();
+  return box;
 }
 
 function detailsSection() {
@@ -147,7 +229,8 @@ function detailsSection() {
       try {
         const body = { displayName };
         if (changingEmail) Object.assign(body, { email, currentPassword: pwF.control.value });
-        await api.account.update(body);
+        const res = await withReauth(() => api.account.update(body), { reason: grownUpReason('change account details') });
+        if (res === undefined) return;
         await refreshSession();
         pwF.control.value = '';
         pwF.hidden = true;
@@ -203,7 +286,8 @@ function sessionsSection(ctx) {
     if (!(await confirmDialog({ title: 'Sign out other devices?', message: 'Every other browser and device signed in to your account will be signed out. This device stays signed in.', confirmLabel: 'Sign out others' }))) return;
     withBusy(signOutOthers, async () => {
       try {
-        const res = await api.account.revokeOtherSessions();
+        const res = await withReauth(() => api.account.revokeOtherSessions(), { reason: grownUpReason('sign out other devices') });
+        if (res === undefined) return;
         toast(res?.revoked ? `Signed out ${res.revoked} other ${res.revoked === 1 ? 'device' : 'devices'}.` : 'No other devices were signed in.', { type: 'success' });
         load();
       } catch (err) {
@@ -218,6 +302,16 @@ function sessionsSection(ctx) {
       signOutOthers.hidden = items.length < 2;
       list.replaceChildren(h('ul', { class: 'lm-sessions', role: 'list' }, ...items.map((s) => row(s))));
     } catch (err) {
+      if (err.code === 'PARENTAL_CONTROL') {
+        // A restricted profile is active and the grown-up's confirmation has been used.
+        const show = button('Show devices', { variant: 'glass', size: 'sm', icon: 'lock' });
+        show.addEventListener('click', async () => {
+          if (await reauth({ reason: grownUpReason('see the devices signed in to this account') })) load();
+        });
+        signOutOthers.hidden = true;
+        list.replaceChildren(h('p', { class: 'lm-muted lm-small' }, 'The device list needs the account password while this profile is active. '), show);
+        return;
+      }
       list.replaceChildren(errorState(err, { retry: load }));
     }
   }
@@ -227,7 +321,8 @@ function sessionsSection(ctx) {
     const revoke = s.current ? null : button('Sign out', { variant: 'ghost', size: 'sm', attrs: { 'aria-label': `Sign out ${label}, last active ${relativeTime(s.lastSeenAt)}` } });
     revoke?.addEventListener('click', () => withBusy(revoke, async () => {
       try {
-        await api.account.revokeSession(s.id);
+        const res = await withReauth(() => api.account.revokeSession(s.id), { reason: grownUpReason('sign out a device') });
+        if (res === undefined) return;
         announce(`${label} signed out`);
         toast(`${label} was signed out.`, { type: 'success' });
         load();
@@ -376,7 +471,8 @@ function dataSection(ctx) {
   const download = button('Download a copy', { variant: 'glass', icon: 'download' });
   download.addEventListener('click', () => withBusy(download, async () => {
     try {
-      const data = await api.account.exportData();
+      const data = await withReauth(() => api.account.exportData(), { reason: grownUpReason('download the account’s data') });
+      if (data === undefined) return;
       downloadJson(data, `lumina-data-${new Date().toISOString().slice(0, 10)}.json`);
       toast('Your data is downloading as a JSON file.', { type: 'success' });
     } catch (err) {
@@ -410,7 +506,8 @@ function deleteDialog(ctx) {
       h('li', null, 'your account, sign-in details and every profile'),
       h('li', null, 'My List, collections, watch progress, history and preferences'),
       h('li', null, 'your reviews, comments, notifications and creator submissions')),
-    h('p', { class: 'lm-muted lm-small' }, 'Consider downloading a copy of your data first. Security records of the deletion are kept as required by law.'),
+    h('p', { class: 'lm-muted lm-small' }, 'Consider downloading a copy of your data first. Lumina’s security log keeps its entries about this account — such as when it was registered, changed and deleted — with the account’s email address. See “How long we keep data” in the ',
+      h('a', { class: 'lm-link', href: '#/legal/privacy' }, 'Privacy Policy'), '.'),
     alert, pwF, confirmF);
   let modal;
   const confirm = button('Delete my account', { variant: 'danger', type: 'submit', disabled: true, attrs: { form: formId } });

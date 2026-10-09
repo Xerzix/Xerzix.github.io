@@ -3,7 +3,7 @@
 import { h, announce, newUid } from '../core/dom.js';
 import { api } from '../api/client.js';
 import { bus } from '../core/bus.js';
-import { refreshLibrary, session, toggleList } from '../core/session.js';
+import { library, refreshLibrary, session } from '../core/session.js';
 import { date, plural, runtime } from '../core/format.js';
 import { navigate } from '../core/router.js';
 import { titleCard } from '../ui/card.js';
@@ -27,7 +27,14 @@ function syncUrl(path) {
 const enc = encodeURIComponent;
 
 // ── My List ───────────────────────────────────────────────
-async function listTab() {
+/** A poster card without its own My List toggle: each item here has a dedicated Remove control. */
+function listCard(t) {
+  const card = titleCard(t);
+  card.querySelector('[data-list-toggle]')?.remove();
+  return card;
+}
+
+async function listTab(ctx) {
   const { items } = await api.library.watchlist();
   let order = [...items];
   let sort = 'custom';
@@ -62,30 +69,46 @@ async function listTab() {
     }
   }
 
+  // The library cache is shared with every card on the page; keep it in step with this list.
+  const setListed = (titleId, listed) => {
+    if (listed) library.listIds.add(titleId);
+    else library.listIds.delete(titleId);
+    bus.emit('library:changed', { titleId });
+  };
+
+  // Always a removal (never a toggle), so it cannot put back a title already taken off the list.
   async function remove(item) {
     const index = order.findIndex((x) => x.titleId === item.titleId);
+    if (index < 0) return;
     const before = order.map((x) => x.titleId);
-    try {
-      await toggleList(item.titleId);
-    } catch (err) {
-      toastError(err);
-      return;
-    }
     order = order.filter((x) => x.titleId !== item.titleId);
     paint();
     const buttons = grid.querySelectorAll('[data-remove]');
     (buttons[Math.min(index, buttons.length - 1)] || wrap.querySelector('a, button'))?.focus();
+    setListed(item.titleId, false);
+    try {
+      await api.library.removeFromList(item.titleId);
+    } catch (err) {
+      order = [...order];
+      order.splice(index, 0, item);
+      paint();
+      setListed(item.titleId, true);
+      toastError(err);
+      return;
+    }
     toast(`Removed “${item.title.title}” from My List.`, {
       type: 'success',
       action: {
         label: 'Undo',
         onClick: async () => {
+          if (order.some((x) => x.titleId === item.titleId)) return;
           try {
-            await toggleList(item.titleId);
+            await api.library.addToList(item.titleId);
             await api.library.reorderList(before);
             order = [...order];
-            order.splice(index, 0, item);
+            order.splice(Math.min(index, order.length), 0, item);
             paint();
+            setListed(item.titleId, true);
           } catch (err) {
             toastError(err);
           }
@@ -93,6 +116,31 @@ async function listTab() {
       },
     });
   }
+
+  // A title can also leave (or rejoin) My List from elsewhere on the page, such as the quick
+  // view. Mirror that here so the grid never shows a title that is no longer on the list.
+  const detached = new Map(); // titleId -> { item, index }
+  const sync = () => {
+    if (!library.ready || !wrap.isConnected) return;
+    let changed = false;
+    order.forEach((item, index) => {
+      if (!library.listIds.has(item.titleId)) {
+        detached.set(item.titleId, { item, index });
+        changed = true;
+      }
+    });
+    if (changed) order = order.filter((x) => library.listIds.has(x.titleId));
+    for (const [titleId, { item, index }] of detached) {
+      if (!library.listIds.has(titleId)) continue;
+      detached.delete(titleId);
+      if (order.some((x) => x.titleId === titleId)) continue;
+      order = [...order];
+      order.splice(Math.min(index, order.length), 0, item);
+      changed = true;
+    }
+    if (changed) paint();
+  };
+  ctx?.onDestroy(bus.on('library:changed', sync));
 
   function paint() {
     if (!order.length) {
@@ -107,7 +155,7 @@ async function listTab() {
     hint.textContent = sort === 'custom' ? 'Use Move earlier and Move later to arrange your list. The order is saved for this profile.' : 'Switch to Custom order to rearrange your list.';
     const list = sorted();
     grid.replaceChildren(...list.map((item, i) => h('li', { class: 'lm-lib__item', 'data-title-id': item.titleId },
-      titleCard(item.title),
+      listCard(item.title),
       h('div', { class: 'lm-lib__controls' },
         sort === 'custom' ? button('', { variant: 'ghost', size: 'sm', icon: 'chevronLeft', ariaLabel: `Move ${item.title.title} earlier`, disabled: i === 0, attrs: { 'data-move': '-1', title: 'Move earlier' }, onClick: () => move(item.titleId, -1) }) : null,
         sort === 'custom' ? button('', { variant: 'ghost', size: 'sm', icon: 'chevronRight', ariaLabel: `Move ${item.title.title} later`, disabled: i === list.length - 1, attrs: { 'data-move': '1', title: 'Move later' }, onClick: () => move(item.titleId, 1) }) : null,
@@ -195,10 +243,12 @@ function dayLabel(iso) {
 }
 
 async function historyTab(rerender) {
-  let page = 1;
-  let first = await api.library.history(page);
+  const first = await api.library.history(1);
+  const pageSize = first.pageSize || 50;
   let total = first.total;
   let loaded = first.items.length;
+  const shownIds = new Set(first.items.map((i) => String(i.id)));
+  let oldestAt = Math.min(Infinity, ...first.items.map((i) => Date.parse(i.watchedAt)));
   const wrap = h('div', { class: 'lm-lib__tab' });
   if (!first.items.length) {
     wrap.append(emptyState({
@@ -275,18 +325,36 @@ async function historyTab(rerender) {
   more.hidden = loaded >= total;
   more.addEventListener('click', async () => {
     more.classList.add('is-busy');
+    more.disabled = true;
     try {
-      page += 1;
-      first = await api.library.history(page);
-      total = first.total;
-      loaded += first.items.length;
-      add(first.items);
+      // History is paged by position. Entries removed above move older ones up, so start from
+      // the page that now holds the first entry not yet listed, skip any already shown, and go
+      // on to the next page until a full page of older entries has been gathered.
+      // Entries newer than the oldest one listed (watched on another device meanwhile) belong
+      // at the top, so they wait for the next visit instead of landing among older ones.
+      let page = Math.floor(loaded / pageSize) + 1;
+      const fresh = new Map();
+      for (;;) {
+        const res = await api.library.history(page);
+        total = res.total;
+        for (const i of res.items) {
+          if (shownIds.has(String(i.id)) || Date.parse(i.watchedAt) > oldestAt) continue;
+          fresh.set(String(i.id), i);
+        }
+        if (fresh.size >= pageSize || !res.items.length || page * (res.pageSize || pageSize) >= res.total) break;
+        page += 1;
+      }
+      for (const id of fresh.keys()) shownIds.add(id);
+      loaded += fresh.size;
+      add([...fresh.values()]);
+      for (const i of fresh.values()) oldestAt = Math.min(oldestAt, Date.parse(i.watchedAt));
       paintCount();
-      more.hidden = loaded >= total || !first.items.length;
+      more.hidden = loaded >= total || !fresh.size;
     } catch (err) {
       toastError(err);
     } finally {
       more.classList.remove('is-busy');
+      more.disabled = false;
     }
   });
 
@@ -402,7 +470,7 @@ export default async function render(ctx) {
   let tabset;
   const rerender = () => tabset?.select(currentTab);
   let currentTab = active;
-  const renderers = { list: listTab, continue: continueTab, history: () => historyTab(rerender), collections: collectionsTab };
+  const renderers = { list: () => listTab(ctx), continue: continueTab, history: () => historyTab(rerender), collections: collectionsTab };
   tabset = tabs({
     label: 'Library sections',
     active,

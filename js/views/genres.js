@@ -90,11 +90,13 @@ async function followButton(genre) {
   } catch {
     return null;
   }
-  const b = button(following ? 'Following' : 'Follow genre', {
+  // A toggle button: the label stays "Follow genre" and aria-pressed carries the state.
+  const hint = () => (following ? `You are following ${genre}. Select to stop notifications.` : 'Get notified when new titles are added to this genre');
+  const b = button('Follow genre', {
     variant: 'glass',
     size: 'sm',
     icon: following ? 'check' : 'bell',
-    attrs: { 'aria-pressed': String(following), title: 'Get notified when new titles are added to this genre' },
+    attrs: { 'aria-pressed': String(following), title: hint() },
   });
   b.addEventListener('click', async () => {
     b.disabled = true;
@@ -103,7 +105,8 @@ async function followButton(genre) {
       else await api.follows.follow('genre', genre);
       following = !following;
       b.setAttribute('aria-pressed', String(following));
-      b.replaceChildren(icon(following ? 'check' : 'bell'), h('span', null, following ? 'Following' : 'Follow genre'));
+      b.title = hint();
+      b.replaceChildren(icon(following ? 'check' : 'bell'), h('span', null, 'Follow genre'));
       toast(following ? `You will hear about new ${genre} titles.` : `You unfollowed ${genre}.`, { type: 'success', timeout: 2600 });
     } catch (err) {
       toastError(err);

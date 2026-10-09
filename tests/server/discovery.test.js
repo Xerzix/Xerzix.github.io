@@ -165,6 +165,17 @@ test('stats: shape from real history, and the privacy switch', async () => {
   await u.post('/api/library/watched', { titleId: 'garden-hours' });
   assert.deepEqual((await u.get('/api/library/stats')).body.completedSeries.map((x) => x.id), ['garden-hours']);
 
+  // "Mark unwatched" undoes the marks: the series is no longer completed and the film that was
+  // only marked (never played) is no longer counted. Real viewing time stays in the history.
+  assert.equal((await u.del('/api/library/watched/garden-hours')).status, 200);
+  assert.equal((await u.del('/api/library/watched/big-buck-bunny')).status, 200);
+  const undone = (await u.get('/api/library/stats')).body;
+  assert.deepEqual(undone.completedSeries, []);
+  assert.equal(undone.moviesWatched, 1, 'only Sintel, which was actually played');
+  assert.equal(undone.titlesWatched, 2);
+  assert.equal(undone.episodesWatched, 1, 'the episode that was actually played');
+  assert.equal(undone.totalSeconds, 95);
+
   // Another profile sees only its own numbers.
   const other = await t.userClient();
   assert.equal((await other.get('/api/library/stats')).body.totalSeconds, 0);

@@ -5,6 +5,13 @@
 //   • reports  — what members told us about their experience (quality_reports)
 // Each half carries a `sufficient` flag. Below the threshold the numbers are withheld
 // (null / empty) so a handful of sessions or reports is never presented as a statistic.
+//
+// Measured figures come only from signed-in members' sessions, and each member counts
+// once: their sessions are first combined into one set of figures per member, then
+// averaged across members (the start time is the median across members). One member — or
+// a script replaying telemetry — can therefore move a figure by at most 1/N, and the
+// threshold is a number of different members, not of sessions. Anonymous sessions are
+// still recorded for the operators' usage view but are not published.
 import { now, toJson } from '../db/index.js';
 import { HttpError, notFound } from '../lib/errors.js';
 import { newId } from '../lib/crypto.js';
@@ -12,7 +19,7 @@ import { newId } from '../lib/crypto.js';
 export const QUALITY_CATEGORIES = ['buffering', 'interruptions', 'poor_quality', 'audio_sync', 'missing_subtitles', 'wrong_language', 'playback_error', 'crash', 'other'];
 export const QUALITY_WINDOW_DAYS = 90;
 export const REPORTS_THRESHOLD = 5; // distinct reporters
-export const SESSIONS_THRESHOLD = 10; // measured viewing sessions
+export const VIEWERS_THRESHOLD = 10; // different signed-in members with measured sessions
 const PER_TITLE_DAILY_REPORTS = 3;
 const CACHE_MS = 30_000;
 
@@ -90,42 +97,54 @@ export class QualityService {
 
   measuredSummary(titleId, since) {
     // A session counts once the player actually started, played something or failed.
-    const where = `title_id = ? AND started_at >= ? AND (seconds_watched > 0 OR error_count > 0 OR startup_ms IS NOT NULL)`;
+    const perViewer = `
+      SELECT account_id,
+             COUNT(*) AS sessions,
+             SUM(seconds_watched) AS watched,
+             SUM(rebuffer_seconds) AS rebuffer,
+             AVG(CASE WHEN error_count > 0 THEN 1.0 ELSE 0.0 END) AS errorShare,
+             SUM(CASE WHEN avg_bitrate_kbps IS NOT NULL AND seconds_watched > 0 THEN avg_bitrate_kbps * seconds_watched END)
+               / SUM(CASE WHEN avg_bitrate_kbps IS NOT NULL AND seconds_watched > 0 THEN seconds_watched END) AS bitrate,
+             AVG(startup_ms) AS startup
+        FROM playback_sessions
+       WHERE title_id = ? AND started_at >= ? AND account_id IS NOT NULL
+         AND (seconds_watched > 0 OR error_count > 0 OR startup_ms IS NOT NULL)
+       GROUP BY account_id`;
     const agg = this.db.get(
-      `SELECT COUNT(*) AS sessions,
-              SUM(seconds_watched) AS watched,
-              SUM(rebuffer_seconds) AS rebuffer,
-              SUM(CASE WHEN error_count > 0 THEN 1 ELSE 0 END) AS withErrors,
-              SUM(CASE WHEN avg_bitrate_kbps IS NOT NULL AND seconds_watched > 0 THEN avg_bitrate_kbps * seconds_watched ELSE 0 END) AS bitrateWeighted,
-              SUM(CASE WHEN avg_bitrate_kbps IS NOT NULL AND seconds_watched > 0 THEN seconds_watched ELSE 0 END) AS bitrateSeconds
-         FROM playback_sessions WHERE ${where}`,
+      `WITH per AS (${perViewer})
+       SELECT COUNT(*) AS viewers,
+              COALESCE(SUM(sessions), 0) AS sessions,
+              AVG(CASE WHEN watched + rebuffer > 0 THEN rebuffer / (watched + rebuffer) END) AS rebufferRatio,
+              AVG(errorShare) AS errorRate,
+              AVG(bitrate) AS bitrate
+         FROM per`,
       titleId, since,
     );
+    const viewers = agg.viewers || 0;
     const sessions = agg.sessions || 0;
-    const sufficient = sessions >= SESSIONS_THRESHOLD;
+    const sufficient = viewers >= VIEWERS_THRESHOLD;
+    const base = { viewers, sessions, threshold: VIEWERS_THRESHOLD };
     if (!sufficient) {
-      return { sessions, threshold: SESSIONS_THRESHOLD, rebufferRatio: null, avgBitrateKbps: null, errorRate: null, medianStartupMs: null, sufficient };
+      return { ...base, rebufferRatio: null, avgBitrateKbps: null, errorRate: null, medianStartupMs: null, sufficient };
     }
-    const watched = agg.watched || 0;
-    const rebuffer = agg.rebuffer || 0;
     return {
-      sessions,
-      threshold: SESSIONS_THRESHOLD,
-      rebufferRatio: watched + rebuffer > 0 ? round(rebuffer / (watched + rebuffer), 4) : 0,
-      avgBitrateKbps: agg.bitrateSeconds > 0 ? round(agg.bitrateWeighted / agg.bitrateSeconds) : null,
-      errorRate: round((agg.withErrors || 0) / sessions, 4),
-      medianStartupMs: this.medianStartup(titleId, since, where),
+      ...base,
+      rebufferRatio: agg.rebufferRatio === null ? 0 : round(agg.rebufferRatio, 4),
+      avgBitrateKbps: agg.bitrate === null ? null : round(agg.bitrate),
+      errorRate: round(agg.errorRate || 0, 4),
+      medianStartupMs: this.medianStartup(perViewer, titleId, since),
       sufficient,
     };
   }
 
-  medianStartup(titleId, since, where) {
-    const n = this.db.get(`SELECT COUNT(*) AS n FROM playback_sessions WHERE ${where} AND startup_ms IS NOT NULL`, titleId, since).n;
-    if (!n) return null;
-    const rows = this.db.all(
-      `SELECT startup_ms FROM playback_sessions WHERE ${where} AND startup_ms IS NOT NULL ORDER BY startup_ms LIMIT ? OFFSET ?`,
-      titleId, since, n % 2 ? 1 : 2, Math.floor((n - 1) / 2),
+  /** Median across members of each member's average start time. */
+  medianStartup(perViewer, titleId, since) {
+    const row = this.db.get(
+      `WITH per AS (${perViewer}),
+            ranked AS (SELECT startup, ROW_NUMBER() OVER (ORDER BY startup) AS rn, COUNT(*) OVER () AS n FROM per WHERE startup IS NOT NULL)
+       SELECT AVG(startup) AS median FROM ranked WHERE rn IN ((n + 1) / 2, (n + 2) / 2)`,
+      titleId, since,
     );
-    return Math.round(rows.reduce((s, r) => s + r.startup_ms, 0) / rows.length);
+    return row?.median === null || row?.median === undefined ? null : Math.round(row.median);
   }
 }

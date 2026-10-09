@@ -8,8 +8,7 @@ import { bus } from '../core/bus.js';
 import { session, setProfile, refreshLibrary } from '../core/session.js';
 import { store } from '../core/storage.js';
 import { INTERFACE_LANGUAGES } from '../core/i18n.js';
-import { ensureContrast, readableOn } from '../core/contrast.js';
-import { PRESETS, THEME_KEYS, THEME_LABELS, DEFAULT_APPEARANCE, checkContrast, autoFix, resolveColors, presetById } from '../theme.js';
+import { PRESETS, THEME_KEYS, THEME_LABELS, DEFAULT_APPEARANCE, checkContrast, fixPalette, resolveColors, presetById } from '../theme.js';
 import { ENVIRONMENTS } from '../fx/garden.js';
 import { playIntro } from '../fx/intro.js';
 import { setAppearance, currentAppearance } from '../app.js';
@@ -17,6 +16,7 @@ import { button, confirmDialog, emptyState, errorState, linkButton, notice, serv
 import { icon, logoMark } from '../ui/icons.js';
 import { avatar } from '../ui/avatars.js';
 import { MEDIA_LANGUAGES, maturityLabel } from './profiles.js';
+import { grownUpReason, withReauth } from './account.js';
 
 const VERSION = '2.0.0';
 
@@ -297,12 +297,21 @@ function normalizeHex(value) {
   return /^#[0-9a-f]{6}$/.test(v) ? v : null;
 }
 
-/** autoFix() adjusts text colours; this also nudges the button colour so its label stays readable. */
-function fixReadability(colors) {
-  const fixed = autoFix(colors);
-  fixed.button = ensureContrast(fixed.button, readableOn(fixed.button, fixed.text), 4.5);
-  return fixed;
+/** "a, b and c" */
+function listOf(items) {
+  return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
+
+/** The colours fixPalette() would change, or [] when it cannot improve anything. */
+function readabilityFix(colors) {
+  const fixed = fixPalette(colors);
+  const changed = THEME_KEYS.filter((k) => fixed[k] !== colors[k]);
+  return { fixed, changed };
+}
+
+const contrastSummaryText = (problems) => (problems.length
+  ? `${problems.length} ${problems.length === 1 ? 'check falls' : 'checks fall'} below the WCAG AA contrast guideline. Text may be hard to read.`
+  : 'Every check meets the WCAG AA contrast guideline.');
 
 function paintPreview(el, c) {
   const vars = { '--p-bg': c.bg, '--p-bg2': c.bg2, '--p-surface': c.surface, '--p-accent': c.accent, '--p-strong': c.accentStrong, '--p-button': c.button, '--p-text': c.text, '--p-text2': c.text2, '--p-gold': c.gold };
@@ -392,18 +401,69 @@ function appearanceSection(sctx) {
   const contrastSummary = h('div');
   const fixBtn = button('Fix readability automatically', { variant: 'primary', size: 'sm', icon: 'sparkle' });
   fixBtn.addEventListener('click', () => {
-    draft.custom = fixReadability(customColors());
+    const { fixed, changed } = readabilityFix(customColors());
+    if (!changed.length) {
+      announce('No automatic fix is available for these colours. Choose darker or lighter colours by hand.');
+      return;
+    }
+    draft.custom = fixed;
     draft.preset = 'custom';
+    // The result is announced here, not by the report (and no older report announcement fires).
+    clearTimeout(announceTimer);
+    lastProblemCount = null;
     apply();
-    announce('Colours adjusted so every text check passes.');
-    toast('Adjusted text and button colours for readability.', { type: 'success' });
+    // Report what actually happened, never more.
+    const remaining = checkContrast(fixed).filter((x) => !x.ok);
+    const what = listOf(changed.map((k) => THEME_LABELS[k].toLowerCase()));
+    const message = remaining.length
+      ? `Adjusted the ${what}. ${remaining.length} ${remaining.length === 1 ? 'check still falls' : 'checks still fall'} short: ${listOf(remaining.map((x) => x.label.toLowerCase()))}.`
+      : `Adjusted the ${what}. Every text check now passes.`;
+    announce(message);
+    toast(message, { type: remaining.length ? 'info' : 'success' });
   });
+  // The report updates in place; only a change in how many checks fail is announced.
+  const contrastItems = new Map();
+  let lastProblemCount = null;
+  let announceTimer = 0;
+  function renderContrast(c) {
+    const checks = checkContrast(c);
+    const problems = checks.filter((x) => !x.ok);
+    for (const x of checks) {
+      let item = contrastItems.get(x.id);
+      if (!item) {
+        item = { mark: h('span', { class: 'lm-contrast__mark' }), sr: h('span', { class: 'visually-hidden' }), ratio: h('span', { class: 'lm-contrast__ratio' }) };
+        item.li = h('li', { class: 'lm-contrast__item' }, item.mark, h('span', { class: 'lm-contrast__label' }, x.label, item.sr), item.ratio);
+        contrastItems.set(x.id, item);
+        contrastList.append(item.li);
+      }
+      if (item.li.dataset.severity !== x.severity) {
+        item.li.dataset.severity = x.severity;
+        item.mark.replaceChildren(icon(x.ok ? 'checkCircle' : 'alert'));
+        item.sr.textContent = x.ok ? ' — passes' : x.severity === 'warn' ? ' — slightly too low' : ' — too low';
+      }
+      const ratio = `${x.ratio.toFixed(2)} : 1 · needs ${x.min}`;
+      if (item.ratio.textContent !== ratio) item.ratio.textContent = ratio;
+    }
+    const type = problems.length ? (problems.some((x) => x.severity === 'fail') ? 'danger' : 'warn') : 'ok';
+    const key = `${problems.length}:${type}`;
+    if (contrastSummary.dataset.key !== key) {
+      contrastSummary.dataset.key = key;
+      contrastSummary.replaceChildren(notice(contrastSummaryText(problems), { type }));
+    }
+    if (lastProblemCount !== null && lastProblemCount !== problems.length) {
+      clearTimeout(announceTimer);
+      announceTimer = setTimeout(() => announce(contrastSummaryText(problems)), 700);
+    }
+    lastProblemCount = problems.length;
+    // Offer the fix only when it would change something.
+    fixBtn.hidden = !problems.length || !readabilityFix(c).changed.length;
+  }
   const customEditor = h('div', { class: 'lm-custom-editor lm-safe-palette' },
     h('div', { class: 'lm-custom-editor__head' },
       h('h4', null, 'Your colours'),
       h('p', null, 'The page previews your palette as you edit. This editor keeps the default colours so you can always read it.')),
     colourGrid,
-    h('div', { class: 'lm-contrast', 'aria-live': 'polite' },
+    h('div', { class: 'lm-contrast' },
       h('strong', null, 'Readability'),
       contrastSummary,
       contrastList,
@@ -498,16 +558,9 @@ function appearanceSection(sctx) {
         picker.value = c[k];
         if (document.activeElement !== text) text.value = c[k];
       });
-      const checks = checkContrast(c);
-      const problems = checks.filter((x) => !x.ok);
-      contrastList.replaceChildren(...checks.map((x) => h('li', { class: 'lm-contrast__item', 'data-severity': x.severity },
-        icon(x.ok ? 'checkCircle' : 'alert'),
-        h('span', { class: 'lm-contrast__label' }, x.label, h('span', { class: 'visually-hidden' }, x.ok ? ' — passes' : x.severity === 'warn' ? ' — slightly too low' : ' — too low')),
-        h('span', { class: 'lm-contrast__ratio' }, `${x.ratio.toFixed(2)} : 1 · needs ${x.min}`))));
-      contrastSummary.replaceChildren(problems.length
-        ? notice(`${problems.length} ${problems.length === 1 ? 'check falls' : 'checks fall'} below the WCAG AA contrast guideline. Text may be hard to read.`, { type: problems.some((x) => x.severity === 'fail') ? 'danger' : 'warn' })
-        : notice('Every check meets the WCAG AA contrast guideline.', { type: 'ok' }));
-      fixBtn.hidden = !problems.length;
+      renderContrast(c);
+    } else {
+      lastProblemCount = null;
     }
     envInputs.forEach((input, id) => { input.checked = draft.environment === id; });
     animSwitch.setChecked(draft.animation);
@@ -547,6 +600,7 @@ function appearanceSection(sctx) {
     window.removeEventListener('beforeunload', onBeforeUnload);
     offSession();
     cancelAnimationFrame(frame);
+    clearTimeout(announceTimer);
     if (dirty()) {
       setAppearance(saved, { persistLocal: false });
       toast('Unsaved appearance changes were discarded.');
@@ -591,7 +645,7 @@ function playbackSection(sctx) {
       settingRow('Save watch progress', 'Remember where you stopped, for resuming and Continue Watching.', sw(sctx, { checked: pb.saveProgress, label: 'Save watch progress', save: (v) => savePrefs({ playback: { saveProgress: v } }) }))),
     group('Quality', 'Lumina only offers resolutions a title really has. “Highest available” never upscales.',
       settingRow('Default quality', null, quality),
-      settingRow('Data saver on mobile networks', 'Prefer lower resolutions to use less data.', sw(sctx, { checked: pb.dataSaver, label: 'Data saver on mobile networks', save: (v) => savePrefs({ playback: { dataSaver: v } }) }))),
+      settingRow('Data saver', 'Prefer lower resolutions on every connection to use less data.', sw(sctx, { checked: pb.dataSaver, label: 'Data saver', save: (v) => savePrefs({ playback: { dataSaver: v } }) }))),
     group('While browsing', null,
       settingRow('Autoplay previews', 'Play trailers quietly on title pages and the featured banner.', sw(sctx, { checked: session.profile.autoplayPreviews, label: 'Autoplay previews', save: (v) => saveProfile({ autoplayPreviews: v }) }))),
   ];
@@ -698,7 +752,8 @@ async function notificationsSection(sctx) {
       label: title,
       save: async (v) => {
         const next = { ...current, [key]: v };
-        const res = await api.notifications.setPrefs(next);
+        const res = await withReauth(() => api.notifications.setPrefs(next), { reason: grownUpReason('change notification settings for the account') });
+        if (res === undefined) throw new Error('Not changed. Notification settings belong to the whole account, so a grown-up needs to confirm the account password.');
         current = res?.preferences || (res && typeof res === 'object' && key in res ? res : next);
       },
     }))));
@@ -720,8 +775,9 @@ function parentalSection() {
     group('How parental controls work', null,
       h('ul', { class: 'lm-delete-list' },
         h('li', null, 'Every profile has a maturity rating. Titles rated above it are hidden everywhere — browsing, search, Velvia Suggestions and direct links.'),
-        h('li', null, 'Kids profiles are limited to titles rated 13 and under. They can’t add, delete or unlock profiles, or change their own rating.'),
-        h('li', null, 'Add a 4-digit PIN to grown-up profiles so kids can’t switch into them. A PIN also protects a profile’s maturity setting.'),
+        h('li', null, 'Kids profiles are limited to titles rated 13 and under.'),
+        h('li', null, 'While a kids profile or any profile with a maturity rating is active, adding, deleting or unlocking profiles, changing ratings or PINs, and account settings need the account password. Each confirmation covers one change, and its own PIN is never enough.'),
+        h('li', null, 'Add a 4-digit PIN to grown-up profiles so nobody else can switch into them.'),
         h('li', null, 'Forgot a PIN? Reset it from Manage profiles by confirming the account password.'),
         h('li', null, 'Ratings come from official classifications where they exist; others are labelled as advisory.'))),
   ];

@@ -291,3 +291,94 @@ test('public listing is safe for anonymous visitors', async () => {
   assert.equal((await anon.get('/api/titles/not-a-title/reviews')).status, 404);
   assert.equal((await anon.get('/api/blocks')).status, 401);
 });
+
+test('a taken-down review or reply cannot be deleted and posted again to go live', async () => {
+  const admin = await t.userClient({ role: 'admin', elevated: true });
+  const author = await t.userClient({ displayName: 'Dai' });
+  const text = 'The director is a fraud and everyone who liked this has no taste at all.';
+  const first = (await review(author, 'sintel', { rating: 1, body: text })).body.review;
+  assert.equal(first.status, 'visible');
+  assert.equal((await admin.patch(`/api/admin/reviews/${first.id}`, { status: 'removed' })).status, 200);
+  assert.equal((await author.del(`/api/reviews/${first.id}`)).status, 204);
+  const record = t.db.get('SELECT * FROM moderation_history WHERE target_id = ?', first.id);
+  assert.equal(record.status, 'removed');
+  assert.equal(record.title_id, 'sintel');
+  assert.match(record.body_hash, /^[0-9a-f]{64}$/);
+  assert.equal(JSON.stringify(record).includes('fraud'), false, 'only a hash of the text is kept');
+
+  // The same text again on the same title waits for a moderator, and says why.
+  const again = (await review(author, 'sintel', { rating: 1, body: text })).body.review;
+  assert.equal(again.status, 'pending');
+  assert.match(t.db.get('SELECT moderation_note FROM reviews WHERE id = ?', again.id).moderation_note, /Held for a moderator: an earlier review of this title/);
+  const hold = t.db.get(`SELECT details FROM audit_log WHERE action = 'moderation.auto_hold' AND target_id = ?`, again.id);
+  assert.ok(JSON.parse(hold.details).reasons.includes('prior_takedown'));
+  assert.ok(!(await t.client().get('/api/titles/sintel/reviews')).body.items.some((x) => x.id === again.id));
+  // Editing the held review into different text does not release it.
+  const edited = await author.patch(`/api/reviews/${again.id}`, { body: 'On reflection, a careful and moving film.' });
+  assert.equal(edited.body.review.status, 'pending');
+  // Neither does a different text, or a rating alone, after deleting again.
+  assert.equal((await author.del(`/api/reviews/${again.id}`)).status, 204);
+  assert.equal((await review(author, 'sintel', { rating: 5, body: null })).body.review.status, 'pending');
+  // The same text on another title is held too (the hash outlives the deleted review).
+  assert.equal((await review(author, 'tears-of-steel', { body: text })).body.review.status, 'pending');
+  // Unrelated new writing elsewhere is unaffected.
+  assert.equal((await review(author, 'hanami', { body: 'Soft spring light and a patient camera.' })).body.review.status, 'visible');
+
+  // Without a takedown, delete and post again stays visible.
+  const plain = await t.userClient();
+  const p1 = (await review(plain, 'sintel', { body: 'Lovely dragon, sad ending.' })).body.review;
+  await plain.del(`/api/reviews/${p1.id}`);
+  assert.equal((await review(plain, 'sintel', { body: 'Lovely dragon, sad ending.' })).body.review.status, 'visible');
+
+  // Replies: a removed reply deleted and posted again is held and queued for moderators.
+  const host = await t.userClient();
+  const target = (await review(host, 'big-buck-bunny', { body: 'Funny, warm and very well animated.' })).body.review;
+  const other = (await review(await t.userClient(), 'big-buck-bunny', { body: 'The rabbit deserved better.' })).body.review;
+  const replier = await t.userClient();
+  const rude = 'Nobody cares what you think about cartoons.';
+  const c1 = (await replier.post(`/api/reviews/${target.id}/comments`, { body: rude })).body.comment;
+  assert.equal(c1.status, 'visible');
+  assert.equal((await admin.patch(`/api/admin/comments/${c1.id}`, { status: 'removed' })).status, 200);
+  assert.equal((await replier.del(`/api/comments/${c1.id}`)).status, 204);
+  const c2 = (await replier.post(`/api/reviews/${target.id}/comments`, { body: rude })).body.comment;
+  assert.equal(c2.status, 'pending');
+  const queued = t.db.get(`SELECT reason, details FROM reports WHERE target_type = 'comment' AND target_id = ? AND reporter_account_id IS NULL`, c2.id);
+  assert.equal(queued.reason, 'other');
+  assert.match(queued.details, /earlier reply to this review/);
+  assert.equal((await replier.post(`/api/reviews/${target.id}/comments`, { body: 'A different and polite reply.' })).body.comment.status, 'pending');
+  assert.equal((await replier.post(`/api/reviews/${other.id}/comments`, { body: rude })).body.comment.status, 'pending');
+  assert.equal((await replier.post(`/api/reviews/${other.id}/comments`, { body: 'Agreed, the ending is lovely.' })).body.comment.status, 'visible');
+  assert.equal(t.db.all(`SELECT * FROM notifications WHERE account_id = ? AND type = 'review_reply'`, host.accountId).length, 1, 'held replies do not notify');
+});
+
+test('blocking needs a review the member can see', async () => {
+  const spammer = await t.userClient({ displayName: 'Cleo' });
+  const viewer = await t.userClient();
+  const held = (await review(spammer, 'elephants-dream', { body: 'Best deals!!! https://x.example.com https://y.example.com www.z.example.net' })).body.review;
+  assert.equal(held.status, 'pending');
+  const r = await viewer.post('/api/blocks', { reviewId: held.id });
+  assert.equal(r.status, 404);
+  assert.equal(JSON.stringify(r.body).includes('Cleo'), false, 'the author of a held review is not revealed');
+});
+
+test('three distinct reports withdraw a shared collection’s link pending moderation', async () => {
+  const owner = await t.userClient({ displayName: 'Mei' });
+  const { collection } = (await owner.post('/api/collections', { name: 'Offensive name', description: 'Abusive description' })).body;
+  const shared = (await owner.patch(`/api/collections/${collection.id}`, { visibility: 'unlisted' })).body.collection;
+  assert.equal((await t.client().get(`/api/shared/collections/${shared.shareToken}`)).status, 200);
+  const results = [];
+  for (let i = 0; i < 3; i++) {
+    const reporter = await t.userClient();
+    results.push((await reporter.post('/api/reports', { targetType: 'collection', targetId: collection.id, reason: 'harassment' })).body.autoHidden);
+  }
+  assert.deepEqual(results, [false, false, true]);
+  const row = t.db.get('SELECT visibility, share_token FROM collections WHERE id = ?', collection.id);
+  assert.deepEqual([row.visibility, row.share_token], ['private', null]);
+  assert.equal((await t.client().get(`/api/shared/collections/${shared.shareToken}`)).status, 404);
+  assert.ok(t.db.get(`SELECT 1 FROM audit_log WHERE action = 'moderation.auto_hide' AND target_type = 'collection' AND target_id = ?`, collection.id));
+  const note = t.db.get(`SELECT title, body FROM notifications WHERE account_id = ? AND type = 'moderation'`, owner.accountId);
+  assert.match(note.title, /made private/);
+  assert.match(note.body, /Offensive name/);
+  // Once private it can no longer be reported (no public link), and the reports stay open for moderators.
+  assert.equal(t.db.get(`SELECT COUNT(*) AS n FROM reports WHERE target_type = 'collection' AND target_id = ? AND status = 'open'`, collection.id).n, 3);
+});

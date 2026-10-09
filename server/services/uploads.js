@@ -367,6 +367,10 @@ export class UploadService {
     let probe;
     if (kind === 'video') {
       probe = await probeFile(path, { ffprobePath: this.config.media.ffprobePath });
+      // ffprobe ran and could not read the file: the right header bytes are not enough.
+      if (probe.ffprobeUnreadable) {
+        return this.reject(ctx, row, 'We could not read a video stream in this file. Export it again from your editing software and upload the new file.');
+      }
       // MP4/MOV can always be parsed (ffprobe or the built-in box parser); other containers
       // are only parsed when ffprobe is configured.
       const parsed = probe.source === 'ffprobe' || probe.source === 'mp4-parser' || type.type === 'mp4' || type.type === 'mov';

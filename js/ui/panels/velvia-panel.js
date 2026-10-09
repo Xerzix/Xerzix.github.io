@@ -5,6 +5,7 @@
 import { h, newUid, announce } from '../../core/dom.js';
 import { api, ApiError } from '../../api/client.js';
 import { session } from '../../core/session.js';
+import { bus } from '../../core/bus.js';
 import { runtime as fmtRuntime } from '../../core/format.js';
 import { icon } from '../icons.js';
 import { notice, spinner } from '../components.js';
@@ -60,12 +61,20 @@ export const conversation = {
   },
 };
 
-/** Whether this profile's viewing history may shape answers (per tab; defaults to the profile setting). */
+/** False when the profile's privacy setting keeps viewing history out of recommendations. */
+export function historyAllowedByProfile() {
+  return !!session.profile && session.profile.preferences?.privacy?.useHistoryForRecommendations !== false;
+}
+
+/**
+ * Whether this profile's viewing history may shape answers: the per-tab choice, defaulting
+ * to the profile setting. When the profile setting is off, history is never used (the server
+ * ignores it too), so a choice stored in this tab doesn't count.
+ */
 export function historyPreference(pid = profileKey()) {
-  if (!session.profile) return false;
+  if (!historyAllowedByProfile()) return false;
   const saved = readSession(`lumina.velvia.history.${pid}`, null);
-  if (typeof saved === 'boolean') return saved;
-  return session.profile.preferences?.privacy?.useHistoryForRecommendations !== false;
+  return typeof saved === 'boolean' ? saved : true;
 }
 
 export function setHistoryPreference(value, pid = profileKey()) {
@@ -171,6 +180,23 @@ function answerBlock(res, { onChip, list = 'mini' } = {}) {
   return wrap;
 }
 
+/**
+ * One request from a panel. It is cancelled when the viewer leaves the page the panel is on,
+ * so an answer about the previous title is never shown or announced on another page.
+ */
+function panelRequest(section) {
+  const ctrl = new AbortController();
+  const off = bus.on('route:changed', () => {
+    if (!section.isConnected) ctrl.abort();
+  });
+  return {
+    signal: ctrl.signal,
+    /** False once the request was cancelled or the panel is no longer on screen. */
+    live: () => !ctrl.signal.aborted && section.isConnected,
+    done: off,
+  };
+}
+
 function providerFoot(res) {
   return h('p', { class: 'lm-vpanel__provider' }, icon('leaf'), `Grounded in the Lumina catalog · ${providerLabel(res.provider)}`);
 }
@@ -209,12 +235,17 @@ export function velviaPanel({ title }) {
     answer.setAttribute('aria-busy', 'true');
     answer.replaceChildren(h('div', { class: 'lm-vpanel__thinking' }, spinner('Velvia is reading the catalog'), h('span', null, 'Velvia is reading the catalog…')));
     thread.push({ role: 'user', content: q });
+    const req = panelRequest(section);
     try {
       const res = await api.velvia.chat({
         messages: apiMessages(thread),
         context: { titleId: title.id },
         options: { useHistory: historyPreference() },
-      });
+      }, { signal: req.signal });
+      if (!req.live()) {
+        thread.pop();
+        return;
+      }
       const turn = assistantTurn(res);
       thread.push(turn);
       // Keep the exchange so "Continue with Velvia" picks up where this left off.
@@ -226,8 +257,10 @@ export function velviaPanel({ title }) {
       announce(`Velvia: ${res.reply}`);
     } catch (err) {
       thread.pop();
+      if (!req.live()) return;
       answer.replaceChildren(notice(errorMessage(err), { type: 'danger' }));
     } finally {
+      req.done();
       busy = false;
       askBtn.disabled = false;
       answer.setAttribute('aria-busy', 'false');
@@ -239,7 +272,7 @@ export function velviaPanel({ title }) {
     input,
     askBtn);
 
-  return h('section', { id: 'velvia', class: 'lm-vpanel', 'aria-labelledby': headingId },
+  const section = h('section', { id: 'velvia', class: 'lm-vpanel', 'aria-labelledby': headingId },
     h('div', { class: 'lm-vpanel__head' },
       velviaEmblem('sm'),
       h('div', null,
@@ -251,6 +284,7 @@ export function velviaPanel({ title }) {
     form,
     answer,
     continueLink);
+  return section;
 }
 
 // ───────────────────────── Compare page panel ─────────────────────────
@@ -279,24 +313,28 @@ export function velviaCompare({ titles }) {
     answer.replaceChildren(h('div', { class: 'lm-vpanel__thinking' }, spinner('Velvia is comparing'), h('span', null, 'Velvia is comparing the catalog details…')));
     const pref = input.value.trim();
     const content = pref || `Compare ${namesOf(list)}.`;
+    const req = panelRequest(section);
     try {
       const res = await api.velvia.chat({
         messages: [{ role: 'user', content }],
         context: { compareIds: list.map((t) => t.id) },
         options: { useHistory: historyPreference() },
-      });
+      }, { signal: req.signal });
+      if (!req.live()) return;
       answer.replaceChildren(answerBlock(res, { list: 'ranked' }), providerFoot(res));
       announce(`Velvia: ${res.reply}`);
     } catch (err) {
+      if (!req.live()) return;
       answer.replaceChildren(notice(errorMessage(err), { type: 'danger' }));
     } finally {
+      req.done();
       busy = false;
       askBtn.disabled = !enough;
       answer.setAttribute('aria-busy', 'false');
     }
   }
 
-  return h('section', { class: 'lm-vpanel lm-vpanel--compare', 'aria-labelledby': headingId },
+  const section = h('section', { class: 'lm-vpanel lm-vpanel--compare', 'aria-labelledby': headingId },
     h('div', { class: 'lm-vpanel__head' },
       velviaEmblem('sm'),
       h('div', null,
@@ -309,4 +347,5 @@ export function velviaCompare({ titles }) {
       h('label', { class: 'lm-label', for: inputId }, 'What do you prefer?'),
       h('div', { class: 'lm-vpanel__row' }, input, askBtn)),
     answer);
+  return section;
 }

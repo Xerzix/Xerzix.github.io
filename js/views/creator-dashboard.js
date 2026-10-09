@@ -79,12 +79,23 @@ function submissionRow(s) {
 
 function titleTile(t) {
   const r = t.stats.memberRating;
+  const live = t.status === 'published';
+  // Only a published title has a page members (and you) can open; before that, the title
+  // links to the submission it came from.
+  const href = live ? `#/title/${encodeURIComponent(t.id)}` : t.submissionId ? `#/creators/submissions/${encodeURIComponent(t.submissionId)}` : null;
+  const art = t.poster ? h('img', { src: t.poster, alt: '', loading: 'lazy' }) : h('span', { class: 'lm-studio-title__placeholder' }, icon('film'));
+  const statusText = live
+    ? `Published ${t.publishedAt ? date(t.publishedAt) : ''}`
+    : t.status === 'draft' ? 'Awaiting publication — not visible to members yet' : 'Not published — not visible to members';
   return h('li', { class: 'lm-studio-title' },
-    h('a', { class: 'lm-studio-title__art', href: `#/title/${encodeURIComponent(t.id)}`, 'aria-label': t.title },
-      t.poster ? h('img', { src: t.poster, alt: '', loading: 'lazy' }) : h('span', { class: 'lm-studio-title__placeholder' }, icon('film'))),
+    href
+      ? h('a', { class: 'lm-studio-title__art', href, tabindex: '-1', 'aria-hidden': 'true' }, art)
+      : h('span', { class: 'lm-studio-title__art', 'aria-hidden': 'true' }, art),
     h('div', { class: 'lm-studio-title__body' },
-      h('a', { class: 'lm-studio-title__name', href: `#/title/${encodeURIComponent(t.id)}` }, t.title),
-      h('span', { class: 'lm-xsmall lm-muted' }, t.status === 'published' ? `Published ${t.publishedAt ? date(t.publishedAt) : ''}` : 'Not published'),
+      href
+        ? h('a', { class: 'lm-studio-title__name', href, 'aria-label': live ? undefined : `${t.title} (view submission)` }, t.title)
+        : h('strong', { class: 'lm-studio-title__name' }, t.title),
+      h('span', { class: 'lm-xsmall lm-muted' }, statusText),
       h('dl', { class: 'lm-studio-stats' },
         h('div', null, h('dt', null, 'Profiles watched'), h('dd', null, t.stats.viewers.toLocaleString())),
         h('div', null, h('dt', null, 'Member rating'), h('dd', null, r ? h('span', { class: 'lm-cluster lm-cluster--sm' }, stars(r.average, { label: `${r.average} out of 5` }), `${r.average} (${r.count.toLocaleString()})`) : 'No ratings yet')),

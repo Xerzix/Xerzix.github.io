@@ -105,6 +105,30 @@ test('profile validation: names unique per account, avatars, maturity and langua
   assert.equal((await c.patch(`/api/profiles/${p.id}`, { maxAge: 14 })).status, 422, 'kids profiles stay at 13 or below');
 });
 
+test('names: invisible, control and bidi characters are removed, so look-alike duplicates are refused', async () => {
+  const c = await t.signUp(email(), PW, 'Bob');
+  const p = await currentProfile(c);
+  for (const sneaky of ['Bob\u200B', '\u200BBob', 'B\u200Cob', 'Bob\uFEFF', '\u2066Bob\u2069', '\u202EboB']) {
+    const r = await c.post('/api/profiles', { name: sneaky });
+    assert.equal(r.status, 409, JSON.stringify(sneaky));
+    assert.equal(r.body.error.code, 'PROFILE_NAME_TAKEN');
+  }
+  assert.equal((await c.post('/api/profiles', { name: '\u202EMika' })).body.profile.name, 'Mika');
+  assert.equal((await c.post('/api/profiles', { name: 'Line1\nLine2' })).body.profile.name, 'Line1 Line2');
+  assert.equal((await c.post('/api/profiles', { name: 'Ai\u0301ko   Tanaka' })).body.profile.name, 'A\u00EDko Tanaka', 'NFC and collapsed spaces');
+  const blank = await c.post('/api/profiles', { name: '\u200B\u200D' });
+  assert.equal(blank.status, 422);
+  assert.ok(blank.body.error.fields.name);
+  assert.equal((await c.patch(`/api/profiles/${p.id}`, { name: 'Line1\u2028Bob\u202E' })).body.profile.name, 'Line1 Bob');
+  // Account display names follow the same rules.
+  assert.equal((await c.patch('/api/account', { displayName: 'Bob\nSmith\u200B' })).body.account.displayName, 'Bob Smith');
+  assert.equal((await c.patch('/api/account', { displayName: '\u200B' })).status, 422);
+  const reg = await t.client().post('/api/auth/register', { email: email(), password: PW, displayName: '\u202EMei\u202C', acceptTerms: true });
+  assert.equal(reg.status, 200);
+  assert.equal(reg.body.account.displayName, 'Mei');
+  assert.equal(reg.body.profile.name, 'Mei');
+});
+
 test('PIN: select, edit and delete need it; changing it needs the current PIN', async () => {
   const c = await t.signUp(email(), PW, 'Parent');
   const parent = await currentProfile(c);
@@ -309,6 +333,97 @@ test('parental controls: a kids session cannot add profiles or loosen its own li
   // A grown-up confirming the account password lifts the restriction.
   await parent.post('/api/auth/elevate', { password: PW });
   assert.equal((await parent.patch(`/api/profiles/${kidProfile.id}`, { maxAge: 13 })).status, 200);
+});
+
+test('parental controls cover every maturity-limited profile, and its own PIN is no way round them', async () => {
+  const c = await t.signUp(email(), PW, 'Parent');
+  const parent = await currentProfile(c);
+  await c.put(`/api/profiles/${parent.id}/pin`, { pin: '4321' });
+  const teen = (await c.post('/api/profiles', { name: 'Teen', maxAge: 13 })).body.profile;
+  assert.equal(teen.isKids, false);
+  await c.put(`/api/profiles/${teen.id}/pin`, { pin: '1357' });
+  assert.equal((await c.post(`/api/profiles/${teen.id}/select`, { pin: '1357' })).status, 200);
+  const blocked = [
+    () => c.patch(`/api/profiles/${teen.id}`, { maxAge: null }),
+    () => c.patch(`/api/profiles/${teen.id}`, { maxAge: null, pin: '1357' }),
+    () => c.patch(`/api/profiles/${teen.id}`, { maxAge: 14, pin: '1357' }),
+    () => c.patch(`/api/profiles/${teen.id}`, { isKids: true }),
+    () => c.post('/api/profiles', { name: 'Grown' }),
+    () => c.put(`/api/profiles/${teen.id}/pin`, { pin: null, currentPin: '1357' }),
+    () => c.put(`/api/profiles/${parent.id}/pin`, { pin: '0000' }),
+    () => c.patch(`/api/profiles/${parent.id}`, { maxAge: 7, pin: '4321' }),
+    () => c.del(`/api/profiles/${parent.id}`, { pin: '4321' }),
+    () => c.put(`/api/profiles/${parent.id}/preferences`, { pin: '4321', preferences: { playback: { skipIntro: true } } }),
+    // Account settings are locked too.
+    () => c.patch('/api/account', { displayName: 'Teen was here' }),
+    () => c.get('/api/account/sessions'),
+    () => c.del('/api/account/sessions'),
+    () => c.get('/api/account/export'),
+    () => c.put('/api/notifications/preferences', { newEpisodes: false }),
+  ];
+  for (const [i, call] of blocked.entries()) {
+    const r = await call();
+    assert.equal(r.status, 403, `call ${i}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body.error.code, 'PARENTAL_CONTROL', `call ${i}`);
+  }
+  const rows = t.db.all('SELECT name, max_age, pin_hash IS NOT NULL AS locked FROM profiles WHERE account_id = (SELECT id FROM accounts WHERE email = ?) ORDER BY created_at', c.email);
+  assert.deepEqual(rows.map((r) => [r.name, r.max_age, r.locked]), [['Parent', null, 1], ['Teen', 13, 1]]);
+  // Everyday settings of its own profile still work.
+  assert.equal((await c.patch(`/api/profiles/${teen.id}`, { avatar: 'koi', uiLanguage: 'ja' })).status, 200);
+  assert.equal((await c.put(`/api/profiles/${teen.id}/preferences`, { preferences: { appearance: { environment: 'snow' } } })).status, 200);
+  assert.equal((await c.get('/api/account/plan')).status, 200);
+});
+
+test('a grown-up’s password confirmation in a restricted session covers one change and never carries over', async () => {
+  const c = await t.signUp(email(), PW, 'Parent');
+  const parent = await currentProfile(c);
+  await c.put(`/api/profiles/${parent.id}/pin`, { pin: '7777' });
+  const kid = (await c.post('/api/profiles', { name: 'Kid', isKids: true, maxAge: 7 })).body.profile;
+  const elevated = async () => (await c.get('/api/session')).body.elevated;
+
+  // A confirmation made on a grown-up profile ends when a restricted profile is entered.
+  await c.post('/api/auth/elevate', { password: PW });
+  assert.equal(await elevated(), true);
+  assert.equal((await c.post(`/api/profiles/${kid.id}/select`, {})).status, 200);
+  assert.equal(await elevated(), false);
+  assert.equal((await c.patch(`/api/profiles/${kid.id}`, { maxAge: 13 })).body.error.code, 'PARENTAL_CONTROL');
+
+  // Confirmed inside the kid's session, it is short…
+  const el = await c.post('/api/auth/elevate', { password: PW });
+  assert.equal(el.status, 200);
+  assert.ok(Date.parse(el.body.elevatedUntil) - Date.now() <= 5 * 60_000 + 2000, 'at most 5 minutes');
+  // …and covers exactly one change.
+  assert.equal((await c.patch(`/api/profiles/${kid.id}`, { maxAge: 8 })).status, 200);
+  assert.equal(await elevated(), false);
+  for (const call of [
+    () => c.put(`/api/profiles/${parent.id}/pin`, { pin: null }),
+    () => c.patch(`/api/profiles/${kid.id}`, { isKids: false, maxAge: null }),
+  ]) assert.equal((await call()).body.error.code, 'PARENTAL_CONTROL');
+  assert.equal((await profilesOf(c)).profiles.find((p) => p.id === parent.id).hasPin, true);
+
+  // The forgotten-PIN path: one confirmation resets one PIN, without the old PIN.
+  await c.post('/api/auth/elevate', { password: PW });
+  assert.equal((await c.put(`/api/profiles/${parent.id}/pin`, { pin: '2222' })).status, 200);
+  assert.equal((await c.put(`/api/profiles/${parent.id}/pin`, { pin: null })).body.error.code, 'PARENTAL_CONTROL');
+
+  // Reading the device list does not use the confirmation up; downloading the data does.
+  assert.equal((await c.get('/api/account/export')).body.error.code, 'PARENTAL_CONTROL');
+  await c.post('/api/auth/elevate', { password: PW });
+  assert.equal((await c.get('/api/account/sessions')).status, 200);
+  assert.equal((await c.get('/api/account/export')).status, 200);
+  assert.equal((await c.get('/api/account/export')).body.error.code, 'PARENTAL_CONTROL');
+
+  // "Lock again": re-entering the restricted profile ends a confirmation that was not used.
+  await c.post('/api/auth/elevate', { password: PW });
+  assert.equal((await c.post(`/api/profiles/${kid.id}/select`, {})).status, 200);
+  assert.equal(await elevated(), false);
+
+  // Grown-up profiles keep the normal confirmation window.
+  assert.equal((await c.post(`/api/profiles/${parent.id}/select`, { pin: '2222' })).status, 200);
+  const adult = await c.post('/api/auth/elevate', { password: PW });
+  assert.ok(Date.parse(adult.body.elevatedUntil) - Date.now() > 10 * 60_000);
+  assert.equal((await c.patch(`/api/profiles/${kid.id}`, { maxAge: 13 })).status, 200);
+  assert.equal(await elevated(), true);
 });
 
 test('PIN attempts are rate limited per profile', async () => {

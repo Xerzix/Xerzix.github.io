@@ -132,7 +132,18 @@ export function parseMediaPlaylist(text) {
 
 // ───────────────────────── ffmpeg ─────────────────────────
 
-/** Reads duration, frame rate, dimensions and audio presence from `ffmpeg -i` (no ffprobe needed). */
+/**
+ * Clockwise display rotation (0, 90, 180 or 270) from a stream's `ffmpeg -i` block: the
+ * display matrix ("rotation of -90.00 degrees", counter-clockwise) or a legacy `rotate` tag.
+ */
+export function displayRotation(block) {
+  const matrix = /rotation of (-?[\d.]+) degrees/.exec(block);
+  const tag = /^\s*rotate\s*:\s*(-?\d+)/m.exec(block);
+  const cw = matrix ? -Number(matrix[1]) : tag ? Number(tag[1]) : 0;
+  return Number.isFinite(cw) ? ((Math.round(cw / 90) * 90) % 360 + 360) % 360 : 0;
+}
+
+/** Reads duration, frame rate, displayed dimensions and audio presence from `ffmpeg -i` (no ffprobe needed). */
 export async function inspectWithFfmpeg(ffmpegPath, input) {
   const stderr = await new Promise((resolve, reject) => {
     const proc = spawn(ffmpegPath, ['-hide_banner', '-nostdin', '-i', input], { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -151,13 +162,22 @@ export async function inspectWithFfmpeg(ffmpegPath, input) {
     });
   });
   const d = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(stderr);
-  const videoLine = /Stream #\d+:\d+[^\n]*?: Video: ([^\n]*)/.exec(stderr)?.[1] || '';
+  const videoMatch = /Stream #\d+:\d+[^\n]*?: Video: ([^\n]*)/.exec(stderr);
+  const videoLine = videoMatch?.[1] || '';
   const dims = /(?:^|[ ,])(\d{2,5})x(\d{2,5})(?:[ ,\[]|$)/.exec(videoLine);
   const fps = /([\d.]+) fps/.exec(videoLine) || /([\d.]+) tbr/.exec(videoLine);
+  // The video stream's own block (metadata and side data) runs until the next stream.
+  const block = videoMatch ? stderr.slice(videoMatch.index + videoMatch[0].length).split(/\n\s*Stream #/)[0] : '';
+  const rotation = displayRotation(block);
+  const turned = rotation === 90 || rotation === 270;
+  const w = dims ? Number(dims[1]) : null;
+  const ht = dims ? Number(dims[2]) : null;
   return {
     durationS: d ? Number(d[1]) * 3600 + Number(d[2]) * 60 + Number(d[3]) : null,
-    width: dims ? Number(dims[1]) : null,
-    height: dims ? Number(dims[2]) : null,
+    // ffmpeg turns rotated video upright while decoding, so plan from the displayed size.
+    width: turned ? ht : w,
+    height: turned ? w : ht,
+    rotation,
     fps: fps ? Number(fps[1]) || null : null,
     hasVideo: !!videoLine,
     hasAudio: /Stream #\d+:\d+[^\n]*?: Audio: /.test(stderr),
@@ -239,7 +259,8 @@ export function buildHlsArgs({ input, outDir, ladder, fps, segmentSeconds, hasAu
   ladder.forEach((r, i) => {
     const maxKbps = Math.round(r.videoKbps * 1.07);
     args.push(
-      `-filter:v:${i}`, `scale=${r.width}:${r.height}:flags=bicubic,setsar=1`,
+      // The width follows the decoded (upright) picture, so the aspect ratio is always kept.
+      `-filter:v:${i}`, `scale=-2:${r.height}:flags=bicubic,setsar=1`,
       `-b:v:${i}`, `${r.videoKbps}k`, `-maxrate:v:${i}`, `${maxKbps}k`, `-bufsize:v:${i}`, `${r.videoKbps * 2}k`,
       `-level:v:${i}`, h264Level({ width: r.width, height: r.height, fps: fps || 30, maxKbps }),
     );

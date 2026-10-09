@@ -11,7 +11,9 @@ export function buildCsp() {
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     `img-src 'self' data: blob: ${media}`,
-    `media-src 'self' blob: ${media}`,
+    // data: only for media: hls.js gives each HLS subtitle rendition a placeholder
+    // <track src="data:,WEBVTT"> and fills it with cues itself. Media cannot run script.
+    `media-src 'self' blob: data: ${media}`,
     `connect-src 'self' ${media}`,
     "worker-src 'self' blob:",
     "frame-src 'none'",

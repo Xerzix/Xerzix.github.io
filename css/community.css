@@ -2006,3 +2006,33 @@
   white-space: pre-line;
   overflow-wrap: anywhere;
 }
+
+/* Touch targets: on phones and touch screens the review controls (helpful, replies, the
+   "more actions" button, read more, reply actions, the toolbar) are at least 44px. */
+@media (max-width: 720px), (pointer: coarse) {
+  .lm-reviews :is(.lm-review__actions, .lm-reviews__toolbar, .lm-spoiler__cover, .lm-reviews__mine-head, .lm-reply-form) .lm-btn--sm,
+  .lm-reviews .lm-select--sm {
+    min-height: 44px;
+  }
+
+  .lm-reviews .lm-btn--icon.lm-btn--sm {
+    width: 44px;
+  }
+
+  .lm-reviews .lm-review__more,
+  .lm-reviews .lm-reply__action {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .lm-reviews .lm-review__more {
+    margin-top: 0;
+  }
+
+  .lm-reply__actions {
+    gap: var(--lm-space-2);
+    margin-top: 0;
+  }
+}

@@ -1,7 +1,7 @@
 // Appearance: theme presets, custom colours with contrast checking, environments,
 // animation, density and translucency. Applies everything to <html> as CSS variables and
 // data attributes; persistence is handled by the caller (profile preferences).
-import { contrastRatio, ensureContrast, readableOn } from './core/contrast.js';
+import { contrastRatio, ensureContrast, luminance, mix, readableOn } from './core/contrast.js';
 import { applyEnvironment } from './fx/garden.js';
 
 export const THEME_KEYS = ['bg', 'bg2', 'surface', 'accent', 'accentStrong', 'button', 'text', 'text2', 'gold'];
@@ -96,6 +96,51 @@ export function autoFix(c) {
   out.text = ensureContrast(out.text, darkest, 4.5);
   out.text2 = ensureContrast(out.text2, c.bg, 4.5);
   out.accentStrong = ensureContrast(out.accentStrong, c.bg, 3);
+  return out;
+}
+
+/** The first mix of `color` towards `target` (in 2% steps) that satisfies `ok`, else `target`. */
+function nudge(color, target, ok) {
+  if (ok(color)) return color;
+  for (let i = 1; i <= 50; i++) {
+    const c = mix(color, target, i / 50);
+    if (ok(c)) return c;
+  }
+  return target;
+}
+
+/**
+ * The complete readability fix used by Settings → Appearance. autoFix() only adjusts text,
+ * which cannot help when a background is the problem (no text colour reads on both a dark
+ * and a light background). This keeps the primary background where possible and:
+ *  1. moves the primary background towards black (light text) or white (dark text) only if
+ *     even pure white/black text could not reach 4.5:1 on it;
+ *  2. moves the secondary and card backgrounds towards the primary one until they can carry
+ *     the same text;
+ *  3. adjusts text, secondary text and highlight colours, then the button colour.
+ * Every colour changes only as much as needed, a palette that already passes is returned
+ * unchanged, and the result passes every checkContrast() check.
+ */
+export function fixPalette(c) {
+  if (checkContrast(c).every((x) => x.ok)) return { ...c };
+  const out = { ...c };
+  const lightText = contrastRatio('#ffffff', out.bg) >= contrastRatio('#000000', out.bg);
+  const extreme = lightText ? '#ffffff' : '#000000';
+  const away = lightText ? '#000000' : '#ffffff';
+  // A background leaves room for readable text when the extreme text colour reaches 4.6:1.
+  const roomy = (bg) => contrastRatio(extreme, bg) >= 4.6;
+  out.bg = nudge(out.bg, away, roomy);
+  out.bg2 = nudge(out.bg2, out.bg, roomy);
+  out.surface = nudge(out.surface, out.bg, roomy);
+  const backgrounds = [out.bg, out.bg2, out.surface];
+  out.text = nudge(out.text, extreme, (t) => backgrounds.every((bg) => contrastRatio(t, bg) >= 4.5));
+  out.text2 = nudge(out.text2, extreme, (t) => contrastRatio(t, out.bg) >= 4.5);
+  out.accentStrong = nudge(out.accentStrong, extreme, (t) => contrastRatio(t, out.bg) >= 3);
+  // The button label is the better of the text colour and near-black; move the button away from it.
+  const label = readableOn(out.button, out.text);
+  const buttonOk = (b) => contrastRatio(readableOn(b, out.text), b) >= 4.5;
+  out.button = nudge(out.button, luminance(label) > 0.18 ? '#000000' : '#ffffff', buttonOk);
+  if (!buttonOk(out.button)) out.button = nudge(out.button, luminance(label) > 0.18 ? '#ffffff' : '#000000', buttonOk);
   return out;
 }
 

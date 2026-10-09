@@ -187,6 +187,27 @@ test('parental limits never leak restricted titles', async () => {
   assert.equal(adult.body.fallback, false, 'the title is visible to an unrestricted viewer');
 });
 
+test('a title hidden by parental limits is "not available on this profile", and is never compared', async () => {
+  const kid = await t.userClient({ maxAge: 7 });
+  const sintel = t.services.catalog.published(null).find((x) => x.id === 'sintel');
+  const cmp = await kid.post('/api/velvia/chat', say('Compare Sintel and Hanami'));
+  assert.equal(cmp.status, 200);
+  assert.match(cmp.body.reply, /^“Sintel” isn’t available on this profile, so I can’t compare it with Hanami/);
+  assert.equal(cmp.body.comparison, undefined);
+  assert.deepEqual(cmp.body.notInCatalog, ['Sintel']);
+  assert.ok(!cmp.body.reply.includes(sintel.synopsis.slice(0, 30)));
+  // An unrestricted viewer gets the plain wording for a title that really isn't on Lumina.
+  const adult = await t.client().post('/api/velvia/chat', say('Who directed Interstellar?'));
+  assert.match(adult.body.reply, /^“Interstellar” isn’t available on Lumina/);
+  // People the catalog doesn't credit are named, and passed to a provider as such.
+  const fake = fakeProvider(answer({ recommendations: [{ titleId: 'hanami', reason: 'Calm' }] }));
+  t.services.velvia.setProvider(fake);
+  const person = await t.client().post('/api/velvia/chat', say('Something calm with Tom Hanks'));
+  assert.equal(person.status, 200);
+  const sent = JSON.parse(fake.calls.at(-1).messages.at(-1).content.split('<context>\n')[1].split('\n</context>')[0]);
+  assert.deepEqual(sent.peopleNotCredited, ['Tom Hanks']);
+});
+
 // ───────────────────────── Provider orchestration ─────────────────────────
 
 test('invented ids from a provider are dropped; an entirely invented answer falls back', async () => {

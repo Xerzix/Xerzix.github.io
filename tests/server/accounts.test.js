@@ -155,6 +155,20 @@ test('repeated failures lock the account, then it unlocks and counters reset', a
   assert.equal(row.locked_until, null);
 });
 
+test('parallel wrong passwords all count towards the lockout (no lost updates)', async () => {
+  const addr = email('race');
+  await register(t.client(), { email: addr });
+  const attempts = config.auth.maxFailedLogins + 4;
+  const results = await Promise.all(Array.from({ length: attempts }, (_, i) => t.client().post('/api/auth/login', { email: addr, password: `wrong password ${i}` })));
+  const statuses = results.map((r) => r.status);
+  assert.ok(statuses.every((s) => s === 401 || s === 423), JSON.stringify(statuses));
+  const row = t.db.get('SELECT failed_logins, locked_until FROM accounts WHERE email = ?', addr);
+  assert.ok(row.locked_until && row.locked_until > new Date().toISOString(), `locked after ${attempts} parallel failures: ${JSON.stringify(row)}`);
+  assert.ok(t.db.get("SELECT 1 FROM notifications n JOIN accounts a ON a.id = n.account_id WHERE a.email = ? AND n.type = 'account_security'", addr), 'the owner is told');
+  // The right password arriving alongside the guesses is refused too.
+  assert.equal((await t.client().post('/api/auth/login', { email: addr, password: PW })).status, 423);
+});
+
 test('suspended accounts cannot sign in (only the password holder learns why)', async () => {
   const addr = email('susp');
   await register(t.client(), { email: addr });
@@ -202,6 +216,9 @@ test('two-factor authentication: setup needs elevation, then sign-in needs a cod
   const enable = await c.post('/api/account/2fa/enable', { code: totp(secret) });
   assert.equal(enable.status, 200);
   assert.equal(enable.body.account.totpEnabled, true);
+  // Each code is accepted once. Clearing the stored step stands in for waiting for the next code.
+  const nextCode = () => t.db.run('UPDATE accounts SET totp_last_step = NULL WHERE email = ?', c.email);
+  nextCode();
 
   const d = t.client();
   const wrongPw = await d.post('/api/auth/login', { email: c.email, password: 'wrong password here' });
@@ -212,13 +229,26 @@ test('two-factor authentication: setup needs elevation, then sign-in needs a cod
   const bad = await d.post('/api/auth/login', { email: c.email, password: PW, totp: '12345x' });
   assert.equal(bad.status, 401);
   assert.equal(bad.body.error.code, 'INVALID_TOTP');
-  const good = await d.post('/api/auth/login', { email: c.email, password: PW, totp: totp(secret) });
+  const code = totp(secret);
+  const good = await d.post('/api/auth/login', { email: c.email, password: PW, totp: code });
   assert.equal(good.status, 200);
   assert.equal(good.body.account.totpEnabled, true);
+  // A code that has been accepted once cannot be replayed (RFC 6238 §5.2).
+  const replay = await t.client().post('/api/auth/login', { email: c.email, password: PW, totp: code });
+  assert.equal(replay.status, 401);
+  assert.equal(replay.body.error.code, 'INVALID_TOTP');
+  assert.equal(replay.body.error.reused, true);
+  nextCode();
+  const racing = await Promise.all([1, 2, 3].map(() => t.client().post('/api/auth/login', { email: c.email, password: PW, totp: totp(secret) })));
+  assert.equal(racing.filter((r) => r.status === 200).length, 1, 'parallel sign-ins with one code: only one succeeds');
 
-  // Elevation now needs the code too.
+  // Elevation now needs the code too, and also refuses a replayed one.
   assert.equal((await d.post('/api/auth/elevate', { password: PW })).body.error.code, 'TOTP_REQUIRED');
-  assert.equal((await d.post('/api/auth/elevate', { password: PW, totp: totp(secret) })).status, 200);
+  nextCode();
+  const elevateCode = totp(secret);
+  assert.equal((await d.post('/api/auth/elevate', { password: PW, totp: elevateCode })).status, 200);
+  assert.equal((await d.post('/api/auth/elevate', { password: PW, totp: elevateCode })).body.error.code, 'INVALID_TOTP');
+  nextCode();
 
   assert.equal((await d.post('/api/account/2fa/disable', { password: PW, code: '000000' === totp(secret) ? '111111' : '000000' })).status, 403);
   assert.equal((await d.post('/api/account/2fa/disable', { password: 'wrong password here', code: totp(secret) })).status, 403);

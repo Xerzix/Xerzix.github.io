@@ -247,6 +247,8 @@ export async function createStaticBackend() {
       unmarkWatched: async (titleId) => {
         const l = lib();
         for (const k of Object.keys(l.progress)) if (l.progress[k].titleId === titleId) delete l.progress[k];
+        // "Mark as watched" leaves a zero-second history entry; undoing the mark removes it too.
+        l.history = l.history.filter((h) => h.titleId !== titleId || h.seconds > 0);
         saveLib(l);
         return { ok: true };
       },
@@ -278,6 +280,7 @@ export async function createStaticBackend() {
         return { ok: true };
       },
       stats: async () => {
+        if (profile().preferences?.privacy?.statsEnabled === false) return { enabled: false };
         const { computeStats } = await import('../core/stats.js');
         return computeStats(lib().history, titles);
       },
@@ -301,7 +304,7 @@ export async function createStaticBackend() {
         const c = l.collections.find((x) => x.id === id);
         if (!c) throw new ApiError(404, 'NOT_FOUND', 'That collection no longer exists.');
         if (d.visibility && d.visibility !== 'private') throw new ServerRequiredError('Sharing collections');
-        Object.assign(c, { name: d.name ?? c.name, description: d.description ?? c.description, updatedAt: now() });
+        Object.assign(c, { name: d.name ?? c.name, description: d.description === undefined ? c.description : (d.description ?? ''), updatedAt: now() });
         saveLib(l);
         return { collection: c };
       },

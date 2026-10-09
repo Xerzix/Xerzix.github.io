@@ -6,6 +6,7 @@ import { now, parseJson, placeholders, toJson } from '../db/index.js';
 import { notFound } from '../lib/errors.js';
 import { v } from '../lib/validate.js';
 import { DEFAULT_NOTIFICATION_PREFS, NOTIFICATION_TYPES, notificationPrefs } from '../services/notifications.js';
+import { parentalGuard } from '../services/profiles.js';
 
 /** Preference keys users may switch off (types marked optional). */
 export const OPTIONAL_PREFS = [...new Set(Object.values(NOTIFICATION_TYPES).filter((t) => t.optional && t.pref).map((t) => t.pref))];
@@ -95,6 +96,8 @@ export default function register(app, { db }) {
 
   app.put('/api/notifications/preferences', requireAuth, async (ctx) => {
     const input = v.parse(prefsSchema, await ctx.body());
+    // Account-wide settings: a kids or maturity-limited profile needs a grown-up's password.
+    parentalGuard(db, ctx, { message: 'Notification settings belong to the whole account, so a grown-up needs to change them. Switch to a grown-up profile, or confirm the account password to continue.' });
     const row = db.get('SELECT settings FROM accounts WHERE id = ?', ctx.account.id);
     const settings = parseJson(row?.settings, {});
     const current = { ...(settings.notifications || {}) };

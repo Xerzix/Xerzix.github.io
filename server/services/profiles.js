@@ -5,6 +5,7 @@ import { now, parseJson, toJson } from '../db/index.js';
 import { conflict, HttpError, notFound, validation } from '../lib/errors.js';
 import { newId } from '../lib/crypto.js';
 import { patterns, v } from '../lib/validate.js';
+import { isElevated } from './accounts.js';
 import { mergePreferences } from './dto.js';
 
 // Mirrors of the browser-side catalogues (js/ui/avatars.js, js/theme.js, js/fx/garden.js,
@@ -24,6 +25,32 @@ export function profileLimitMessage(max) {
 
 export const profileLimitError = (max) => conflict(profileLimitMessage(max), 'PROFILE_LIMIT', { max });
 const nameTaken = () => conflict('You already have a profile with that name.', 'PROFILE_NAME_TAKEN', { fields: { name: 'You already have a profile with that name.' } });
+
+// ── Names ──
+/**
+ * Normalises a person-facing name (profile names, account display names): NFC; removes
+ * control characters (including newlines and tabs) and invisible format characters such as
+ * zero-width spaces, BOMs and bidi overrides/isolates (U+202A–U+202E, U+2066–U+2069), keeping a
+ * zero-width joiner only inside emoji sequences; collapses runs of whitespace; trims. This
+ * stops look-alike duplicates ("Bob" + U+200B) and names that reorder or break the page.
+ */
+export function cleanName(value) {
+  return String(value ?? '')
+    .normalize('NFC')
+    .replace(/\s+/gu, ' ') // newlines, tabs and other spaces become one space
+    .replace(/[\p{Cc}\p{Cf}]/gu, (ch) => (ch === '\u200D' ? ch : ''))
+    .replace(/(?<!\p{Extended_Pictographic}\uFE0F?)\u200D|\u200D(?!\p{Extended_Pictographic})/gu, '')
+    .replace(/ {2,}/g, ' ')
+    .trim();
+}
+
+/** Cleans `data[key]` in place when present; 422 when nothing visible is left. */
+export function cleanNameField(data, key, message = 'Use at least one visible character.') {
+  if (data[key] === undefined) return;
+  const clean = cleanName(data[key]);
+  if (!clean) throw validation({ [key]: message });
+  data[key] = clean;
+}
 
 // ── Schemas ──
 const bool = () => v.boolean().optional();
@@ -137,6 +164,7 @@ export class ProfileService {
   }
 
   create(account, data) {
+    cleanNameField(data, 'name', 'Give the profile a name.');
     const max = account.max_profiles;
     if (this.count(account.id) >= max) throw profileLimitError(max);
     if (this.nameInUse(account.id, data.name)) throw nameTaken();
@@ -164,6 +192,7 @@ export class ProfileService {
   }
 
   update(accountId, profile, data) {
+    cleanNameField(data, 'name', 'Give the profile a name.');
     const sets = [];
     const params = [];
     if (data.name !== undefined && data.name !== profile.name) {
@@ -220,9 +249,42 @@ export class ProfileService {
     return this.get(accountId, profile.id);
   }
 
-  select(sessionId, profileId) {
-    this.db.run('UPDATE sessions SET profile_id = ? WHERE id = ?', profileId, sessionId);
+  /**
+   * Makes the profile the session's active one. Entering a restricted profile always starts
+   * locked: any password confirmation the session had ends, so a grown-up's confirmation
+   * never carries over to a child.
+   */
+  select(sessionId, profile) {
+    if (isRestricted(profile)) this.db.run('UPDATE sessions SET profile_id = ?, elevated_until = NULL WHERE id = ?', profile.id, sessionId);
+    else this.db.run('UPDATE sessions SET profile_id = ? WHERE id = ?', profile.id, sessionId);
   }
+}
+
+// ── Parental controls ──
+/**
+ * A restricted profile is a kids profile or any profile with a maturity limit. While one is
+ * the session's active profile, the session may not loosen parental controls or manage the
+ * account without a grown-up re-entering the account password.
+ */
+export const isRestricted = (p) => !!p && (!!p.is_kids || (p.max_age !== null && p.max_age !== undefined));
+
+/** How long a password confirmation lasts while a restricted profile is active. */
+export const PARENTAL_UNLOCK_MINUTES = 5;
+
+const PARENTAL_MESSAGE = 'This profile has parental controls, so a grown-up needs to do this. Switch to a grown-up profile, or confirm the account password to continue.';
+
+/**
+ * Enforces parental controls for a restricted session. The action needs a recent account
+ * password confirmation (POST /api/auth/elevate), and that confirmation covers one action
+ * only: it is ended here, so a grown-up who unlocks a child's session for one change does not
+ * leave it unlocked. The current request keeps ctx.session.elevatedUntil, so later checks in
+ * the same request (e.g. skipping a forgotten PIN) still see the confirmation.
+ * `consume: false` is for reads that should not use the confirmation up.
+ */
+export function parentalGuard(db, ctx, { consume = true, message = PARENTAL_MESSAGE } = {}) {
+  if (!isRestricted(ctx.profile)) return;
+  if (!isElevated(ctx)) throw new HttpError(403, 'PARENTAL_CONTROL', message);
+  if (consume) db.run('UPDATE sessions SET elevated_until = NULL WHERE id = ?', ctx.session.id);
 }
 
 export function pinError(code, field = 'pin') {

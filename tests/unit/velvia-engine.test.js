@@ -346,3 +346,209 @@ test('reasons read naturally and compare tables carry title names', () => {
   assert.match(ask('More like Laugh Lines').recommendations[0].reason, /^Shares Laugh Lines’ /);
   assert.match(ask('More like Star Song').recommendations[0].reason, /^Shares Star Song’s drama genre · /);
 });
+
+test('a worry about a family title is answered with its rating, never a bare "Yes"', () => {
+  for (const q of ['Is Bunny Hop too scary for my kids?', 'Is Bunny Hop violent?', 'Is Quiet Garden too mature?', 'Is Bunny Hop inappropriate for children?']) {
+    const r = ask(q);
+    assert.equal(r.intent, 'discuss', q);
+    assert.doesNotMatch(r.reply, /^Yes\b/, q);
+    assert.match(r.reply, /rated G/, q);
+    assert.match(r.reply, /listed moods are/, `${q}: the moods say what it is like`);
+  }
+  assert.match(ask('Is Bunny Hop right for kids?').reply, /^Yes — Bunny Hop is rated G/, 'a suitability question can be answered yes');
+  assert.doesNotMatch(ask('Is it scary?', { context: { titleId: 'quiet-garden' } }).reply, /^Yes\b/);
+  // A worry about an adult title without children in the question offers no "for younger viewers" list.
+  const worry = ask('Is Mind Maze scary?');
+  assert.match(worry.reply, /rated R/);
+  assert.deepEqual(worry.recommendations, []);
+});
+
+test('titles and people that are not on Lumina are named as such in every phrasing', () => {
+  const notHere = (q, name = 'Interstellar') => {
+    const r = ask(q);
+    assert.match(r.reply, new RegExp(`“${name}” isn’t available on Lumina`), q);
+    assert.ok(r.notInCatalog?.includes(name), `${q}: ${JSON.stringify(r.notInCatalog)}`);
+    return r;
+  };
+  assert.deepEqual(notHere('I want to watch Interstellar').recommendations, []);
+  assert.deepEqual(notHere('Who directed Interstellar?').recommendations, []);
+  notHere('How long is Interstellar?');
+  notHere('Does Parasite have subtitles?', 'Parasite');
+  notHere('Tell me about the soundtrack of Interstellar');
+
+  // Comparing a title that is here with one that isn't: say so, then describe the one that is.
+  const mixed = notHere('Compare Star Song and Interstellar');
+  assert.equal(mixed.comparison, undefined);
+  assert.match(mixed.reply, /can’t compare it with Star Song/);
+  assert.match(mixed.reply, /Star Song \(2023, film/);
+  notHere('Is Interstellar better than Star Song?');
+  notHere('Star Song vs Interstellar');
+  const neither = ask('Compare Inception and Interstellar');
+  assert.match(neither.reply, /“Inception” and “Interstellar” aren’t available on Lumina/);
+  assert.deepEqual(neither.notInCatalog, ['Inception', 'Interstellar']);
+  assert.deepEqual(neither.recommendations, []);
+
+  // People the catalog does not credit.
+  for (const q of ['Show me something with Tom Hanks', 'Something with Keanu Reeves', 'Movies by Christopher Nolan']) {
+    const r = ask(q);
+    assert.match(r.reply, /^No title on Lumina lists (?:Tom Hanks|Keanu Reeves|Christopher Nolan) as a director or cast member/, q);
+    assert.deepEqual(r.recommendations, [], q);
+    assert.ok(r.clarifyingQuestion, q);
+  }
+  const withTraits = ask('A thriller with Keanu Reeves');
+  assert.match(withTraits.reply, /No title on Lumina lists Keanu Reeves/);
+  assert.ok(withTraits.recommendations.length > 0);
+  assert.ok(withTraits.recommendations.every((x) => x.closest === true), 'alternatives are labelled closest options');
+  assert.deepEqual(withTraits.peopleNotInCatalog, ['Keanu Reeves']);
+  // A credited person is still found.
+  assert.equal(ask('Something with Rui Tan').recommendations[0].titleId, 'mind-maze');
+
+  // Under parental limits the wording never says whether a hidden title exists.
+  const kids = CATALOG.filter((t) => t.minAge <= 7);
+  const r = respond(kids, { messages: [{ role: 'user', content: 'Compare Mind Maze and Bunny Hop' }] }, { restricted: true });
+  assert.match(r.reply, /^“Mind Maze” isn’t available on this profile, so I can’t compare it with Bunny Hop/);
+  assert.equal(r.comparison, undefined);
+  assert.ok(!r.reply.includes('archivist'), 'nothing from the hidden title');
+});
+
+test('names are cut cleanly and only carried into the next reply', () => {
+  assert.deepEqual(parseMessage('Is Inception scary?').refs.map((r) => r.text), ['Inception']);
+  assert.deepEqual(parseMessage('Is The Shining scary?').refs.map((r) => r.text), ['The Shining']);
+  assert.deepEqual(parseMessage('What is Mind Maze like?').refs.map((r) => r.text), ['Mind Maze']);
+  assert.deepEqual(parseMessage('Something like Tears for Fears').refs.map((r) => r.text), ['Tears for Fears']);
+  assert.equal(ask('Is Mind Maze scary?').notInCatalog, undefined, '"Mind Maze scary" is not an unknown title');
+
+  // "What’s Star Song about?" -> "More like Star Song" -> "Something shorter": no phantom title.
+  const r = convo('What’s Star Song about?', 'More like Star Song', 'Something shorter');
+  assert.equal(r.notInCatalog, undefined);
+  assert.doesNotMatch(r.reply, /isn’t available/);
+
+  // An unknown title is mentioned in the reply right after it, not for the rest of the conversation.
+  const later = convo('Recommend something similar to Interstellar', 'The emotional story', 'something shorter');
+  assert.doesNotMatch(later.reply, /Interstellar/);
+});
+
+test('a look-alike name is not a catalog title, and its words are not preferences', () => {
+  const tff = CATALOG.concat([T({ id: 'tears-of-steel', type: 'movie', title: 'Tears of Steel', year: 2012, runtimeMin: 12, ageRating: 'PG-13', minAge: 13, genres: ['Science Fiction'], moods: ['action-packed'], editorialRank: 60 })]);
+  const r = respond(tff, { messages: [{ role: 'user', content: 'Something like Tears for Fears' }] });
+  assert.match(r.reply, /“Tears for Fears” isn’t available on Lumina/);
+  assert.deepEqual(r.recommendations, []);
+  assert.equal(respond(tff, { messages: [{ role: 'user', content: 'Something like Tears of Stel' }] }).intent, 'similar', 'a real typo still resolves');
+
+  const garden = ask('I loved Garden State');
+  assert.match(garden.reply, /“Garden State” isn’t available on Lumina/);
+  assert.deepEqual(garden.recommendations, [], '"Garden" is part of the name, not a request for gardens');
+});
+
+test('"What is X like?" is a question about X, not a request for titles like it', () => {
+  const like = ask('What is Mind Maze like?');
+  assert.equal(like.intent, 'discuss');
+  assert.match(like.reply, /^Mind Maze \(2021, film/);
+  const music = ask('What is the soundtrack of Star Song like?');
+  assert.equal(music.intent, 'discuss');
+  assert.match(music.reply, /Mika Sato/);
+  const ctx = ask('What is the soundtrack like?', { context: { titleId: 'star-song' } });
+  assert.equal(ctx.intent, 'discuss');
+  assert.match(ctx.reply, /Mika Sato/);
+  assert.equal(ask('Something like Mind Maze').intent, 'similar', 'a real "like" request still works');
+});
+
+test('follow-ups about earlier picks are answered, not refused', () => {
+  const second = convo('Something calm', 'Tell me about the second one');
+  assert.equal(second.intent, 'discuss');
+  assert.doesNotMatch(second.reply, /can’t answer/);
+  const first = convo('Recommend a thriller', 'Tell me about the first one');
+  assert.equal(first.intent, 'discuss');
+  assert.match(first.reply, /^Mind Maze/);
+  // An ordinal refers to the latest list of picks, even after a reply about one of them.
+  const again = convo('Recommend a thriller', 'Tell me about the first one', 'Is the second one scary?');
+  assert.equal(again.intent, 'discuss');
+  assert.match(again.reply, /^The Long Shadow is rated R/);
+  const more = convo('I loved Star Song', 'Tell me more about it');
+  assert.equal(more.intent, 'discuss');
+  assert.doesNotMatch(more.reply, /different directions/);
+});
+
+test('ruled-out genres stay out, including in open picks', () => {
+  for (const q of ['not sci-fi', 'anything but sci-fi', 'nothing science fiction please']) {
+    const r = ask(q);
+    assert.ok(r.recommendations.length > 0, q);
+    for (const rec of r.recommendations) assert.ok(!rec.title.genres.includes('Science Fiction'), `${q}: ${rec.titleId}`);
+    assert.match(r.reply, /Leaving out anything tagged science fiction/, q);
+  }
+  for (const q of ['nothing animated', 'I don’t want anything animated', 'no animation please']) {
+    for (const rec of ask(q).recommendations) assert.ok(!rec.title.genres.includes('Animation'), `${q}: ${rec.titleId}`);
+  }
+  assert.ok(parseMessage('anything except horror').avoid.includes('horror'));
+  assert.ok(parseMessage('something other than comedy').avoid.includes('comedy'));
+  const only = parseMessage('nothing but comedies');
+  assert.ok(only.facets.includes('comedy') && !only.avoid.includes('comedy'), '"nothing but" asks for it');
+  assert.ok(parseMessage('a comedy other than slapstick').facets.includes('comedy'), 'naming it outright wins');
+});
+
+test('runtime phrases: hours and minutes, ranges, approximate lengths and unreadable ones', () => {
+  assert.equal(parseMessage('under 1 hour 30').constraints.maxRuntime, 89);
+  assert.equal(parseMessage('under 1h30').constraints.maxRuntime, 89);
+  assert.equal(parseMessage('less than 2 hours and 15 minutes').constraints.maxRuntime, 134);
+  assert.equal(parseMessage('under one and a half hours').constraints.maxRuntime, 89);
+  assert.equal(parseMessage('under 2 hours 4K').constraints.minHeight, 2160, '"2 hours 4K" is not 2h04');
+  assert.deepEqual(pick(parseMessage('between 5 and 12 minutes').constraints), { minRuntime: 5, maxRuntime: 12 });
+  assert.deepEqual(pick(parseMessage('10-12 minutes').constraints), { minRuntime: 10, maxRuntime: 12 });
+  assert.deepEqual(pick(parseMessage('from 1 to 2 hours').constraints), { minRuntime: 60, maxRuntime: 120 });
+  assert.deepEqual(pick(parseMessage('about 90 minutes').constraints), { minRuntime: 68, maxRuntime: 113 });
+  const film = parseMessage('a 10 minute film').constraints;
+  assert.equal(film.type, 'movie', 'a film was asked for');
+  const range = ask('Recommend something between 80 and 100 minutes');
+  assert.match(range.reply, /between 80 and 100 minutes/);
+  for (const rec of range.recommendations) assert.ok(rec.title.runtimeMin >= 80 && rec.title.runtimeMin <= 100, rec.titleId);
+  const unclear = ask('something that lasts a few minutes');
+  assert.equal(unclear.intent, 'clarify');
+  assert.match(unclear.reply, /couldn’t tell how long/);
+  assert.deepEqual(unclear.recommendations, []);
+});
+
+test('a series meets a minimum length by its whole running time, and replies say so', () => {
+  const short = CATALOG.concat([T({ id: 'pond-minutes', type: 'series', title: 'Pond Minutes', year: 2024, runtimeMin: 1, ageRating: 'TV-G', minAge: 0, genres: ['Nature'], moods: ['relaxing'], seasonCount: 2, episodeCount: 4, editorialRank: 5 })]);
+  const long = respond(short, { messages: [{ role: 'user', content: 'something at least an hour long' }] });
+  assert.ok(!long.recommendations.some((r) => r.titleId === 'pond-minutes'), 'four one-minute episodes are not an hour');
+  for (const rec of long.recommendations) {
+    const total = rec.title.type === 'series' ? rec.title.runtimeMin * rec.title.episodeCount : rec.title.runtimeMin;
+    assert.ok(total >= 60, rec.titleId);
+  }
+  // "Shorter" is strictly shorter than the pick it follows, and the phrase is accurate.
+  const shorter = convo('Recommend a movie with beautiful cinematography', 'something shorter');
+  const ref = convo('Recommend a movie with beautiful cinematography').recommendations[0].title.runtimeMin;
+  for (const rec of shorter.recommendations) assert.ok(rec.title.runtimeMin < ref, rec.titleId);
+  const pond = short.find((t) => t.id === 'pond-minutes');
+  const only = respond([pond], { messages: [{ role: 'user', content: 'Something calm' }] });
+  assert.equal(only.recommendations[0].titleId, 'pond-minutes');
+  assert.ok(!only.suggestions.includes('Something shorter'), 'nothing can be shorter than one-minute episodes');
+  const longer = respond(short, { messages: [
+    { role: 'user', content: 'Something calm' },
+    { role: 'assistant', content: 'Here is a calm series.\nSuggested: Pond Minutes' },
+    { role: 'user', content: 'Something longer' },
+  ] });
+  assert.ok(!longer.recommendations.some((x) => x.titleId === 'pond-minutes'));
+  assert.match(longer.reply, /of at least 5 minutes/, 'longer than the series’ four minutes in all');
+});
+
+test('stays fast on a large catalog, even with long messages full of names', () => {
+  const big = [];
+  for (let i = 0; i < 5000; i++) {
+    const src = CATALOG[i % CATALOG.length];
+    big.push({ ...src, id: `${src.id}-${i}`, title: `${['Autumn', 'River', 'Lantern', 'Crane'][i % 4]} ${['Moon', 'Echo', 'Glass'][i % 3]} ${i}`, editorialRank: i });
+  }
+  const names = Array.from({ length: 200 }, (_, k) => `${['Autumn', 'River', 'Lantern', 'Crane'][k % 4]} ${['Moon', 'Echo', 'Glass'][k % 3]}`);
+  const messages = Array.from({ length: 19 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: `Tell me about ${names.join(', ')}`.slice(0, 2000) }))
+    .concat([{ role: 'user', content: `Compare ${names.join(' and ')}`.slice(0, 2000) }]);
+  respond(big, { messages }); // first request builds the per-title caches
+  const started = performance.now();
+  for (let i = 0; i < 3; i++) respond(big, { messages });
+  respond(big, { messages: [{ role: 'user', content: 'Find me a psychological thriller under two hours' }] });
+  const ms = (performance.now() - started) / 4;
+  assert.ok(ms < 250, `averaged ${Math.round(ms)} ms per request`);
+});
+
+function pick(c) {
+  return { minRuntime: c.minRuntime, maxRuntime: c.maxRuntime };
+}

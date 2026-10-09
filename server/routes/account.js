@@ -7,13 +7,14 @@ import { conflict, forbidden, HttpError, notFound, validation } from '../lib/err
 import { log } from '../lib/log.js';
 import { rateLimit } from '../lib/security.js';
 import { patterns, v } from '../lib/validate.js';
-import { AccountService, assertAccountPassword, isElevated, normalizeEmail, totpMatches } from '../services/accounts.js';
+import { AccountService, assertAccountPassword, consumeTotp, isElevated, normalizeEmail, totpError } from '../services/accounts.js';
 import { audit } from '../services/audit.js';
 import { accountDto } from '../services/dto.js';
 import { planSummary } from '../services/entitlements.js';
 import { sendMail } from '../services/mailer.js';
 import { notify } from '../services/notifications.js';
 import { assertPasswordPolicy, PASSWORD_MAX } from '../services/passwords.js';
+import { cleanNameField, parentalGuard } from '../services/profiles.js';
 
 const MIN = 60_000;
 const password = () => v.string().raw().max(1024);
@@ -29,6 +30,11 @@ function securityNotice(db, account, title, body) {
 export default function register(app, { db, services, config }) {
   const accounts = (services.accounts ??= new AccountService(db));
   const fresh = (ctx) => accounts.byId(ctx.account.id);
+  // Account settings are the grown-ups' while a kids or maturity-limited profile is active.
+  // Endpoints that take the account password in the same request need no extra check.
+  const ADULTS_ONLY = 'Account settings are locked while this profile is active. Switch to a grown-up profile, or confirm the account password to continue.';
+  const adultsOnly = (ctx) => parentalGuard(db, ctx, { message: ADULTS_ONLY });
+  const adultsOnlyRead = (ctx) => parentalGuard(db, ctx, { message: ADULTS_ONLY, consume: false });
 
   // ── Details ──
   app.patch('/api/account', requireAuth, async (ctx) => {
@@ -37,6 +43,8 @@ export default function register(app, { db, services, config }) {
       email: v.string().email().optional(),
       currentPassword: password().optional(),
     }), await ctx.body());
+    cleanNameField(body, 'displayName');
+    adultsOnly(ctx);
     const account = ctx.account;
     const ts = now();
     const email = body.email ? normalizeEmail(body.email) : null;
@@ -81,9 +89,9 @@ export default function register(app, { db, services, config }) {
   });
 
   // ── Signed-in devices ──
-  app.get('/api/account/sessions', requireAuth, (ctx) => ({ items: accounts.sessions(ctx.account.id, ctx.session.id) }));
+  app.get('/api/account/sessions', requireAuth, adultsOnlyRead, (ctx) => ({ items: accounts.sessions(ctx.account.id, ctx.session.id) }));
 
-  app.delete('/api/account/sessions/:id', requireAuth, (ctx) => {
+  app.delete('/api/account/sessions/:id', requireAuth, adultsOnly, (ctx) => {
     const id = ctx.params.id;
     if (!accounts.revokeSession(ctx.account.id, id)) throw notFound('That session has already ended.');
     audit(db, ctx, 'account.session_revoke', { targetType: 'session', targetId: id });
@@ -91,7 +99,7 @@ export default function register(app, { db, services, config }) {
     return { ok: true };
   });
 
-  app.delete('/api/account/sessions', requireAuth, (ctx) => {
+  app.delete('/api/account/sessions', requireAuth, adultsOnly, (ctx) => {
     const revoked = accounts.revokeOtherSessions(ctx.account.id, ctx.session.id);
     audit(db, ctx, 'account.sessions_revoke_others', { targetType: 'account', targetId: ctx.account.id, details: { revoked } });
     return { ok: true, revoked };
@@ -102,9 +110,10 @@ export default function register(app, { db, services, config }) {
     // Not requireElevated: that guard demands TOTP for staff when ADMIN_REQUIRE_2FA is set,
     // which would stop staff from ever setting it up.
     if (!isElevated(ctx)) throw new HttpError(403, 'REAUTH_REQUIRED', 'Please confirm your password to continue.');
+    adultsOnly(ctx);
     if (ctx.account.totp_enabled) throw conflict('Two-factor authentication is already on. Turn it off first to set up a new authenticator.', 'TOTP_ALREADY_ENABLED');
     const secret = generateTotpSecret();
-    db.run('UPDATE accounts SET totp_secret = ?, totp_enabled = 0, updated_at = ? WHERE id = ?', encryptField(secret), now(), ctx.account.id);
+    db.run('UPDATE accounts SET totp_secret = ?, totp_enabled = 0, totp_last_step = NULL, updated_at = ? WHERE id = ?', encryptField(secret), now(), ctx.account.id);
     return { secret, otpauthUrl: otpauthUrl(secret, ctx.account.email) };
   });
 
@@ -113,7 +122,9 @@ export default function register(app, { db, services, config }) {
     const account = fresh(ctx);
     if (account.totp_enabled) throw conflict('Two-factor authentication is already on.', 'TOTP_ALREADY_ENABLED');
     if (!account.totp_secret) throw conflict('Start the set-up first to get a key for your authenticator app.', 'TOTP_SETUP_REQUIRED');
-    if (!totpMatches(account, code)) {
+    const result = consumeTotp(db, account, code);
+    if (result === 'reused') throw totpError(result, 422, 'code');
+    if (result !== 'ok') {
       throw new HttpError(422, 'INVALID_TOTP', 'That code did not match. Check that the time on your device is correct and try again.', { fields: { code: 'That code did not match.' } });
     }
     db.run('UPDATE accounts SET totp_enabled = 1, updated_at = ? WHERE id = ?', now(), account.id);
@@ -130,10 +141,9 @@ export default function register(app, { db, services, config }) {
       throw forbidden('Staff accounts must keep two-factor authentication on.', 'TOTP_REQUIRED_FOR_STAFF');
     }
     await assertAccountPassword(account, body.password);
-    if (!patterns.totp.test(body.code.replace(/\s+/g, '')) || !totpMatches(account, body.code)) {
-      throw new HttpError(403, 'INVALID_TOTP', 'That code did not match. Check your authenticator app and try again.', { fields: { code: 'That code did not match.' } });
-    }
-    db.run('UPDATE accounts SET totp_enabled = 0, totp_secret = NULL, updated_at = ? WHERE id = ?', now(), account.id);
+    const result = patterns.totp.test(body.code.replace(/\s+/g, '')) ? consumeTotp(db, account, body.code) : 'invalid';
+    if (result !== 'ok') throw totpError(result, 403, 'code');
+    db.run('UPDATE accounts SET totp_enabled = 0, totp_secret = NULL, totp_last_step = NULL, updated_at = ? WHERE id = ?', now(), account.id);
     audit(db, ctx, 'account.2fa_disable', { targetType: 'account', targetId: account.id });
     securityNotice(db, account, 'Two-factor authentication was turned off', 'Signing in to Lumina now needs only your password.');
     return { account: accountDto(fresh(ctx)) };
@@ -143,7 +153,7 @@ export default function register(app, { db, services, config }) {
   app.get('/api/account/plan', requireAuth, (ctx) => planSummary(ctx.account));
 
   // ── Personal data ──
-  app.get('/api/account/export', requireAuth, rateLimit('account-export', { max: 10, windowMs: 60 * MIN, by: 'account' }), (ctx) => {
+  app.get('/api/account/export', requireAuth, adultsOnly, rateLimit('account-export', { max: 10, windowMs: 60 * MIN, by: 'account' }), (ctx) => {
     const data = accounts.exportData(ctx.account, ctx.session.id);
     audit(db, ctx, 'account.export', { targetType: 'account', targetId: ctx.account.id });
     ctx.setHeader('Content-Disposition', `attachment; filename="lumina-data-${new Date().toISOString().slice(0, 10)}.json"`);

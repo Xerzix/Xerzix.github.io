@@ -72,11 +72,11 @@ JSON over HTTPS, same-origin, cookie session. The browser client lives in `js/ap
 ## Auth & account
 | POST | `/api/auth/register` `{email, password, displayName, acceptTerms: true}` | public, rate limited | session payload; creates the first profile |
 |---|---|---|---|
-| POST | `/api/auth/login` `{email, password, totp?}` | public, rate limited | session payload · 401 `INVALID_CREDENTIALS` · 401 `TOTP_REQUIRED` · 423 `ACCOUNT_LOCKED` · 403 `ACCOUNT_SUSPENDED` |
+| POST | `/api/auth/login` `{email, password, totp?}` | public, rate limited | session payload · 401 `INVALID_CREDENTIALS` · 401 `TOTP_REQUIRED` · 401 `INVALID_TOTP` (`reused: true` when the code was already accepted once — each code works once) · 423 `ACCOUNT_LOCKED` · 403 `ACCOUNT_SUSPENDED` |
 | POST | `/api/auth/logout` | account | 204 |
 | POST | `/api/auth/forgot` `{email}` | public | 202 always (no account enumeration) |
 | POST | `/api/auth/reset` `{token, password}` | public | 200; revokes every session |
-| POST | `/api/auth/elevate` `{password, totp?}` | account | `{elevatedUntil}` |
+| POST | `/api/auth/elevate` `{password, totp?}` | account | `{elevatedUntil}`. While a restricted profile is active (see Profiles) the confirmation lasts at most 5 minutes and covers one parental-control change |
 | PATCH | `/api/account` `{displayName?, email?, currentPassword (required for email)}` | account | `{account}` |
 | POST | `/api/account/password` `{currentPassword, newPassword}` | account | `{ok}`; revokes other sessions |
 | GET / DELETE | `/api/account/sessions` · `/api/account/sessions/:id` · DELETE `/api/account/sessions` (all others) | account | `{items: [{id, current, userAgent, ip, createdAt, lastSeenAt}]}` |
@@ -84,6 +84,8 @@ JSON over HTTPS, same-origin, cookie session. The browser client lives in `js/ap
 | DELETE | `/api/account` `{password, confirm: 'DELETE'}` | account | 204; deletes all personal data |
 | GET | `/api/account/export` | account | JSON download of personal data |
 | GET | `/api/account/plan` | account | `{mode, plan, billing, cancellable}` |
+
+While a restricted profile is active, `PATCH /api/account`, the sessions list and revocations, `2fa/setup`, `GET /api/account/export` and `PUT /api/notifications/preferences` answer `403 PARENTAL_CONTROL` unless a grown-up has just confirmed the account password; endpoints that take the password in the request itself are unaffected. Display names and profile names are NFC-normalised, with control, zero-width and bidi-control characters removed and spaces collapsed.
 
 ## Profiles (account)
 | GET | `/api/profiles` | `{profiles: Profile[], max}` |
@@ -94,6 +96,8 @@ JSON over HTTPS, same-origin, cookie session. The browser client lives in `js/ap
 | POST | `/api/profiles/:id/select` `{pin?}` | `{profile}` · 403 `PIN_REQUIRED` / `PIN_INVALID` |
 | PUT | `/api/profiles/:id/pin` `{pin: '1234'|null, currentPin?}` | `{profile}` |
 | PUT | `/api/profiles/:id/preferences` `{preferences: partial}` | `{profile}` (deep-merged) |
+
+Parental controls: a profile is *restricted* when it is a kids profile or has a maturity limit (`maxAge`). While one is the session's active profile, creating or deleting profiles, editing other profiles, setting PINs and any maturity change answer `403 PARENTAL_CONTROL` — the profile's own PIN does not count. A grown-up's `POST /api/auth/elevate` allows one such change, after which the confirmation ends; selecting a restricted profile also ends any confirmation the session had.
 
 ## Community
 | GET | `/api/titles/:id/reviews?sort=helpful|newest|highest|lowest&page` | public | `{items: Review[], summary: {average, count, distribution: {1..5}}, mine: Review|null, total, page, pageSize}` |
@@ -108,13 +112,14 @@ JSON over HTTPS, same-origin, cookie session. The browser client lives in `js/ap
 
 Review: `{ id, titleId, rating, body, containsSpoilers, status, author: {name, avatar}, isMine, fromYourAccount, helpfulCount, votedHelpful, commentCount, createdAt, updatedAt, edited, editedAt }` (`fromYourAccount`: written by another profile of the viewer's account — no helpful votes, reports or blocks). The list also returns `sort` and `commentsEnabled`.
 
-Moderation: reviews and replies are scored by spam heuristics (links, shouting, repeated characters, blocklist, the same text reused by the account, more than 5 posts in 10 minutes); a held post has `status: 'pending'`, is visible only to its author and is audited as `moderation.auto_hold`. A target with 3 distinct open reports is hidden pending moderator review (`moderation.auto_hide`).
+Moderation: reviews and replies are scored by spam heuristics (links, shouting, repeated characters, blocklist, the same text reused by the account, more than 5 posts in 10 minutes); a held post has `status: 'pending'`, is visible only to its author and is audited as `moderation.auto_hold`. A target with 3 distinct open reports is hidden pending moderator review (`moderation.auto_hide`; a shared collection is made private, which withdraws its link, and its owner is notified). Deleting a hidden or removed post keeps a record (`moderation_history`: a hash of the text, never the text): for 365 days the account's next review of that title, reply on that review, or the same text anywhere is held as `pending` for a moderator. Blocking (`POST /api/blocks`) only accepts a visible review.
 
 ## Playback quality & telemetry
 | POST | `/api/quality-reports` `{titleId, episodeId?, category, description?, device?, connectionMbps?, selectedResolution?, diagnostics?}` | account, rate limited |
 |---|---|---|
-| GET | `/api/titles/:id/quality` | public: `{window:'90d', reports: {count, distinctReporters, categories:[{category,count}], sufficient}, measured: {sessions, rebufferRatio, avgBitrateKbps, errorRate, medianStartupMs, sufficient}}`. Reported (subjective) and measured (player telemetry) data are always kept apart. |
-| POST | `/api/playback/sessions` `{sessionId, mediaId, titleId, episodeId?, secondsWatched, startupMs?, rebufferCount, rebufferSeconds, avgBitrateKbps?, maxHeight?, droppedFrames?, bytesEstimate?, errorCount}` | public (account attached when signed in) |
+| GET | `/api/titles/:id/quality` | public: `{window:'90d', reports: {count, distinctReporters, categories:[{category,count}], sufficient}, measured: {viewers, sessions, threshold, rebufferRatio, avgBitrateKbps, errorRate, medianStartupMs, sufficient}}`. Reported (subjective) and measured (player telemetry) data are always kept apart. Measured figures use signed-in members' sessions only, each member counted once (`sufficient` = at least 10 members). |
+| POST | `/api/playback/sessions/open` `{mediaId, titleId, episodeId?}` | public, rate limited 30/min. `{sessionId, issuedAt}`: a signed viewing-session id bound to the media, the account (if any) and the issue time |
+| POST | `/api/playback/sessions` `{sessionId, mediaId, titleId, episodeId?, secondsWatched, startupMs?, rebufferCount, rebufferSeconds, avgBitrateKbps?, maxHeight?, droppedFrames?, bytesEstimate?, errorCount}` | public (account attached when signed in). Only ids issued by `/open` to the same viewer and media are accepted (`404 SESSION_NOT_FOUND`); values are bounded by the time since issue and the media's verified renditions |
 | POST | `/api/playback/errors` `{mediaId, titleId, episodeId?, code, message, fatal, details?}` | public, rate limited |
 
 ## Velvia Suggestions
@@ -130,12 +135,12 @@ Moderation: reviews and replies are scored by spam heuristics (links, shouting, 
 | GET / POST | `/api/creators/submissions` | creator | `{items}` / `{submission}` (draft) |
 | GET / PATCH / DELETE | `/api/creators/submissions/:id` | owner (admins use the admin API) | `{submission, files, events}` |
 | POST | `/api/creators/submissions/:id/attest` `{rights: {copyrightOwner, distributionRights, territories[], restrictions?, musicCleared, footageCleared, documentationNotes?}, confirm: true}` | owner | `{submission}` |
-| POST | `/api/creators/submissions/:id/submit` · `/respond {message}` | owner | `{submission}` |
+| POST | `/api/creators/submissions/:id/submit` · `/respond {message}` | owner | `{submission}` · `/respond`: 409 `UPLOADS_IN_PROGRESS` while an upload for the submission is still running |
 | DELETE | `/api/creators/submissions/:id/files/:fileId` | owner (draft or info_required) | 204 |
 | GET | `/api/creators/titles` | creator | published titles from the creator's submissions, with stats |
 | POST | `/api/uploads` `{filename, size, mime?, purpose:'submission'|'artwork', submissionId?, role}` | creator (submission, own draft/info_required) · staff (artwork) | `{id, offset: 0, size, chunkSize, maxChunkSize, expiresAt}` · 413 `FILE_TOO_LARGE` · 422 `UNSUPPORTED_FILE_TYPE` · 409 `SUBMISSION_LOCKED` / `TOO_MANY_UPLOADS` |
 | HEAD / GET | `/api/uploads/:id` | owner | `Upload-Offset` + `Upload-Length` headers / `{id, purpose, submissionId, role, filename, size, offset, status: in_progress|processing|complete|rejected|aborted|expired, error, fileId?, url?, width?, height?}` |
-| PATCH | `/api/uploads/:id` (`Content-Type: application/offset+octet-stream`, `Upload-Offset`) | owner | 204 + `Upload-Offset`. 409 `OFFSET_MISMATCH` (`error.offset` = the server offset), 413 `CHUNK_TOO_LARGE`, 409 `UPLOAD_BUSY` while another chunk or the final check runs. When the last byte arrives the file is validated by content (magic bytes), hashed (SHA-256), probed and scanned, then attached; refusals are 422 `UPLOAD_REJECTED` / `UPLOAD_INFECTED` / `DUPLICATE_FILE`. An empty PATCH at the final offset re-runs an interrupted check. |
+| PATCH | `/api/uploads/:id` (`Content-Type: application/offset+octet-stream`, `Upload-Offset`) | owner | 204 + `Upload-Offset`. 409 `OFFSET_MISMATCH` (`error.offset` = the server offset), 413 `CHUNK_TOO_LARGE`, 409 `UPLOAD_BUSY` while another chunk or the final check runs. When the last byte arrives the file is validated by content (magic bytes), hashed (SHA-256), probed (with ffprobe configured, a video it cannot read is refused; a rotated video reports its displayed size) and scanned, then attached; refusals are 422 `UPLOAD_REJECTED` / `UPLOAD_INFECTED` / `DUPLICATE_FILE`. An empty PATCH at the final offset re-runs an interrupted check. |
 | DELETE | `/api/uploads/:id` | owner | 204 · 409 `UPLOAD_COMPLETE` / `UPLOAD_BUSY` (final check running) |
 | GET | `/media/art/:file` | public | staff-uploaded artwork from storage `public/art/` only (`upl_<id>.png|jpg|webp`), cached immutable |
 
@@ -151,11 +156,11 @@ Submission statuses: `draft → uploading → submitted → under_review → inf
 ## Watch parties (profile; single-instance, in-memory)
 | POST | `/api/parties` `{titleId, episodeId?}` | `{code, party}` |
 |---|---|---|
-| GET | `/api/parties/:code` · POST `/join` · POST `/leave` (→ `{ok, ended}`) · DELETE (host ends) | `{party: {code, host, titleId, episodeId, state: {playing, position, updatedAt, episodeId, serverTime}, members: [{name, avatar, isHost, online, isYou}], memberCount, maxMembers, allowGuestControl, you: {isMember, isHost, canControl}, createdAt}}` |
+| GET | `/api/parties/:code` · POST `/join` · POST `/leave` (→ `{ok, ended}`) · DELETE (host ends) | `{party: {code, host, titleId, episodeId, state: {playing, position, updatedAt, episodeId, serverTime}, members: [{name, avatar, isHost, online, isYou}], memberCount, maxMembers, allowGuestControl, you: {isMember, isHost, canControl, canChat}, createdAt}}`. Kids profiles cannot create parties (`403 PROFILE_RESTRICTED`), can join only parties hosted from their own account, and are removed if hosting passes to another account |
 | PATCH | `/api/parties/:code` `{allowGuestControl}` | host only → `{party}` |
 | POST | `/api/parties/:code/control` `{action:'play'|'pause'|'seek'|'episode', position, episodeId?}` | host, or guests when allowed → `{state}` |
-| POST | `/api/parties/:code/chat` `{text}` (≤ 500 chars, 5 per 10 s, 20 per minute) | member → `{message}` |
-| GET | `/api/parties/:code/events` | member. Server-Sent Events: `state`, `chat` (recent history first, flagged `history: true`), `members`, `ended` `{reason}`; heartbeat comment every 20 s |
+| POST | `/api/parties/:code/chat` `{text}` (≤ 500 chars, 5 per 10 s, 20 per minute) | member → `{message}`. `403 PROFILE_RESTRICTED` on kids profiles; messages that are empty once invisible characters are removed are refused |
+| GET | `/api/parties/:code/events` | member, rate limited 30/min per account. Server-Sent Events: `state`, `chat` (recent history first, flagged `history: true`; kids profiles receive system messages only), `members`, `ended` `{reason}` (`restricted` when a kids profile is taken out), `replaced` (a member's fourth stream replaces the oldest, which should not reconnect); heartbeat comment every 20 s. `503 PARTY_CAPACITY` when the server's stream cap is reached |
 
 ## Administration (staff; admin-only rows are marked)
 All admin routes are under `/api/admin/*`. Every mutation writes an audit log entry.

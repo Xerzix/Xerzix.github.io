@@ -106,12 +106,16 @@ export class VelviaService {
    */
   signalsFor(profile, options = {}) {
     if (!profile) return { signals: {}, personalisation: 'unavailable' };
+    // Under parental limits a title the viewer names may exist but be hidden from this
+    // profile, so Velvia says it isn't available "on this profile" (never whether it exists).
+    const maxAge = profile.max_age ?? profile.maxAge ?? null;
+    const restricted = maxAge !== null && maxAge !== undefined;
     const prefs = parseJson(profile.preferences, {}) || {};
     if (options.useHistory === false || prefs?.privacy?.useHistoryForRecommendations === false) {
-      return { signals: { useHistory: false }, personalisation: 'off' };
+      return { signals: { useHistory: false, restricted }, personalisation: 'off' };
     }
     const s = this.library.homeSignals(profile);
-    return { signals: { history: s.history, watchlist: s.watchlist, ratings: s.ratings, progress: s.progress }, personalisation: 'on' };
+    return { signals: { history: s.history, watchlist: s.watchlist, ratings: s.ratings, progress: s.progress, restricted }, personalisation: 'on' };
   }
 
   /** The grounded card set for a provider: the engine's best matches first, then context. */
@@ -190,6 +194,7 @@ export class VelviaService {
       personalisation,
       recentlyWatched: personalisation === 'on' ? (signals.history || []).map((h) => byId.get(h.titleId)?.title).filter(Boolean).slice(0, HISTORY_NAMES) : [],
       titlesNotOnLumina: local.notInCatalog || [],
+      peopleNotCredited: local.peopleNotInCatalog || [],
     };
     const messages = buildMessages({ messages: body.messages, cards, context });
     const deadlineMs = Math.max(1000, 2 * (this.config.velvia.timeoutMs || 20000) + 1500);

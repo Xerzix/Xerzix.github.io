@@ -80,6 +80,8 @@ class BaseEngine {
   audioTracks() { return []; }
   setAudioTrack() {}
   currentBitrate() { return null; }
+  /** Measured bitrate (bits/s) of the rendition being played, or null when not measured. */
+  playingBitrate() { return null; }
   bandwidthEstimate() { return null; }
   codecs() { return ''; }
   measuredBitrate() {
@@ -113,6 +115,7 @@ export class HlsJsEngine extends BaseEngine {
     this.recover = { media: 0, network: 0 };
     this.manualId = null;
     this.capHeight = null;
+    this.levelPayload = new Map(); // level index → { bits, seconds } of main fragments loaded
   }
 
   start({ startAt = null } = {}) {
@@ -150,6 +153,11 @@ export class HlsJsEngine extends BaseEngine {
       if (frag?.type === 'main' && frag.duration > 0 && loaded) {
         this.segmentRates.push((loaded * 8) / frag.duration);
         if (this.segmentRates.length > 6) this.segmentRates.shift();
+        // Per rendition: bytes actually downloaded over the media time they cover.
+        const lp = this.levelPayload.get(frag.level) || { bits: 0, seconds: 0 };
+        lp.bits += loaded * 8;
+        lp.seconds += frag.duration;
+        this.levelPayload.set(frag.level, lp);
       }
     });
     hls.on(E.ERROR, (_, data) => this.onError(data));
@@ -267,8 +275,14 @@ export class HlsJsEngine extends BaseEngine {
     if (this.hls && this.hls.audioTrack !== id) this.hls.audioTrack = id;
   }
 
+  /** The playlist's declared peak BANDWIDTH for the current level (metadata, not measured). */
   currentBitrate() {
     return this.hls?.levels?.[this.hls.currentLevel]?.bitrate || null;
+  }
+
+  playingBitrate() {
+    const lp = this.hls ? this.levelPayload.get(this.hls.currentLevel) : null;
+    return lp && lp.seconds > 0 ? lp.bits / lp.seconds : null;
   }
 
   bandwidthEstimate() {

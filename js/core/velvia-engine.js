@@ -105,7 +105,21 @@ const GREETING_RE = /^\s*(?:hi|hello|hey|hiya|good (?:morning|afternoon|evening|
 const QUESTION_RE = /\?\s*$|^\s*(?:what|who|where|when|why|how|which|can|could|would|will|do|does|did|is|are|tell me|explain|write|translate|calculate|define)\b/;
 const DOMAIN_RE = /\b(?:tonight|watch\w*|movies?|films?|series|shows?|tv|episodes?|seasons?|titles?|catalog(?:ue)?|lumina|cinema|stream\w*|recommend\w*|suggest\w*|actors?|actress(?:es)?|direct\w*|genres?|trailers?|velvia|play\w*|screen\w*|cartoons?|anime|documentar\w+)\b/;
 const PRONOUN_RE = /\b(?:it|its|it's|this|that|this one|that one|the (?:film|movie|series|show|title))\b/;
-const WORD_STOP = new Set(['a', 'an', 'the', 'some', 'something', 'anything', 'any', 'more', 'this', 'that', 'it', 'them', 'those', 'these', 'one', 'ones', 'my', 'your', 'what', 'how', 'which', 'who', 'watching', 'to', 'me', 'us', 'i', 'you', 'we', 'good', 'great', 'nice', 'stuff', 'things', 'thing', 'movie', 'movies', 'film', 'films', 'show', 'shows', 'series', 'title', 'titles', 'else', 'others', 'other', 'lumina', 'here', 'there', 'tonight', 'today', 'now', 'much', 'many', 'lot', 'lots', 'kind', 'sort', 'type', 'story', 'plot', 'music', 'soundtrack', 'visuals', 'ones']);
+// "What is Sintel like?" asks about Sintel; it is not a request for titles like Sintel.
+const LIKE_QUESTION_RE = /\b(?:what|how)\b[^?]*\blike\s*[?.!]*$/;
+// Questions about a title's suitability ("is it right for kids?") versus a worry ("is it too scary?").
+const CONCERN_RE = /\bscar(?:y|ier|e[sd]?)\b|\bfrighten|\bcreepy\b|\bviolen(?:t|ce)\b|\bgor(?:e|y)\b|\bgraphic\b|\bdisturbing\b|\bmature\b|\binappropriate\b|\bunsuitable\b|\bintense\b|\btoo\s+[a-z]+/;
+const SUITABLE_RE = /\b(?:right|ok(?:ay)?|good|suitable|appropriate|safe|fine|alright|suited)\s+for\b|\bsuitable\b|\bappropriate\b|\b(?:kid|child|family)[\s-]?friendly\b|\bcan (?:my |the |our )?(?:kids?|children|son|daughter|little ones) (?:watch|see)\b|\bfor (?:the |my |our )?(?:kids|children|family|little ones)\b|\ball ages\b/;
+const KIDS_RE = /\bkids?\b|\bchild(?:ren)?\b|\bfamily\b|\byoung(?:er)?\b|\blittle ones?\b|\btoddlers?\b|\bson\b|\bdaughter\b|\bteens?\b|\bage\b|\bappropriate\b|\bsuitable\b/;
+const STRONG_COMPARE_RE = /\bcompare\b|\bcomparison\b|\bversus\b|\bvs\.?(?=\s|$)|\bdifferences? between\b|\bbetter than\b|\bwhich\b/;
+const WORD_STOP = new Set(['a', 'an', 'the', 'some', 'something', 'anything', 'any', 'more', 'this', 'that', 'it', 'them', 'those', 'these', 'one', 'ones', 'my', 'your', 'what', 'how', 'which', 'who', 'watching', 'to', 'me', 'us', 'i', 'you', 'we', 'good', 'great', 'nice', 'stuff', 'things', 'thing', 'movie', 'movies', 'film', 'films', 'show', 'shows', 'series', 'title', 'titles', 'else', 'others', 'other', 'lumina', 'velvia', 'here', 'there', 'tonight', 'today', 'tomorrow', 'now', 'much', 'many', 'lot', 'lots', 'kind', 'sort', 'type', 'story', 'plot', 'music', 'soundtrack', 'visuals', 'yes', 'no', 'ok', 'okay', 'please', 'thanks', 'hello', 'hi', 'hey', 'minute', 'minutes', 'min', 'mins', 'hour', 'hours', 'season', 'seasons', 'episode', 'episodes', 'subtitles', 'audio']);
+// Small words inside a title ("Tears of Steel", "Return of the King").
+const CONNECTORS = new Set(['of', 'the', 'a', 'an', 'in', 'on', 'to', 'for', 'at', 'from', 'by', 'de', 'la', 'le', 'les', 'du', 'des', 'von', 'van', 'der', 'den', 'da', 'di', 'del', 'y', 'et']);
+// Question words a lower-case reference can trail ("is inception scary" -> "inception").
+const TRAILING_JUNK = new Set(['about', 'like', 'scary', 'violent', 'good', 'any', 'worth', 'suitable', 'appropriate', 'ok', 'okay', 'right', 'fine', 'safe', 'available', 'there', 'here', 'again', 'please', 'instead', 'too', 'tonight', 'now', 'today', 'really', 'so', 'very', 'long', 'short', 'mature', 'better', 'worse', 'than', 'is', 'was']);
+const PERSON_STOP = new Set(['dolby', 'vision', 'atmos', 'hdr', 'uhd', 'hd', 'subtitles', 'subtitle', 'captions', 'audio', 'sound', 'surround', 'stereo', 'friends', 'family', 'kids', 'children']);
+const isCapWord = (w) => /^[\p{Lu}\p{N}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(w || '');
+const has = (v) => v !== undefined && v !== null;
 const COMMON_SINGLE = new Set(['dream', 'garden', 'nature', 'space', 'love', 'home', 'family', 'night', 'time', 'music', 'seasons', 'short', 'drama', 'comedy', 'action', 'horror', 'quiet', 'calm', 'relax', 'moon', 'snow', 'autumn', 'spring', 'summer', 'winter', 'light', 'dark', 'gold']);
 
 // ───────────────────────────── Helpers ─────────────────────────────
@@ -121,6 +135,7 @@ function doc(t) {
       title: normalize(t.title),
       original: normalize(t.originalTitle || ''),
       people: [...(t.directors || []), ...(t.cast || [])].map((p) => ({ raw: p, n: normalize(p) })),
+      facets: new Map(),
     };
     DOCS.set(t, d);
   }
@@ -152,6 +167,7 @@ function minutesPhrase(n) {
   if (n < 1) return 'under a minute';
   if (n === 1) return '1 minute';
   if (n < 120) return `${Math.round(n)} minutes`;
+  if (n % 60 === 0) return `${n / 60} hours`;
   return fmtRuntime(n);
 }
 
@@ -172,6 +188,41 @@ function describeRuntime(t) {
     return s ? `${s}${t.runtimeMin ? ` of about ${minutesPhrase(t.runtimeMin)} each` : ''}` : '';
   }
   return t.runtimeMin || t.runtimeMin === 0 ? minutesPhrase(t.runtimeMin) : '';
+}
+
+/**
+ * Length used for "at least N minutes": a film's runtime, or a series' whole running time
+ * (episodes × episode length). An upper limit applies per episode, so an episode fits.
+ */
+function totalRuntime(t) {
+  if (t.type === 'series' && Number.isFinite(t.runtimeMin) && t.episodeCount > 0) return t.runtimeMin * t.episodeCount;
+  return t.runtimeMin;
+}
+
+/** "under 90 minutes" / "up to 12 minutes" for an inclusive upper bound in minutes. */
+function maxPhrase(max) {
+  if (max < 1) return 'under a minute';
+  if (max === 119) return 'under two hours';
+  if (max === 120) return 'up to two hours';
+  if ((max + 1) % 5 === 0) return `under ${minutesPhrase(max + 1)}`;
+  return `up to ${minutesPhrase(max)}`;
+}
+
+/** "of at least 10 minutes" / "over 2 hours" for an inclusive lower bound in minutes. */
+function minPhrase(min) {
+  if (min > 1 && (min - 1) % 5 === 0) return `over ${minutesPhrase(min - 1)}`;
+  return `of at least ${minutesPhrase(min)}`;
+}
+
+function runtimePhrase(c) {
+  const hasMax = has(c.maxRuntime);
+  const hasMin = has(c.minRuntime) && c.minRuntime > 0;
+  if (hasMax && hasMin) {
+    return c.maxRuntime < 120 ? `between ${Math.round(c.minRuntime)} and ${minutesPhrase(c.maxRuntime)}` : `between ${minutesPhrase(c.minRuntime)} and ${minutesPhrase(c.maxRuntime)}`;
+  }
+  if (hasMax) return c.type === 'series' ? `with episodes ${maxPhrase(c.maxRuntime)}` : maxPhrase(c.maxRuntime);
+  if (hasMin) return minPhrase(c.minRuntime);
+  return '';
 }
 
 const langNames = (codes) => (codes || []).map((c) => (baseLang(c) === 'zxx' ? 'no dialogue' : languageName(c)));
@@ -228,13 +279,28 @@ export function parseMessage(raw, { ignore = [] } = {}) {
   for (const name of ignore) {
     if (name && name.length >= 2) lowered = lowered.replace(new RegExp(escapeRe(name.toLowerCase()), 'g'), (m) => ' '.repeat(m.length));
   }
-  lowered = lowered.replace(/(\d+)\s*h\s*(\d+)\s*(?:m|mins?|minutes?)?\b/g, (m, h, mm) => `${Number(h) * 60 + Number(mm)} minutes`);
+  // "1h30", "1 hour 30", "2 hours and 15 minutes", "one and a half hours" -> minutes.
+  lowered = lowered.replace(/(\d+)\s*(?:h|hrs?|hours?)\s*(?:and\s+)?(\d{1,2})(?!\d|\.\d|\s*(?:k|p|fps|seasons?|episodes?|hours?|hrs?|h)\b)\s*(?:m|mins?|minutes?)?\b/g, (m, h, mm) => (Number(mm) < 60 ? `${Number(h) * 60 + Number(mm)} minutes` : m));
+  lowered = lowered.replace(/\b(\d+|an?|one|two|three)\s+and\s+a\s+half\s+(?:hours?|hrs?)\b/g, (m, n) => `${(numberValue(n) || 1) * 60 + 30} minutes`);
   const st = { s: lowered };
   const c = {};
   const flags = {};
   const avoid = new Set();
   const soften = new Set();
   const boost = new Set();
+
+  // Runtime ranges: "between 5 and 12 minutes", "10-12 minutes", "from 1 to 2 hours".
+  const range = (m, a, ua, b, ub) => {
+    let lo = durationMinutes(a, ua || ub);
+    let hi = durationMinutes(b, ub);
+    if (lo === null || hi === null) return;
+    if (lo > hi) [lo, hi] = [hi, lo];
+    c.minRuntime = lo;
+    c.maxRuntime = hi;
+  };
+  const RUNIT = String.raw`(?:hours?|hrs?|h|minutes?|mins?|m)\b`;
+  mask(st, new RegExp(String.raw`\b(?:between|from)\s+${NUM}\s*(${RUNIT})?\s*(?:and|to|-|–)\s*${NUM}[\s-]*${UNIT}`, 'g'), range);
+  mask(st, new RegExp(String.raw`(?<![\w.])${NUM}\s*(${RUNIT})?\s*(?:-|–|to)\s*${NUM}[\s-]*${UNIT}`, 'g'), range);
 
   // Runtime: explicit bounds first ("under two hours", "< 90 min", "90 minutes or less").
   const upper = new RegExp(String.raw`(?<![a-z])(under|less than|shorter than|below|no (?:more|longer) than|not (?:more|longer) than|at most|max(?:imum)?(?: of)?|within|up to|<=?|≤)\s*(?:about |around |roughly |approximately )?${DUR}`, 'g');
@@ -257,13 +323,29 @@ export function parseMessage(raw, { ignore = [] } = {}) {
   };
   mask(st, new RegExp(String.raw`\b(?:i|we)(?:'ve| have| 've got| have got| got| only have| just have)?\s+(?:only\s+|just\s+)?(?:got\s+)?(?:about\s+|around\s+|roughly\s+|maybe\s+)?${DUR}`, 'g'), fits);
   mask(st, new RegExp(String.raw`${DUR}\s+(?:to spare|to kill|free|before (?:bed|dinner|work|school))`, 'g'), fits);
-  mask(st, new RegExp(String.raw`\b(?:a|an)\s+${DUR}\s+(?:long\s+)?(?:film|movie|feature|watch|episode)`, 'g'), (m, num, unit, extra) => {
+  mask(st, new RegExp(String.raw`\bfor\s+(?:about\s+|around\s+|roughly\s+|maybe\s+|just\s+)?${DUR}`, 'g'), fits);
+  // Approximate lengths: "a 10 minute film", "about 90 minutes", "20 minutes long".
+  const approx = (mins) => {
+    if (!mins) return;
+    c.maxRuntime ??= Math.round(mins * 1.25);
+    c.minRuntime ??= Math.round(mins * 0.75);
+  };
+  const perEpisode = (mins) => {
+    // An episode length: an upper limit per episode, and a series.
+    if (!mins) return;
+    c.maxRuntime ??= Math.round(mins * 1.25);
+    c.type ??= 'series';
+  };
+  // "a 10 minute film", "a 90-minute thriller": the noun stays in the text ("film" sets the
+  // format, "thriller" the genre).
+  mask(st, new RegExp(String.raw`\b(?:a|an)\s+${DUR}(?=[\s-]+(?:long\s+)?([a-z]+))`, 'g'), (m, num, unit, extra, noun) => {
     const mins = durationMinutes(num, unit, extra);
-    if (mins) {
-      c.maxRuntime ??= Math.round(mins * 1.25);
-      c.minRuntime ??= Math.round(mins * 0.75);
-    }
+    if (/^episodes?$/.test(noun)) perEpisode(mins);
+    else approx(mins);
   });
+  mask(st, new RegExp(String.raw`${DUR}[\s-]+(?:long\s+)?episodes?\b`, 'g'), (m, num, unit, extra) => perEpisode(durationMinutes(num, unit, extra)));
+  mask(st, new RegExp(String.raw`\b(?:about|around|roughly|approximately|approx\.?)\s+${DUR}`, 'g'), (m, num, unit, extra) => approx(durationMinutes(num, unit, extra)));
+  mask(st, new RegExp(String.raw`${DUR}\s*(?:long|or so|-?ish)\b`, 'g'), (m, num, unit, extra) => approx(durationMinutes(num, unit, extra)));
   mask(st, /\b(?:feature|full)[\s-]length\b/g, () => { c.minRuntime ??= 60; });
   mask(st, /\b(?:not|nothing|isn't|no)\s+(?:too|very|so|overly)?\s*long\b/g, () => { c.maxRuntime ??= 100; });
   mask(st, /\bshorter\b|\bquicker\b|\bless long\b/g, () => { flags.shorter = true; });
@@ -271,6 +353,8 @@ export function parseMessage(raw, { ignore = [] } = {}) {
   mask(st, /\b(?:short|quick|brief|bite[\s-]sized)\b(?![\s-]film)/g, () => { flags.short = true; });
   mask(st, /\bshort[\s-]films?\b/g, () => { flags.short = true; c.type ??= 'movie'; });
   mask(st, /\b(?:a|something|anything)\s+long\b/g, () => { c.minRuntime ??= 90; });
+  // A length Velvia could not read ("a few minutes", "a couple hours") is asked about, not ignored.
+  if (/\b(?:hours?|hrs?|minutes?|mins?)\b/.test(st.s)) flags.unparsedTime = true;
 
   // Seasons and format.
   mask(st, /\b(several|multiple|many|lots of|a lot of|a few|a couple of|a bunch of|two or more|2 or more|more than one|at least (?:two|2|three|3)|\d+\s*\+?|two|three|four|five)\s+seasons?\b/g, (m, q) => {
@@ -330,7 +414,9 @@ export function parseMessage(raw, { ignore = [] } = {}) {
     }
     for (const k of keys) soften.add(k);
   });
-  mask(st, /\b(?:no|not|nothing|without|avoid|skip|never|isn't|is not|don't want|do not want|none of the)\s+(too\s+|very\s+|so\s+|overly\s+)?(?:anything\s+|any\s+|something\s+|more\s+|a\s+)?([a-z][a-z'-]*(?:\s+[a-z][a-z'-]*){0,2})/g, (m, degree, phrase) => {
+  // "nothing but comedies" asks for comedies only; "anything but sci-fi" rules sci-fi out.
+  mask(st, /\bnothing but\b/g, () => {});
+  mask(st, /\b(?:no|not|nothing|without|avoid|skip|never|isn't|is not|don't want|do not want|none of the|anything but|everything but|except(?: for)?|other than|apart from|rather than|instead of|but not|no more)\s+(too\s+|very\s+|so\s+|overly\s+)?(?:anything\s+|any\s+|something\s+|more\s+|a\s+|an\s+)?([a-z][a-z'-]*(?:\s+[a-z][a-z'-]*){0,2})/g, (m, degree, phrase) => {
     const keys = facetKeysIn(` ${phrase} `);
     for (const k of keys) (degree ? soften : avoid).add(k);
     if (/^(?:series|shows?|tv)\b/.test(phrase)) c.type = 'movie';
@@ -342,9 +428,14 @@ export function parseMessage(raw, { ignore = [] } = {}) {
     else boost.add('intense');
   });
 
-  // Positive facets.
+  // Positive facets. One the viewer names outright wins over a negated detail of it
+  // ("a comedy other than slapstick" still asks for a comedy).
   const facets = new Set(boost);
-  for (const k of FACET_KEYS) if (!avoid.has(k) && !soften.has(k) && FACETS[k].re.test(st.s)) facets.add(k);
+  for (const k of FACET_KEYS) {
+    if (!FACETS[k].re.test(st.s)) continue;
+    avoid.delete(k);
+    if (!soften.has(k)) facets.add(k);
+  }
   // "intense" and "thriller" overlap; keep both, scoring handles overlap.
 
   // Format.
@@ -382,50 +473,129 @@ export function parseMessage(raw, { ignore = [] } = {}) {
     constraints: c,
     flags,
     refs: extractRefs(text),
-    topics: detectTopics(lower),
+    // Read with catalog names masked: "Star Song" is not a question about songs.
+    topics: detectTopics(lowered),
   };
 }
 
 // Title references the viewer makes ("similar to Interstellar", "tell me about “Sintel”").
+const REF_END = String.raw`(?=[?.!,;:]|\s+(?:but|and|with|that|which|or|except|only|please|though|because|if|for|to|in|on|tonight|today|now|again|instead)\b|$)`;
 const REF_FRAMES = [
   /(?:similar to|reminds? me of|in the (?:vein|style|spirit) of|along the lines of|the same (?:vibe|feel) as|comparable to|fans? of|a fan of)\s+(.+?)(?=[?.!,;:]|\s+(?:but|and|with|that|which|or|except|only|please|though|because|if|for|to|in|on)\b|$)/gi,
   /(?:something|anything|movies?|films?|shows?|series|titles?|more|stuff|ones?|things|picks|else)\s+like\s+(.+?)(?=[?.!,;:]|\s+(?:but|and|with|that|which|or|except|only|please|though|because|if|for|to|in|on)\b|$)/gi,
   /(?:tell me (?:more )?about|what do you know about|thoughts on|info(?:rmation)? on|details (?:on|about)|what is|what's|is|do you have|have you got|can i (?:watch|stream)|where (?:is|can i find)|i (?:loved|liked|enjoyed|adored|just watched|watched|saw)|(?:loved|liked|enjoyed|adored))\s+(.+?)(?=[?.!,;:]|\s+(?:but|and|with|that|which|or|except|only|please|though|because|if|for|to|on lumina|available|any good|good|worth)\b|$)/gi,
+  // Questions whose subject is a title: "who directed X", "how long is X", "does X have…".
+  new RegExp(String.raw`\bwho\s+(?:directed|made|wrote|scored|composed|produced|created|stars?\s+in|starred\s+in|acts?\s+in|acted\s+in|plays?\s+in|(?:is|was|are|were)\s+in|(?:is|was)\s+the\s+(?:director|composer|star|lead)\s+of)\s+(.+?)${REF_END}`, 'gi'),
+  new RegExp(String.raw`\bhow\s+(?:long|old|good|scary|violent|intense|dark|sad|funny|slow|graphic)\s+(?:is|was)\s+(.+?)${REF_END}`, 'gi'),
+  /\b(?:does|did|will)\s+(.+?)(?=\s+(?:have|has|got|come|contain|include|feature|star|run|last|play|stream|need|use|end)\b|[?.!,;:]|$)/gi,
+  /\bwhen\s+(?:was|did|is)\s+(.+?)(?=\s+(?:made|released|filmed|shot|out|come out|premiere)\b|[?.!,;:]|$)/gi,
+  new RegExp(String.raw`\b(?:watch|play|stream|put on|start)\s+(.+?)${REF_END}`, 'gi'),
+  new RegExp(String.raw`\b(?:better|worse|shorter|longer|scarier|funnier|calmer|darker)\s+than\s+(.+?)${REF_END}`, 'gi'),
 ];
-const STRONG_FRAME = /similar|remind|vein|style|spirit|lines|vibe|feel|comparable|fan|like|about|know|thoughts|info|details|have|stream|find|loved|liked|enjoyed|adored|watched|saw/i;
+const STRONG_FRAME = /similar|remind|vein|style|spirit|lines|vibe|feel|comparable|fan|like|about|know|thoughts|info|details|have|stream|find|loved|liked|enjoyed|adored|watched|saw|who|how long|how old/i;
+// Frames where the name itself must be capitalised or quoted ("is X", "does X have", "watch X").
+const WEAK_FRAME = /^(?:what is|what's|is|does|did|will|when (?:was|did|is)|watch|play|stream|put on|start|how \w+ (?:is|was)|\w+ than)\s*$/i;
+const CAPITALISED = /(?:^|\s)[\p{Lu}\p{N}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+// "Compare Sintel and Interstellar", "the difference between A, B and C".
+const COMPARE_FRAME = /\b(?:compare|comparing|comparison of|comparison between|differences? between|choose between|pick between|decide between)\s+(.+?)(?=[?.!;:]|\s+(?:for|but|because|if|please|tonight|which|who|when|using)\b|$)/gi;
+const NAME_SEQ = String.raw`(?:[Tt]he\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:-]*(?:\s+(?:(?:of|the|a|an|in|on|to|for|at|from|de|la|le|du|von|van)\s+)*[\p{Lu}\p{N}][\p{L}\p{N}'’:-]*)*`;
+const PAIR_RE = new RegExp(String.raw`(${NAME_SEQ})\s+(vs\.?|versus|or)\s+(${NAME_SEQ})`, 'gu');
+// People: "with Tom Hanks", "starring …", "directed by …", "movies by …" (two to four capitalised words).
+const NAME_WORD = String.raw`[\p{Lu}][\p{L}'’.-]*`;
+const PERSON_RE = new RegExp(String.raw`\b(with|starring|featuring|directed by|by)\s+(${NAME_WORD}(?:\s+(?:(?:de|da|di|del|van|von|der|den|du|la|le|ter)\s+)?${NAME_WORD}){1,3})`, 'gu');
+const MAX_REFS = 8;
+const TITLE_PART = String.raw`(?:soundtrack|music|score|cast|director|directors|crew|ending|plot|story|pacing|cinematography|visuals|length|runtime|age rating|rating|subtitles|audio|trailer|sequel|characters|themes|tone|mood|reviews?)`;
+const TITLE_CONTINUES = /^(?:\s+(?:for|to|in|on|at|from|of)\s+[\p{Lu}\p{N}][\p{L}\p{N}'’:-]*(?:\s+[\p{Lu}\p{N}][\p{L}\p{N}'’:-]*)*)+/u;
+
+/**
+ * Cuts a reference down to the name: "Inception scary" -> "Inception", "Tears of Steel
+ * about" -> "Tears of Steel", "is inception scary" -> "inception".
+ */
+function trimRef(x) {
+  const words = x.split(/\s+/).filter(Boolean);
+  if (!words.length) return '';
+  const lead = /^the$/i.test(words[0]) && isCapWord(words[1]) ? 1 : 0;
+  if (isCapWord(words[lead])) {
+    const keep = words.slice(0, lead + 1);
+    for (let i = lead + 1; i < words.length; i++) {
+      if (isCapWord(words[i])) {
+        keep.push(words[i]);
+        continue;
+      }
+      let j = i;
+      while (j < words.length && CONNECTORS.has(words[j].toLowerCase())) j++;
+      if (j > i && j < words.length && isCapWord(words[j])) {
+        keep.push(...words.slice(i, j + 1));
+        i = j;
+        continue;
+      }
+      break;
+    }
+    return keep.join(' ');
+  }
+  while (words.length > 1 && TRAILING_JUNK.has(words[words.length - 1].toLowerCase())) words.pop();
+  return words.join(' ');
+}
 
 function extractRefs(text) {
   const out = [];
   const seen = new Set();
-  const push = (raw, strong, quoted = false, weak = false) => {
+  const push = (raw, strong, { quoted = false, weak = false, kind = 'title', compare = false, prep = null } = {}) => {
+    if (out.length >= MAX_REFS) return;
     let x = raw.trim().replace(/^[“"']|[”"']$/g, '').replace(/'s\b.*$/i, '').replace(/\s+(?:movie|film|series|show|please|instead|again|too)$/i, '').trim();
+    if (!quoted) x = trimRef(x);
     if (!x || x.length < 2 || x.length > 60 || x.split(/\s+/).length > 8) return;
     const words = normalize(x).split(' ').filter(Boolean);
     if (!words.length) return;
     if (!quoted) {
-      const capitalised = /(?:^|\s)[\p{Lu}\p{N}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
       // "The Matrix" is a title; "the cinematography" is not.
-      if (words[0] === 'the' ? !capitalised.test(x.replace(/^the\s+/i, '')) : WORD_STOP.has(words[0])) return;
+      if (words[0] === 'the' ? !isCapWord(x.replace(/^the\s+/i, '')) : WORD_STOP.has(words[0])) {
+        // "the soundtrack of Interstellar": the title named after a title attribute.
+        const inner = x.match(new RegExp(String.raw`^the\s+${TITLE_PART}\s+of\s+(${NAME_SEQ})$`, 'iu'));
+        if (inner) push(inner[1], strong, { kind, compare, prep });
+        return;
+      }
       if (words.every((w) => WORD_STOP.has(w) || facetKeysIn(` ${w} `).length || LANGS[w] || /^\d+$/.test(w))) return;
-      if (!capitalised.test(x) && !strong) return;
+      if (!CAPITALISED.test(x) && !strong) return;
       // After a weak frame the name itself must start with a capital ("is Sintel…", "what is The Matrix").
-      if (weak && !/^(?:the\s+)?[\p{Lu}\p{N}]/u.test(x.replace(/^the\s+/i, (m) => m.toLowerCase()))) return;
+      if (weak && !isCapWord(x.replace(/^the\s+/i, ''))) return;
     }
     if (x === x.toLowerCase() && /^[a-z]/.test(x)) x = x.replace(/\b[a-z]/g, (ch) => ch.toUpperCase());
     const key = normalize(x);
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ text: x, strong: strong || quoted, quoted });
+    const ref = { text: x, strong: strong || quoted, quoted, kind };
+    if (compare) ref.compare = true;
+    if (prep) ref.prep = prep;
+    out.push(ref);
   };
-  for (const m of text.matchAll(/["“]([^"“”]{2,60})["”]/g)) push(m[1], true, true);
+  for (const m of text.matchAll(/["“]([^"“”]{2,60})["”]/g)) push(m[1], true, { quoted: true });
+  for (const m of text.matchAll(COMPARE_FRAME)) {
+    for (const part of m[1].split(/\s*,\s*(?:and\s+|or\s+)?|\s+(?:and|with|to|vs\.?|versus|or|&)\s+/i)) push(part, true, { weak: true, compare: true });
+  }
+  if (/\b(?:vs\.?|versus)\b/i.test(text) || (/\bor\b/i.test(text) && /\bwhich\b|\bbetter\b|\bshould i\b|\bcompare\b|\bbetween\b|\bprefer\b/i.test(text))) {
+    for (const m of text.matchAll(PAIR_RE)) {
+      push(m[1], true, { weak: true, compare: true });
+      push(m[3], true, { weak: true, compare: true });
+    }
+  }
   for (const re of REF_FRAMES) {
     re.lastIndex = 0;
     for (const m of text.matchAll(re)) {
-      const frame = m[0].slice(0, m[0].length - m[1].length);
-      // "is X" and "what is X" are weak frames: only accept capitalised or quoted names.
-      const weak = /^(?:what is|what's|is)\s*$/i.test(frame.trim());
-      push(m[1], !weak && STRONG_FRAME.test(frame), false, weak);
+      const frame = m[0].slice(0, m[0].length - m[1].length).trim();
+      const weak = WEAK_FRAME.test(frame);
+      let name = m[1];
+      // A capitalised name carries on past a small word ("Tears for Fears", "Return to Oz").
+      const more = isCapWord(name.trim()) && text.slice(m.index + m[0].length).match(TITLE_CONTINUES);
+      if (more && !/\b(?:lumina|velvia)\b/i.test(more[0])) name = `${name}${more[0]}`;
+      push(name, !weak && STRONG_FRAME.test(frame), { weak });
     }
+  }
+  for (const m of text.matchAll(PERSON_RE)) {
+    const name = m[2].trim();
+    const words = normalize(name).split(' ');
+    if (words.some((w) => WORD_STOP.has(w) || PERSON_STOP.has(w) || LANGS[w] || facetKeysIn(` ${w} `).length)) continue;
+    push(name, true, { kind: 'person', prep: /by/i.test(m[1]) ? 'by' : 'with' });
   }
   return out;
 }
@@ -453,35 +623,90 @@ function detectTopics(lower) {
 }
 
 // ───────────────────────────── Title matching ─────────────────────────────
-/** Catalog titles named in `raw`, in order of appearance. */
-function findMentions(raw, titles, { trusted = false } = {}) {
-  const text = String(raw || '');
-  const norm = ` ${normalize(text)} `;
-  // Words the viewer typed with a capital letter (accent-insensitive), for single-word titles.
-  const capitalised = new Set(text.split(/[^\p{L}\p{N}]+/u).filter((w) => /^\p{Lu}/u.test(w)).map((w) => normalize(w)));
-  const hits = [];
+const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+let IX_CACHE = { pool: null, ix: null };
+
+/**
+ * Lookup tables for one request's catalog (names, leading words, people, names by length),
+ * so matching costs the length of the message rather than the size of the catalog.
+ */
+function indexFor(titles) {
+  if (IX_CACHE.pool === titles) return IX_CACHE.ix;
+  const ix = { byName: new Map(), byFirst: new Map(), byLen: new Map(), people: new Map(), cjk: [], maxWords: 1, resolved: new Map() };
+  const add = (map, k, v) => {
+    const xs = map.get(k);
+    if (xs) xs.push(v);
+    else map.set(k, [v]);
+  };
   for (const t of titles) {
     const d = doc(t);
-    let hit = null;
-    for (const name of [d.title, d.original]) {
-      if (!name || hit) continue;
-      const cjk = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(name);
-      const i = cjk ? norm.indexOf(name) : norm.indexOf(` ${name} `);
-      if (i < 0) continue;
-      const len = name.length;
-      if (cjk || (name.includes(' ') && len >= 4)) hit = { at: i, len };
-      else if (len >= 3 && (trusted || capitalised.has(name) || (len >= 4 && !COMMON_SINGLE.has(name)))) hit = { at: i, len };
+    for (const name of new Set([d.title, d.original])) {
+      if (!name) continue;
+      if (CJK_RE.test(name)) ix.cjk.push({ name, t });
+      add(ix.byName, name, t);
+      add(ix.byLen, name.length, { name, t, words: name.split(' '), compact: name.replace(/ /g, '') });
+      ix.maxWords = Math.max(ix.maxWords, name.split(' ').length);
     }
-    if (!hit && d.title.includes(' ')) {
-      // The leading word of a longer title, typed with a capital ("Kōyō", "Elephants").
-      const first = d.title.split(' ')[0];
-      const i = norm.indexOf(` ${first} `);
-      if (i >= 0 && first.length >= 4 && !COMMON_SINGLE.has(first) && (trusted || capitalised.has(first))) hit = { at: i, len: first.length };
-    }
-    if (hit) hits.push({ t, ...hit });
+    if (d.title.includes(' ')) add(ix.byFirst, d.title.split(' ')[0], t);
+    for (const p of d.people) if (p.n.includes(' ')) add(ix.people, p.n, { t, raw: p.raw });
   }
+  ix.maxWords = Math.min(ix.maxWords, 12);
+  IX_CACHE = { pool: titles, ix };
+  return ix;
+}
+
+/** The message as normalized words, each with whether the viewer typed it capitalised. */
+function wordsOf(raw) {
+  const out = [];
+  for (const m of String(raw || '').matchAll(/[\p{L}\p{N}\p{M}'’`]+/gu)) {
+    const upper = /^\p{Lu}/u.test(m[0]);
+    const cap = isCapWord(m[0]);
+    for (const w of normalize(m[0]).split(' ')) if (w) out.push({ w, upper, cap });
+  }
+  return out;
+}
+
+/** Catalog titles named in `raw`, in order of appearance. */
+function findMentions(raw, titles, { trusted = false } = {}) {
+  const ix = indexFor(titles);
+  const words = wordsOf(raw);
+  // Words the viewer typed with a capital letter (accent-insensitive), for single-word titles.
+  const capitalised = new Set(words.filter((x) => x.upper).map((x) => x.w));
+  const hits = new Map();
+  for (let i = 0; i < words.length; i++) {
+    let key = '';
+    for (let n = 1; n <= ix.maxWords && i + n <= words.length; n++) {
+      key = n === 1 ? words[i].w : `${key} ${words[i + n - 1].w}`;
+      const ts = ix.byName.get(key);
+      if (!ts) continue;
+      const len = key.length;
+      const ok = key.includes(' ') ? len >= 4 : len >= 3 && (trusted || capitalised.has(key) || (len >= 4 && !COMMON_SINGLE.has(key)));
+      if (ok) for (const t of ts) if (!hits.has(t)) hits.set(t, { t, at: i, len: n });
+    }
+  }
+  if (ix.cjk.length) {
+    const norm = words.map((x) => x.w).join(' ');
+    for (const { name, t } of ix.cjk) {
+      const at = norm.indexOf(name);
+      if (at >= 0 && !hits.has(t)) hits.set(t, { t, at: norm.slice(0, at).split(' ').length - 1, len: name.split(' ').length });
+    }
+  }
+  // The leading word of a longer title, typed with a capital ("Kōyō", "Elephants"), when only
+  // one title starts with it — unless the viewer carries on into a different name ("Tears for
+  // Fears" is not "Tears of Steel").
+  for (let i = 0; i < words.length; i++) {
+    const first = words[i].w;
+    const ts = ix.byFirst.get(first);
+    if (!ts || ts.length !== 1 || hits.has(ts[0]) || first.length < 4 || COMMON_SINGLE.has(first) || !(trusted || capitalised.has(first))) continue;
+    const t = ts[0];
+    const next = words[i + 1];
+    const titleNext = doc(t).title.split(' ')[1];
+    const otherName = next && next.w !== titleNext && (next.cap || (CONNECTORS.has(next.w) && words[i + 2]?.cap));
+    if (!otherName) hits.set(t, { t, at: i, len: 1 });
+  }
+  const all = [...hits.values()];
   // A shorter title matched inside a longer matched title ("Dune" in "Dune: Part Two") is dropped.
-  const kept = hits.filter((h) => !hits.some((o) => o !== h && o.len > h.len && o.at <= h.at && o.at + o.len >= h.at + h.len));
+  const kept = all.filter((h) => !all.some((o) => o !== h && o.len > h.len && o.at <= h.at && o.at + o.len >= h.at + h.len));
   kept.sort((x, y) => x.at - y.at || y.len - x.len);
   return kept.map((h) => h.t);
 }
@@ -490,23 +715,47 @@ function escapeRe(s) {
   return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Resolves a free-text reference to a catalog title (typo tolerant), or null. */
+/**
+ * Resolves a free-text reference to a catalog title, or null. Typos are tolerated word by
+ * word ("Elephant Dream"), so a different title that merely looks alike ("Tears for Fears")
+ * is not mistaken for a catalog one.
+ */
 function resolveRef(refText, titles) {
   const n = normalize(refText);
   if (!n) return null;
+  const ix = indexFor(titles);
+  const exact = ix.byName.get(n);
+  if (exact) return exact[0];
+  if (ix.resolved.has(n)) return ix.resolved.get(n);
+  const best = fuzzyTitle(n, ix);
+  ix.resolved.set(n, best);
+  return best;
+}
+
+function fuzzyTitle(n, ix) {
+  const budget = Math.max(typoBudget(n.length), n.length >= 12 ? 3 : 0);
+  if (!budget) return null;
+  const nw = n.split(' ');
+  const compact = n.replace(/ /g, '');
   let best = null;
   let bestD = Infinity;
-  for (const t of titles) {
-    const d = doc(t);
-    for (const name of [d.title, d.original]) {
-      if (!name) continue;
-      if (name === n) return t;
-      const budget = Math.max(typoBudget(n.length), n.length >= 12 ? 3 : 0);
-      if (!budget) continue;
-      const dist = editDistance(n, name, budget);
-      if (dist <= budget && dist < bestD) {
+  for (let len = n.length - budget; len <= n.length + budget; len++) {
+    for (const { t, words, compact: other } of ix.byLen.get(len) || []) {
+      let total = 0;
+      if (words.length === nw.length) {
+        for (let k = 0; k < words.length && total <= budget; k++) {
+          const wb = typoBudget(Math.max(words[k].length, nw[k].length));
+          const dk = editDistance(nw[k], words[k], wb);
+          total += dk > wb ? budget + 1 : dk;
+        }
+      } else {
+        // A missing or extra space ("Tearsof Steel"), with at most one other typo.
+        const dc = editDistance(compact, other, 1);
+        total = dc <= 1 ? dc + 1 : Infinity;
+      }
+      if (total <= budget && total < bestD) {
         best = t;
-        bestD = dist;
+        bestD = total;
       }
     }
   }
@@ -514,14 +763,18 @@ function resolveRef(refText, titles) {
 }
 
 function findPeople(raw, titles) {
-  const norm = ` ${normalize(raw)} `;
+  const ix = indexFor(titles);
+  const words = wordsOf(raw).map((x) => x.w);
   const people = new Map();
-  for (const t of titles) {
-    for (const p of doc(t).people) {
-      if (!p.n.includes(' ') || !norm.includes(` ${p.n} `)) continue;
-      const director = (t.directors || []).includes(p.raw);
-      const prev = people.get(p.n);
-      people.set(p.n, { n: p.n, name: p.raw, director: director || !!prev?.director });
+  for (let i = 0; i < words.length; i++) {
+    let key = words[i];
+    for (let n = 2; n <= 4 && i + n <= words.length; n++) {
+      key = `${key} ${words[i + n - 1]}`;
+      for (const { t, raw: name } of ix.people.get(key) || []) {
+        const director = (t.directors || []).includes(name);
+        const prev = people.get(key);
+        people.set(key, { n: key, name, director: director || !!prev?.director });
+      }
     }
   }
   return [...people.values()];
@@ -537,22 +790,32 @@ function meaningfulOverlap(a, b) {
 }
 
 /** Titles Velvia suggested in an assistant turn ("Suggested: A · B" line, else named titles). */
+const SUGGESTED_LINE = /(?:^|\n)\s*(?:suggested|suggestions|recommended|picks)(?: titles)?\s*:\s*(.+)$/im;
 function titlesInAssistant(content, titles) {
   const text = String(content || '');
-  const line = text.match(/(?:^|\n)\s*(?:suggested|suggestions|recommended|picks)(?: titles)?\s*:\s*(.+)$/im);
+  const line = text.match(SUGGESTED_LINE);
   if (line) {
     const names = line[1].split(/\s*(?:·|;|\|)\s*/).map((s) => normalize(s)).filter(Boolean);
-    const byName = new Map(titles.map((t) => [doc(t).title, t]));
-    const found = names.map((n) => byName.get(n)).filter(Boolean);
+    const { byName } = indexFor(titles);
+    const found = names.map((n) => byName.get(n)?.find((t) => doc(t).title === n)).filter(Boolean);
     if (found.length) return found;
   }
   return findMentions(text, titles, { trusted: true });
 }
 
 // ───────────────────────────── Scoring ─────────────────────────────
+/** How well a title matches one facet. Cached per title object (the catalog is reused). */
 function facetMatch(t, key) {
-  const f = FACETS[key];
   const d = doc(t);
+  const cached = d.facets.get(key);
+  if (cached) return cached;
+  const m = computeFacetMatch(t, d, key);
+  d.facets.set(key, m);
+  return m;
+}
+
+function computeFacetMatch(t, d, key) {
+  const f = FACETS[key];
   let primary = 0;
   let related = 0;
   const hits = [];
@@ -589,8 +852,13 @@ function passesHard(t, c, { ignore = new Set() } = {}) {
   if (!ignore.has('seasons') && c.minSeasons && !(t.type === 'series' && (t.seasonCount || 0) >= c.minSeasons)) return false;
   if (!ignore.has('seasons') && c.maxSeasons && !(t.type === 'series' && (t.seasonCount || 0) <= c.maxSeasons)) return false;
   if (!ignore.has('runtime')) {
-    if (c.maxRuntime && !(Number.isFinite(t.runtimeMin) && t.runtimeMin <= c.maxRuntime)) return false;
-    if (c.minRuntime && !(Number.isFinite(t.runtimeMin) && t.runtimeMin >= c.minRuntime) && t.type !== 'series') return false;
+    // An upper limit applies to a film's runtime or a series' episode length (an episode fits).
+    // A lower limit alone applies to the whole running time, so a series of one-minute episodes
+    // isn't "an hour long"; a range ("between 80 and 100 minutes") describes one sitting, so a
+    // series' episodes must fall inside it.
+    if (has(c.maxRuntime) && !(Number.isFinite(t.runtimeMin) && t.runtimeMin <= c.maxRuntime)) return false;
+    const measure = has(c.maxRuntime) ? t.runtimeMin : totalRuntime(t);
+    if (c.minRuntime > 0 && !(Number.isFinite(measure) && measure >= c.minRuntime)) return false;
   }
   if (!ignore.has('quality')) {
     if (c.minHeight && !((t.resolutions || [])[0] >= c.minHeight)) return false;
@@ -650,16 +918,37 @@ function isFollowUp(parsed, prevAssistant) {
   return !ownFacets && !parsed.refs.length && hasConstraints && !parsed.flags.request;
 }
 
+/**
+ * What a reference names: a catalog title, a credited person, or nothing in the catalog.
+ * A reference that contains a catalog title ("the soundtrack of Sintel") is never unknown.
+ */
+function refTarget(r, titles) {
+  const title = resolveRef(r.text, titles) || findMentions(r.text, titles)[0] || null;
+  if (title) return { title, person: null, unknown: false };
+  const person = findPeople(r.text, titles)[0] || null;
+  return { title: null, person, unknown: !person };
+}
+
+function parseTurn(text, titles) {
+  const mentions = findMentions(text, titles);
+  const ignore = mentions.flatMap((t) => [t.title, t.originalTitle].filter(Boolean));
+  let parsed = parseMessage(text, { ignore });
+  const unknown = parsed.refs.filter((r) => refTarget(r, titles).unknown);
+  // A name that isn't in the catalog is not a stated preference ("Garden State" is not a
+  // request for gardens), so its words are read out of the message.
+  if (unknown.length) parsed = parseMessage(text, { ignore: [...ignore, ...unknown.map((r) => r.text)] });
+  return { mentions, parsed, unknown };
+}
+
 function buildState(msgs, titles) {
   const turns = [];
   let lastAssistant = null;
+  let lastList = null; // the latest answer that listed picks ("Suggested: A · B")
   for (const m of msgs) {
-    if (m.role === 'assistant') lastAssistant = m.content;
-    else {
-      const mentions = findMentions(m.content, titles);
-      const ignore = mentions.flatMap((t) => [t.title, t.originalTitle].filter(Boolean));
-      turns.push({ text: m.content, mentions, parsed: parseMessage(m.content, { ignore }), prevAssistant: lastAssistant, prevRecs: lastAssistant ? titlesInAssistant(lastAssistant, titles) : [] });
-    }
+    if (m.role === 'assistant') {
+      lastAssistant = m.content;
+      if (SUGGESTED_LINE.test(m.content)) lastList = m.content;
+    } else turns.push({ text: m.content, ...parseTurn(m.content, titles), prevAssistant: lastAssistant, prevRecs: lastAssistant ? titlesInAssistant(lastAssistant, titles) : [] });
   }
   if (!turns.length) return null;
   let start = turns.length - 1;
@@ -688,27 +977,35 @@ function buildState(msgs, titles) {
       if (v === undefined) continue;
       c[k] = v;
       if (k === 'type' && v === 'movie') { delete c.minSeasons; delete c.maxSeasons; }
-      if (k === 'maxRuntime' && c.minRuntime && c.minRuntime > v) delete c.minRuntime;
-      if (k === 'minRuntime' && c.maxRuntime && c.maxRuntime < v) delete c.maxRuntime;
+      if (k === 'maxRuntime' && has(c.minRuntime) && c.minRuntime > v) delete c.minRuntime;
+      if (k === 'minRuntime' && has(c.maxRuntime) && c.maxRuntime < v) delete c.maxRuntime;
     }
-    if (p.flags.short && !p.constraints.maxRuntime) c.maxRuntime = Math.min(c.maxRuntime || 40, 40);
-    if (p.flags.shorter && !p.constraints.maxRuntime) {
+    if (p.flags.short && !has(p.constraints.maxRuntime)) c.maxRuntime = has(c.maxRuntime) ? Math.min(c.maxRuntime, 40) : 40;
+    if (p.flags.shorter && !has(p.constraints.maxRuntime)) {
+      // Strictly shorter than the pick it follows (a series by its episode length).
       const ref = turns[i].prevRecs[0]?.runtimeMin;
-      c.maxRuntime = ref ? Math.max(1, Math.min(c.maxRuntime || Infinity, ref - 1)) : Math.max(1, Math.floor((c.maxRuntime || 40) * 0.75));
+      c.maxRuntime = Number.isFinite(ref)
+        ? Math.max(0, Math.min(has(c.maxRuntime) ? c.maxRuntime : Infinity, Math.ceil(ref) - 1))
+        : Math.max(1, Math.floor((has(c.maxRuntime) ? c.maxRuntime : 40) * 0.75));
       delete c.minRuntime;
     }
-    if (p.flags.longer && !p.constraints.minRuntime) {
-      const ref = turns[i].prevRecs[0]?.runtimeMin;
-      c.minRuntime = ref ? ref + 1 : Math.max(c.minRuntime || 0, (c.maxRuntime || 60) + 1);
+    if (p.flags.longer && !has(p.constraints.minRuntime)) {
+      // Strictly longer than the pick it follows (a series by its whole running time).
+      const refT = turns[i].prevRecs[0];
+      const ref = refT ? totalRuntime(refT) : undefined;
+      c.minRuntime = Number.isFinite(ref) ? Math.floor(ref) + 1 : Math.max(c.minRuntime || 0, (has(c.maxRuntime) ? c.maxRuntime : 60) + 1);
       delete c.maxRuntime;
     }
     for (const k of ['rewatch', 'preferNew', 'preferRated', 'familyNight']) if (p.flags[k]) flags[k] = true;
-    const unknown = p.refs.find((r) => !resolveRef(r.text, titles));
-    if (unknown) unknownRef = unknown.text;
+    // A title that isn't on Lumina is remembered only for the reply right after it was named
+    // (answering "what did you enjoy about it?"), not for the rest of the conversation.
+    const unknown = turns[i].unknown.find((r) => r.kind !== 'person');
+    if (unknown && i >= turns.length - 2) unknownRef = unknown.text;
   }
   const latest = turns[turns.length - 1];
-  for (const k of ['excludePrev', 'open', 'request', 'followUp']) if (latest.parsed.flags[k]) flags[k] = true;
-  return { facets, avoid, soften, constraints: c, flags, unknownRef, latest, turns, prevRecs, prevAssistant, carried: start < turns.length - 1 };
+  for (const k of ['excludePrev', 'open', 'request', 'followUp', 'unparsedTime']) if (latest.parsed.flags[k]) flags[k] = true;
+  const lastRecs = lastList && lastList !== prevAssistant ? titlesInAssistant(lastList, titles) : prevRecs;
+  return { facets, avoid, soften, constraints: c, flags, unknownRef, latest, turns, prevRecs, lastRecs, prevAssistant, carried: start < turns.length - 1 };
 }
 
 // ───────────────────────────── Analysis ─────────────────────────────
@@ -728,7 +1025,10 @@ export function analyze(titles, payload = {}, signals = {}) {
   const compareIds = [...new Set(Array.isArray(context.compareIds) ? context.compareIds : [])].slice(0, 3);
   const compareTitles = compareIds.map((id) => sig.byId.get(id)).filter(Boolean);
 
-  const a = { pool, msgs, sig, state, contextTitle, compareTitles, useHistory, intent: 'recommend', target: null, compare: [], topics: [], unknown: null, people: [], ranked: [], full: [], partial: [], closest: [], relaxed: [] };
+  const a = {
+    pool, msgs, sig, state, contextTitle, compareTitles, useHistory, intent: 'recommend', target: null, compare: [], topics: [],
+    unknown: null, unknowns: [], unknownPeople: [], restricted: !!signals?.restricted, people: [], ranked: [], full: [], partial: [], closest: [], relaxed: [],
+  };
   if (!state) {
     a.intent = 'open';
     a.ranked = openPicks(a);
@@ -738,38 +1038,63 @@ export function analyze(titles, payload = {}, signals = {}) {
   const lower = ` ${latestText.toLowerCase()} `;
   const parsed = state.latest.parsed;
   const mentions = [...state.latest.mentions];
+  const unknownTitles = [];
+  const unknownPeople = [];
   for (const r of parsed.refs) {
-    const t = resolveRef(r.text, pool);
-    if (t && !mentions.includes(t)) mentions.push(t);
+    const hit = refTarget(r, pool);
+    if (hit.title && !mentions.includes(hit.title)) mentions.push(hit.title);
+    if (!hit.unknown) continue;
+    if (r.kind === 'person') unknownPeople.push({ name: r.text, prep: r.prep || 'with' });
+    else unknownTitles.push(r.text);
   }
   a.people = findPeople(latestText, pool);
   a.topics = parsed.topics;
-  const unknownNow = parsed.refs.find((r) => !resolveRef(r.text, pool) && !findMentions(r.text, pool).length && !findPeople(r.text, pool).length);
+  a.unknowns = unknownTitles;
+  if (unknownPeople.length && !a.people.length) a.unknownPeople = unknownPeople;
+  // "What is Sintel like?" is a question about Sintel, not a request for titles like it.
+  const simText = LIKE_QUESTION_RE.test(lower.trim()) ? `${lower.trimEnd().replace(/\blike(\s*[?.!]*)$/, '$1')} ` : lower;
+  const wantsSimilar = SIMILAR_RE.test(simText);
+  a.audienceAsk = CONCERN_RE.test(lower) ? 'concern' : SUITABLE_RE.test(lower) ? 'suitable' : 'other';
+  a.kidsQuestion = KIDS_RE.test(lower);
 
   // Ordinal or pronoun references to Velvia's previous suggestions ("the second one", "is it scary?").
   let prevRef = null;
   const ord = lower.match(/\bthe (first|second|third|fourth|fifth|last)(?: one| pick| option| title| film| movie| series| suggestion)?\b/);
-  if (ord && state.prevRecs.length) {
-    const idx = { first: 0, second: 1, third: 2, fourth: 3, fifth: 4, last: state.prevRecs.length - 1 }[ord[1]];
-    prevRef = state.prevRecs[idx] || null;
-  } else if (state.prevRecs.length && !contextTitle && PRONOUN_RE.test(lower) && (parsed.topics.length || /\?/.test(lower)) && !parsed.flags.request) {
+  // "The second one" means the latest list of picks, even after a reply about one of them.
+  const ordList = state.lastRecs.length > 1 ? state.lastRecs : state.prevRecs;
+  if (ord && ordList.length) {
+    const idx = { first: 0, second: 1, third: 2, fourth: 3, fifth: 4, last: ordList.length - 1 }[ord[1]];
+    prevRef = ordList[idx] || null;
+  } else if (state.prevRecs.length && !contextTitle && PRONOUN_RE.test(lower) && (parsed.topics.length || /\?/.test(lower) || /\b(?:tell me|more about|describe|explain)\b/.test(lower)) && !parsed.flags.request) {
     prevRef = state.prevRecs[0];
   }
 
   // 0. Messages that are not a request about a title: questions about Velvia, thanks, and
   //    questions that have nothing to do with watching (answered honestly, never with picks).
+  //    "Tell me about the first one" refers to Velvia's last picks, so it is never one of these.
   const plain = !parsed.facets.length && !parsed.avoid.length && !parsed.soften.length && !hasConstraints(parsed.constraints) && !parsed.refs.length
     && !mentions.length && !a.people.length && !parsed.topics.length && !parsed.flags.shorter && !parsed.flags.longer && !parsed.flags.short
-    && !parsed.flags.open && !parsed.flags.request && compareTitles.length < 2;
+    && !parsed.flags.open && !parsed.flags.request && compareTitles.length < 2 && !prevRef;
   if (plain && (parsed.flags.meta || parsed.flags.thanks || (parsed.flags.offTopic && !PRONOUN_RE.test(lower)))) {
     a.intent = parsed.flags.meta ? 'about' : parsed.flags.thanks ? 'thanks' : 'offtopic';
     return a;
   }
   a.greeting = !!parsed.flags.greeting;
 
-  // 1. Compare two or three titles.
+  // 1. Compare two or three titles. A title that isn't on Lumina is named as such; the rest
+  //    are compared (or, if only one is here, described).
+  const compareAsk = STRONG_COMPARE_RE.test(lower) || (COMPARE_RE.test(lower) && !wantsSimilar);
   if (compareTitles.length >= 2) a.compare = compareTitles;
-  else if (mentions.length >= 2 && COMPARE_RE.test(lower)) a.compare = mentions.slice(0, 3);
+  else if (compareAsk && unknownTitles.length && mentions.length + unknownTitles.length >= 2) {
+    a.compareMissing = true;
+    if (mentions.length >= 2) a.compare = mentions.slice(0, 3);
+    else {
+      a.intent = 'discuss';
+      a.target = mentions[0] || null;
+      if (!a.target) a.unknown = unknownTitles[0];
+      return a;
+    }
+  } else if (mentions.length >= 2 && compareAsk) a.compare = mentions.slice(0, 3);
   else if (state.prevRecs.length >= 2 && (/\bcompare\b.*\b(?:top (?:two|three|2|3)|first (?:two|three)|them|these|those)\b/.test(lower) || /\bwhich (?:one |of (?:them|these|those|the two|the three) )?(?:is|has|would|should)\b/.test(lower))) {
     a.compare = state.prevRecs.slice(0, /\b(?:three|3)\b/.test(lower) ? 3 : 2);
   }
@@ -780,14 +1105,13 @@ export function analyze(titles, payload = {}, signals = {}) {
   }
 
   // 2. A single title the message is about.
-  const refersToContext = contextTitle && (PRONOUN_RE.test(lower) || mentions.includes(contextTitle) || (parsed.topics.length > 0 && (!parsed.facets.length || !parsed.flags.request)) || SIMILAR_RE.test(lower));
-  const target = mentions[0] || (refersToContext ? contextTitle : null) || prevRef;
-  const wantsSimilar = SIMILAR_RE.test(lower);
+  const refersToContext = contextTitle && (PRONOUN_RE.test(lower) || mentions.includes(contextTitle) || (parsed.topics.length > 0 && (!parsed.facets.length || !parsed.flags.request)) || SIMILAR_RE.test(simText));
+  const target = mentions[0] || (ord && prevRef) || (refersToContext ? contextTitle : null) || prevRef;
   const asksAbout = parsed.topics.length > 0 || /\?|\btell me\b|\bexplain\b|\bdescribe\b|\bwhat(?:'s| is)\b/.test(lower);
-  const nextWords = /\bnext\b|\bafter\b|\blike\b|\bsimilar\b|\bmore\b/.test(lower);
+  const nextWords = /\bnext\b|\bafter\b|\blike\b|\bsimilar\b|\bmore\b/.test(simText);
 
-  if (unknownNow && !target) {
-    a.unknown = unknownNow.text;
+  if (unknownTitles.length && !target) {
+    a.unknown = unknownTitles[0];
     a.intent = wantsSimilar || !asksAbout ? 'similar' : 'discuss';
   } else if (target && wantsSimilar && (!parsed.topics.length || nextWords)) {
     a.intent = 'similar';
@@ -799,7 +1123,7 @@ export function analyze(titles, payload = {}, signals = {}) {
 
   if (a.intent === 'discuss' && a.target) {
     // A family question about a title that is not for younger viewers: offer suitable picks.
-    if (parsed.topics.includes('audience') && Number(a.target.minAge ?? 18) > 8) {
+    if (parsed.topics.includes('audience') && a.kidsQuestion && Number(a.target.minAge ?? 18) > 8) {
       state.constraints = { maxAge: 8 };
       state.facets = new Map();
       a.ranked = rankTitles(a, { similarTo: a.target });
@@ -811,8 +1135,9 @@ export function analyze(titles, payload = {}, signals = {}) {
 
   if (a.intent === 'similar' && a.target) {
     const rt = a.target.runtimeMin;
-    if (parsed.flags.shorter && !parsed.constraints.maxRuntime && Number.isFinite(rt)) state.constraints.maxRuntime = Math.max(1, rt - 1);
-    if (parsed.flags.longer && !parsed.constraints.minRuntime && Number.isFinite(rt)) state.constraints.minRuntime = rt + 1;
+    const total = totalRuntime(a.target);
+    if (parsed.flags.shorter && !has(parsed.constraints.maxRuntime) && Number.isFinite(rt)) state.constraints.maxRuntime = Math.max(0, Math.ceil(rt) - 1);
+    if (parsed.flags.longer && !has(parsed.constraints.minRuntime) && Number.isFinite(total)) state.constraints.minRuntime = Math.floor(total) + 1;
     a.ranked = rankTitles(a, { similarTo: a.target });
     return a;
   }
@@ -823,10 +1148,19 @@ export function analyze(titles, payload = {}, signals = {}) {
   }
 
   // 3. Recommendations.
+  // Someone the catalog doesn't credit, with nothing else to go on: say so and ask.
+  if (a.unknownPeople.length && !state.facets.size) {
+    a.intent = 'person';
+    return a;
+  }
   const nothingAsked = !state.facets.size && !hasConstraints(state.constraints) && !a.people.length && !state.flags.preferNew && !state.flags.preferRated;
   if (nothingAsked && state.unknownRef && state.carried) {
     a.intent = 'similar';
     a.unknown = state.unknownRef;
+    return a;
+  }
+  if (nothingAsked && state.flags.unparsedTime && !state.avoid.size) {
+    a.intent = 'clarify';
     return a;
   }
   if (nothingAsked) {
@@ -897,10 +1231,11 @@ function rankTitles(a, { similarTo = null, extraConstraints = {} }) {
   const eligible = (t) => !excluded.has(t.id) && !avoid.some((k) => facetMatch(t, k).strong);
   const want = facets.size;
   const matches = (x) => (similarTo ? (x.simScore > 0.2 && meaningfulOverlap(similarTo, x.t)) || x.strongKeys.length > 0 : want ? x.strongKeys.length > 0 : a.people.length ? x.people.length > 0 : true);
-  a.excludedWatched = [...sig.watched].some((id) => !state.flags.rewatch && pool.some((t) => t.id === id && passesHard(t, c)));
+  a.excludedWatched = !state.flags.rewatch && [...sig.watched].some((id) => sig.byId.has(id) && passesHard(sig.byId.get(id), c));
 
-  const score = (items) => items.map((t) => scoreTitle(a, t, { similarTo, facets })).sort(compareScored);
-  const candidates = (ignore) => score(pool.filter((t) => eligible(t) && passesHard(t, c, { ignore })));
+  // Every eligible title is scored once; each pass below only filters that ranked list.
+  const scored = pool.filter(eligible).map((t) => scoreTitle(a, t, { similarTo, facets })).sort(compareScored);
+  const candidates = (ignore) => scored.filter((x) => passesHard(x.t, c, { ignore }));
   const related = (x) => x.strongKeys.length > 0 || x.relatedHits.length > 0;
   let ranked = candidates(new Set()).filter(matches);
   a.full = ranked.filter((x) => (similarTo || !want ? true : x.strongKeys.length >= want));
@@ -937,8 +1272,11 @@ function rankTitles(a, { similarTo = null, extraConstraints = {} }) {
 function openPicks(a) {
   const { pool, sig, state } = a;
   const excluded = state?.flags?.rewatch ? new Set() : sig.watched;
+  // "Not sci-fi", "nothing animated": what the viewer ruled out stays out.
+  const avoid = [...(state?.avoid || [])];
+  const c = state?.constraints || {};
   const scored = pool
-    .filter((t) => !excluded.has(t.id) && !sig.disliked?.has(t.id))
+    .filter((t) => !excluded.has(t.id) && !sig.disliked?.has(t.id) && !avoid.some((k) => facetMatch(t, k).strong) && passesHard(t, c))
     .map((t) => ({ t, score: sig.taste.size ? Math.min(tasteScore(sig.taste, t), 30) / 12 : 0, strongKeys: [], hits: [], relatedHits: [], simScore: 0, people: [], taste: sig.taste.size ? tasteScore(sig.taste, t) : 0 }))
     .sort((x, y) => y.score - x.score || byEditorial(x.t, y.t));
   // Three different directions: vary the lead genre and the format.
@@ -962,8 +1300,8 @@ function rankForCompare(a) {
   const { state } = a;
   const c = state.constraints;
   const facets = state.facets;
-  const shorter = state.latest.parsed.flags.shorter || state.latest.parsed.flags.short || c.maxRuntime;
-  const longer = state.latest.parsed.flags.longer || c.minRuntime;
+  const shorter = state.latest.parsed.flags.shorter || state.latest.parsed.flags.short || has(c.maxRuntime);
+  const longer = state.latest.parsed.flags.longer || c.minRuntime > 0;
   const scored = a.compare.map((t) => {
     const x = scoreTitle(a, t, { facets });
     x.prefHits = [];
@@ -1015,8 +1353,8 @@ function describeRequest(state, people = []) {
   if (withs.length) head = `${head || 'something'} with ${list(withs)}`;
   const tail = [];
   if (people.length) tail.push(list(people.map((p) => `${p.director ? 'by' : 'with'} ${p.name}`)));
-  if (c.maxRuntime) tail.push(c.maxRuntime >= 119 && c.maxRuntime <= 120 ? 'under two hours' : `under ${minutesPhrase(c.maxRuntime % 5 === 4 ? c.maxRuntime + 1 : c.maxRuntime)}`);
-  if (c.minRuntime) tail.push(`of at least ${minutesPhrase(c.minRuntime)}`);
+  const length = runtimePhrase(c);
+  if (length) tail.push(length);
   if (c.minSeasons) tail.push('with several seasons');
   if (c.maxSeasons === 1) tail.push('with a single season');
   if (c.minHeight >= 2160) tail.push('in 4K');
@@ -1077,7 +1415,9 @@ function reasonFor(a, x, { closest = false, similarTo = null } = {}) {
   }
   if (closest) lead = `Closest option: ${lowerFirst(lead)}`;
   const len = lengthShort(t);
-  if (len) parts.push(c.maxRuntime && t.type !== 'series' && Number.isFinite(t.runtimeMin) ? `runs ${minutesPhrase(t.runtimeMin)}` : len);
+  if (len) parts.push(has(c.maxRuntime) && t.type !== 'series' && Number.isFinite(t.runtimeMin) ? `runs ${minutesPhrase(t.runtimeMin)}` : len);
+  // A series meets a minimum length by its whole running time: say what that is.
+  if (c.minRuntime > 0 && t.type === 'series' && t.episodeCount > 0 && Number.isFinite(t.runtimeMin)) parts.push(`about ${minutesPhrase(totalRuntime(t))} in all`);
   if (verified4k(t)) parts.push('available in 4K');
   else if (c.minHeight >= 2160 && mentions4k(t)) parts.push('4K is mentioned in its description, but the stream isn’t verified yet');
   else if (c.minHeight >= 2160) parts.push('resolution detected at playback');
@@ -1099,7 +1439,8 @@ function followUps(a, recs) {
   const c = a.state?.constraints || {};
   const out = [];
   const top = recs[0]?.title;
-  if (top && !(top.type === 'movie' && top.runtimeMin <= 5)) out.push('Something shorter');
+  // Not offered when nothing could be shorter (a one-minute film, or one-minute episodes).
+  if (top && !(top.runtimeMin <= 5)) out.push('Something shorter');
   out.push(c.type === 'series' ? 'What about a film instead?' : 'What about a series instead?');
   if ([...(a.state?.facets?.keys() || [])].some((k) => INTENSE_CLUSTER.includes(k))) out.push('Less intense');
   if (top) out.push(`More like ${top.title}`);
@@ -1151,8 +1492,13 @@ export function composeResponse(a) {
   else if (a.intent === 'discuss' && a.target) out = composeDiscuss(a);
   else if (a.unknown && !a.ranked.length) out = composeUnknown(a);
   else if (a.intent === 'similar' && a.target) out = composeSimilar(a);
+  else if (a.intent === 'person') out = composePerson(a);
+  else if (a.intent === 'clarify') out = composeClarifyLength(a);
   else if (a.intent === 'open') out = composeOpen(a);
   else out = composeRecommend(a);
+  // Every title the viewer named that isn't on Lumina is said so plainly, whatever the answer.
+  const missing = [...new Set([...(a.unknowns || []), a.unknown].filter(Boolean))];
+  if (missing.length && !missing.every((n) => out.reply.includes(quote(n)))) out.reply = `${notOn(a, missing)}. ${out.reply}`;
   const result = {
     reply: out.reply,
     recommendations: (out.recommendations || []).slice(0, MAX_RECOMMENDATIONS),
@@ -1163,8 +1509,40 @@ export function composeResponse(a) {
     intent: a.intent,
   };
   if (out.comparison) result.comparison = out.comparison;
-  if (a.unknown) result.notInCatalog = [a.unknown];
+  if (missing.length) result.notInCatalog = missing;
+  if (a.unknownPeople?.length) result.peopleNotInCatalog = a.unknownPeople.map((p) => p.name);
   return result;
+}
+
+/** "“Interstellar” isn’t available on Lumina" (or "on this profile" under parental limits). */
+function notOn(a, names) {
+  const where = a.restricted ? 'on this profile' : 'on Lumina';
+  const quoted = names.map(quote);
+  return quoted.length === 1 ? `${quoted[0]} isn’t available ${where}` : `${list(quoted)} aren’t available ${where}`;
+}
+
+/** "No title on Lumina lists Tom Hanks as a director or cast member." */
+function personNote(a) {
+  const names = list(a.unknownPeople.map((p) => p.name));
+  return `No title ${a.restricted ? 'available on this profile' : 'on Lumina'} lists ${names} as a director or cast member.`;
+}
+
+function composePerson(a) {
+  return {
+    reply: `${personNote(a)} I won’t suggest titles that aren’t here. Tell me what you enjoy about their work — the genre, the mood or the pace — and I’ll find the closest titles in the catalog.`,
+    recommendations: [],
+    clarifyingQuestion: 'What do you enjoy most about their films?',
+    suggestions: ['Something gripping', 'Something with a complex plot', 'Something funny', 'What should I watch tonight?'],
+  };
+}
+
+function composeClarifyLength() {
+  return {
+    reply: 'I couldn’t tell how long you’d like it to be. Could you put it another way — for example “under 90 minutes” or “between 10 and 20 minutes”?',
+    recommendations: [],
+    clarifyingQuestion: 'How long would you like it to be?',
+    suggestions: ['Under 30 minutes', 'Under 90 minutes', 'Under two hours', 'Length doesn’t matter'],
+  };
 }
 
 function composeAbout(a) {
@@ -1197,6 +1575,15 @@ function composeOffTopic() {
 
 function composeOpen(a) {
   const picks = a.ranked.slice(0, 3);
+  const avoided = [...(a.state?.avoid || [])].map((k) => FACETS[k].terms[0]);
+  if (!picks.length && avoided.length) {
+    return {
+      reply: `Everything I could suggest from the catalog right now is tagged ${list(avoided, 'or')}, so I have nothing else to offer. Tell me a mood or a length and I’ll look again.`,
+      recommendations: [],
+      clarifyingQuestion: 'What would you like instead?',
+      suggestions: ['Something calm', 'Something funny', 'Something with a complex plot'],
+    };
+  }
   if (!picks.length) {
     return {
       reply: 'You’ve already watched everything I would suggest from the catalog right now. Ask me for something to rewatch, or tell me a mood and I’ll look again.',
@@ -1207,8 +1594,9 @@ function composeOpen(a) {
   }
   const personal = a.sig.taste.size && picks.some((x) => x.taste > 0);
   const names = picks.map((x) => x.t.title);
+  const lead = avoided.length ? `Leaving out anything tagged ${list(avoided, 'or')}, here` : personal ? 'Going by what you’ve been watching, here' : 'Here';
   return {
-    reply: `${a.greeting ? 'Hello. ' : ''}${personal ? 'Going by what you’ve been watching, here' : 'Here'} are ${picks.length === 3 ? 'three' : picks.length === 2 ? 'two' : 'a'} different direction${picks.length === 1 ? '' : 's'} from the Lumina catalog: ${list(names)}. ${names[0]} is ${describeBrief(picks[0].t)}.`,
+    reply: `${a.greeting ? 'Hello. ' : ''}${lead} are ${picks.length === 3 ? 'three' : picks.length === 2 ? 'two' : 'a'} different direction${picks.length === 1 ? '' : 's'} from the Lumina catalog: ${list(names)}. ${names[0]} is ${describeBrief(picks[0].t)}.`,
     recommendations: picks.map((x) => recItem(a, x)),
     clarifyingQuestion: 'Something calm, or something gripping?',
     suggestions: ['Something calm', 'Something gripping', 'Something funny', 'A series to settle into'],
@@ -1222,11 +1610,26 @@ function composeRecommend(a) {
   const { tail, typeNoun } = describeRequest(state, a.people);
   const closest = !a.full.length;
   const source = closest ? (a.closest.length ? a.closest : a.partial) : a.full;
+  const unknownNote = a.unknown ? `${notOn(a, [a.unknown])}, so I’ve gone by what you described. ` : '';
+  const agePhrase = c.maxAge !== undefined && c.maxAge !== null;
+  const lengthNote = state.flags.unparsedTime && !runtimePhrase(c) ? ' I couldn’t tell what length you meant, so I haven’t filtered by it.' : '';
+
+  // Someone the catalog doesn't credit: everything offered is a clearly labelled closest option.
+  if (a.unknownPeople?.length && !a.people.length) {
+    const picks = source.slice(0, 3);
+    return {
+      reply: `${unknownNote}${personNote(a)}${picks.length
+        ? ` These are the closest options in the catalog for ${summary}, clearly labelled.`
+        : ` I couldn’t find ${summary.replace(/^something\b/, 'anything')} in the catalog either, and I won’t suggest titles that aren’t here.`}${lengthNote}`,
+      recommendations: picks.map((x) => recItem(a, x, { closest: true })),
+      clarifyingQuestion: picks.length ? '' : 'What else would you enjoy — a mood, a genre or a length?',
+      suggestions: picks.length ? followUps(a, picks.map((x) => recItem(a, x, { closest: true }))) : ['Something calm', 'Something gripping', 'What should I watch tonight?'],
+    };
+  }
+
   const picks = source.slice(0, closest ? 3 : MAX_RECOMMENDATIONS);
   const recs = picks.map((x) => recItem(a, x, { closest }));
   const sentences = [];
-  const unknownNote = a.unknown ? `${quote(a.unknown)} isn’t available on Lumina, so I’ve gone by what you described. ` : '';
-  const agePhrase = c.maxAge !== undefined && c.maxAge !== null;
 
   if (!picks.length) {
     return {
@@ -1278,7 +1681,7 @@ function composeRecommend(a) {
   }
   if (a.excludedWatched && !state.flags.rewatch) sentences.push('I’ve left out titles you’ve already watched.');
   return {
-    reply: sentences.slice(0, 4).join(' '),
+    reply: `${sentences.slice(0, 4).join(' ')}${lengthNote}`,
     recommendations: recs,
     clarifyingQuestion: '',
     suggestions: followUps(a, recs),
@@ -1316,18 +1719,29 @@ function composeSimilar(a) {
 
 function composeUnknown(a) {
   const name = a.unknown;
+  const names = [...new Set([...(a.unknowns || []), name].filter(Boolean))];
+  const missing = notOn(a, names);
+  if (a.compareMissing) {
+    return {
+      reply: `${missing}, so I can’t compare ${names.length > 1 ? 'them' : 'it'} from the catalog — and I won’t guess. Name titles that are on Lumina, or tell me what you’re in the mood for, and I’ll help you choose.`,
+      recommendations: [],
+      clarifyingQuestion: 'What are you in the mood for?',
+      suggestions: ['Something calm', 'Something with a complex plot', 'What should I watch tonight?'],
+    };
+  }
   if (a.intent === 'discuss') {
     return {
-      reply: `${quote(name)} isn’t available on Lumina, so I can’t tell you about it from the catalog — and I won’t guess. Tell me what you’re in the mood for and I’ll find something that is here.`,
+      reply: `${missing}, so I can’t tell you about ${names.length > 1 ? 'them' : 'it'} from the catalog — and I won’t guess. Tell me what you’re in the mood for and I’ll find something that is here.`,
       recommendations: [],
       clarifyingQuestion: 'What kind of film or series are you looking for?',
       suggestions: ['Something calm', 'Something with a complex plot', 'What should I watch tonight?'],
     };
   }
+  const loved = /\b(?:loved|liked|enjoyed|adored|like|similar|fan of|reminds?|vein|style|spirit|vibe)\b/i.test(a.state?.latest?.text || '');
   return {
-    reply: `${quote(name)} isn’t available on Lumina, so I can’t match it directly — and I’d rather not guess at what you loved about it. Tell me what drew you in, and I’ll find the closest titles that are in the catalog.`,
+    reply: `${missing}, so I can’t ${loved ? 'match it directly' : 'offer it'} — and I won’t guess at titles from outside the catalog. Tell me what draws you to it, and I’ll find the closest titles that are in the catalog.`,
     recommendations: [],
-    clarifyingQuestion: `What did you enjoy most about ${name}?`,
+    clarifyingQuestion: loved ? `What did you enjoy most about ${name}?` : `What draws you to ${name}?`,
     suggestions: ['The big ideas and mysteries', 'The emotional story', 'The visuals', 'The music'],
   };
 }
@@ -1337,7 +1751,11 @@ function composeDiscuss(a) {
   const t = a.target;
   let topics = a.topics.filter((k) => k !== 'availability' || a.topics.length === 1);
   if (!topics.length) topics = ['overview'];
-  const reply = topics.slice(0, 3).map((topic) => discussTopic(a, t, topic)).join(' ');
+  let reply = topics.slice(0, 3).map((topic) => discussTopic(a, t, topic)).join(' ');
+  if (a.compareMissing && a.unknowns.length) {
+    // "Compare Sintel and Interstellar" with only Sintel here: say so, then describe Sintel.
+    reply = `${notOn(a, a.unknowns)}, so I can’t compare ${a.unknowns.length > 1 ? 'them' : 'it'} with ${t.title}. Here’s what the catalog records about ${t.title}: ${reply}`;
+  }
   const recs = topics.includes('audience') && a.ranked.length ? a.ranked.slice(0, 3).map((x) => recItem(a, x)) : [];
   const options = [
     ['story', `What’s ${t.title} about?`],
@@ -1411,8 +1829,13 @@ function discussTopic(a, t, topic) {
       const family = (t.moods || []).includes('family-friendly') || genres.some((g) => /family/i.test(g));
       const kidOk = Number(t.minAge ?? 18) <= 8;
       const base = `${name} is rated ${t.ageRating} (${lowerFirst(ratingLabel(t.ageRating))}).${advisory}`;
-      if (kidOk) return `${family ? 'Yes — ' : ''}${base}${family ? ' The catalog also tags it as family-friendly.' : ''}`;
-      return `${base}${a.ranked.length ? ' For younger viewers, these catalog titles are a better fit:' : ' The catalog has nothing similar rated for younger viewers.'}`;
+      const familyNote = family ? ' The catalog also tags it as family-friendly.' : '';
+      // A worry ("is it too scary?") is answered with the rating and moods, never a bare
+      // "Yes", which would read as "yes, it is scary".
+      const moodNote = a.audienceAsk === 'concern' && moods.length ? ` Its listed moods are ${list(moods.slice(0, 4))}.` : '';
+      if (kidOk) return `${a.audienceAsk === 'suitable' && family ? 'Yes — ' : ''}${base}${familyNote}${moodNote}`;
+      const younger = a.kidsQuestion ? (a.ranked.length ? ' For younger viewers, these catalog titles are a better fit:' : ' The catalog has nothing similar rated for younger viewers.') : '';
+      return `${base}${moodNote}${younger}`;
     }
     case 'languages': {
       const audio = langNames(t.audioLanguages);

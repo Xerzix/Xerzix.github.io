@@ -253,7 +253,9 @@ function loginView(ctx, root, next) {
         onTotp: () => codeF.setError('Enter the 6-digit code.'),
         onError: (err) => {
           if (err.code === 'INVALID_TOTP') {
-            codeF.setError('That code did not match. Codes change every 30 seconds — try the current one.');
+            codeF.setError(err.extra?.reused
+              ? 'That code has already been used. Wait for the next code in your authenticator app.'
+              : 'That code did not match. Codes change every 30 seconds — try the current one.');
             codeF.control.select();
             codeF.control.focus();
           } else totpAlert.replaceChildren(describeError(err));

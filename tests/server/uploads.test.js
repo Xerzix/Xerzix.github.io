@@ -345,3 +345,47 @@ test('a real encoded MP4 is probed (skipped without ffmpeg)', { skip: !FFMPEG &&
   assert.deepEqual([file.probe.width, file.probe.height, file.probe.videoCodec, file.probe.audioCodec], [640, 360, 'h264', 'aac']);
   assert.ok(Math.abs(file.probe.durationS - 2) < 0.2);
 });
+
+// ffprobe-backed checks: FFPROBE_PATH, ffprobe next to FFMPEG_PATH, or ffprobe on PATH.
+const FFPROBE = process.env.FFPROBE_PATH
+  || (process.env.FFMPEG_PATH && existsSync(join(process.env.FFMPEG_PATH, '..', 'ffprobe')) ? join(process.env.FFMPEG_PATH, '..', 'ffprobe') : '')
+  || (spawnSync('ffprobe', ['-version'], { stdio: 'ignore' }).status === 0 ? 'ffprobe' : '');
+
+test('with ffprobe configured, a video it cannot read is rejected even behind a valid header', { skip: !FFPROBE && 'ffprobe not available (set FFPROBE_PATH)' }, async () => {
+  const before = config.media.ffprobePath;
+  config.media.ffprobePath = FFPROBE;
+  try {
+    const { c, sub } = await creatorWithDraft();
+    const junk = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), randomBytes(200_000)]);
+    const { body } = await c.post('/api/uploads', { filename: 'master.mkv', size: junk.length, purpose: 'submission', submissionId: sub.id, role: 'feature' });
+    const r = await sendAll(c, body.id, junk);
+    assert.equal(r.status, 422);
+    assert.equal(r.body.error.code, 'UPLOAD_REJECTED');
+    assert.match(r.body.error.message, /could not read a video stream/);
+    assert.equal((await c.get(`/api/creators/submissions/${sub.id}`)).body.files.length, 0, 'nothing counts towards submitting');
+    assert.ok(!storageFiles('uploads').includes(`${body.id}.part`));
+  } finally {
+    config.media.ffprobePath = before;
+  }
+});
+
+test('probe errors shown to the creator never contain server paths', async () => {
+  const before = config.media.ffprobePath;
+  config.media.ffprobePath = join(t.dir, 'missing-tools', 'ffprobe'); // configured but absent: the MP4 parser takes over
+  try {
+    const { c, sub } = await creatorWithDraft();
+    const data = fakeMp4(60_000);
+    const { body } = await c.post('/api/uploads', { filename: 'clip.mp4', size: data.length, purpose: 'submission', submissionId: sub.id, role: 'feature' });
+    assert.equal((await sendAll(c, body.id, data)).status, 204);
+    const detail = await c.get(`/api/creators/submissions/${sub.id}`);
+    const [file] = detail.body.files;
+    assert.equal(file.probe.source, 'mp4-parser');
+    assert.ok(file.probe.ffprobeError, 'the failure is still recorded');
+    const json = JSON.stringify(detail.body);
+    assert.equal(json.includes(t.dir), false);
+    assert.equal(json.includes(config.storageDir), false);
+    assert.equal(json.includes(body.id + '.part'), false);
+  } finally {
+    config.media.ffprobePath = before;
+  }
+});

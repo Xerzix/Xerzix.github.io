@@ -247,3 +247,167 @@ test('service: hosting is capped per account and codes avoid ambiguous character
     svc.stop();
   }
 });
+
+// ── Kids profiles, invisible chat and event-stream limits ──
+
+/** A further profile (optionally a kids profile) on an existing account, with its own session. */
+async function profileClient(accountId, { name, kids = false }) {
+  const { newId, randomToken, sha256 } = await import('../../server/lib/crypto.js');
+  const ts = new Date().toISOString();
+  const profileId = newId('prf');
+  t.db.run('INSERT INTO profiles (id, account_id, name, avatar, max_age, is_kids, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', profileId, accountId, name, 'sakura', kids ? 7 : null, kids ? 1 : 0, ts, ts);
+  const token = randomToken(32);
+  t.db.run(
+    `INSERT INTO sessions (id, account_id, token_hash, profile_id, created_at, last_seen_at, expires_at, elevated_until, user_agent, ip) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'test', '127.0.0.1')`,
+    newId('ses'), accountId, sha256(token), profileId, ts, ts, new Date(Date.now() + 86_400_000).toISOString(),
+  );
+  const c = t.client();
+  c.jar.set('lumina_sid', token);
+  Object.assign(c, { accountId, profileId });
+  return c;
+}
+
+/** Reads events up to and including the first one matching `pred`; returns them all. */
+async function readUntil(stream, pred) {
+  const out = [];
+  for (;;) {
+    const ev = await stream.next();
+    out.push(ev);
+    if (pred(ev)) return out;
+  }
+}
+const systemSays = (re) => (e) => e.event === 'chat' && e.data.system && re.test(e.data.text);
+
+test('kids profiles cannot start parties, join strangers or chat, and leave when a stranger becomes host', async () => {
+  const kid = await t.userClient({ maxAge: 7, displayName: 'Kid' });
+  const parent = await profileClient(kid.accountId, { name: 'Parent' });
+  const stranger = await t.userClient({ displayName: 'Stranger' });
+
+  const create = await kid.post('/api/parties', { titleId: 'hanami' });
+  assert.equal(create.status, 403);
+  assert.equal(create.body.error.code, 'PROFILE_RESTRICTED');
+
+  // A stranger's party is closed to kids profiles.
+  const strangerParty = (await stranger.post('/api/parties', { titleId: 'hanami' })).body.code;
+  const refused = await kid.post(`/api/parties/${strangerParty}/join`);
+  assert.equal(refused.status, 403);
+  assert.equal(refused.body.error.code, 'PROFILE_RESTRICTED');
+  await stranger.del(`/api/parties/${strangerParty}`);
+
+  // A party started on the kid's own account is open to them, without chat.
+  const { code } = (await parent.post('/api/parties', { titleId: 'hanami' })).body;
+  const joined = await kid.post(`/api/parties/${code}/join`);
+  assert.equal(joined.status, 200, JSON.stringify(joined.body));
+  assert.equal(joined.body.party.you.canChat, false);
+  assert.equal((await stranger.post(`/api/parties/${code}/join`)).status, 200);
+  assert.equal((await stranger.get(`/api/parties/${code}`)).body.party.you.canChat, true);
+  assert.equal((await stranger.post(`/api/parties/${code}/chat`, { text: 'hi kid, what is your name?' })).status, 200);
+  assert.equal((await parent.post(`/api/parties/${code}/chat`, { text: 'popcorn time' })).status, 200);
+  const kidChat = await kid.post(`/api/parties/${code}/chat`, { text: 'hi! I am 7' });
+  assert.equal(kidChat.status, 403);
+  assert.equal(kidChat.body.error.code, 'PROFILE_RESTRICTED');
+
+  // The kid's stream carries the room's system messages only — no member's text, neither in
+  // the history nor live. (A settings change posts a system message that marks the end.)
+  const stream = await openEvents(kid, code);
+  try {
+    await parent.patch(`/api/parties/${code}`, { allowGuestControl: true });
+    let events = await readUntil(stream, systemSays(/Everyone can now control/));
+    let chats = events.filter((e) => e.event === 'chat');
+    assert.ok(chats.some((e) => e.data.history && /Stranger joined/.test(e.data.text)), 'system history still arrives');
+    assert.ok(chats.every((e) => e.data.system), JSON.stringify(chats));
+    await stranger.post(`/api/parties/${code}/chat`, { text: 'still there?' });
+    await parent.patch(`/api/parties/${code}`, { allowGuestControl: false });
+    events = await readUntil(stream, systemSays(/Only the host controls/));
+    chats = events.filter((e) => e.event === 'chat');
+    assert.ok(chats.every((e) => e.data.system), JSON.stringify(chats));
+
+    // The parent leaves and the stranger becomes host: the kids profile is taken out.
+    await parent.post(`/api/parties/${code}/leave`);
+    const ended = await stream.until('ended');
+    assert.equal(ended.data.reason, 'restricted');
+  } finally {
+    stream.close();
+  }
+  const after = (await kid.get(`/api/parties/${code}`)).body.party;
+  assert.equal(after.you.isMember, false);
+  assert.equal(after.host.name, 'Stranger');
+  assert.equal((await kid.post(`/api/parties/${code}/join`)).status, 403);
+});
+
+test('chat refuses messages made only of invisible characters and strips hidden ones', async () => {
+  const host = await t.userClient();
+  const { code } = (await host.post('/api/parties', { titleId: 'hanami' })).body;
+  for (const text of ['​​', '⁠ ﻿', '‮​', 'ㅤ', '́']) {
+    const r = await host.post(`/api/parties/${code}/chat`, { text });
+    assert.equal(r.status, 422, JSON.stringify(text));
+  }
+  const r = await host.post(`/api/parties/${code}/chat`, { text: 'he​llo ‮world' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.message.text, 'hello world');
+  // Joiners inside emoji sequences are kept.
+  const family = '\u{1F469}‍\u{1F467}';
+  assert.equal((await host.post(`/api/parties/${code}/chat`, { text: family })).body.message.text, family);
+});
+
+test('event streams: a member keeps at most three, the server caps the total, opening is rate limited', async () => {
+  // Service: a fourth stream replaces the member's oldest, which is told so and closed.
+  const svc = new PartyService({ limits: { maxStreams: 4 } });
+  try {
+    const room = svc.create({ titleId: 'hanami', profile: profile('p1'), accountId: 'a1' });
+    svc.join(room.code, profile('p2'), 'a2');
+    const sinks = [];
+    const unsubs = [];
+    for (let i = 0; i < 4; i++) {
+      const sink = { events: [], closed: false };
+      sink.send = (e, d) => sink.events.push([e, d]);
+      sink.close = () => { sink.closed = true; };
+      sinks.push(sink);
+      unsubs.push(svc.subscribe(room.code, 'p1', sink));
+    }
+    assert.equal(sinks[0].closed, true);
+    assert.deepEqual(sinks[0].events.at(-1), ['replaced', { reason: 'too_many_streams' }]);
+    assert.ok(sinks.slice(1).every((s) => !s.closed));
+    assert.equal(room.subscribers.size, 3);
+    unsubs[0](); // the replaced stream's close handler runs later
+    assert.equal(room.members.get('p1').connections, 3);
+    // Server-wide cap.
+    svc.subscribe(room.code, 'p2', { send() {}, close() {} });
+    assert.throws(() => svc.subscribe(room.code, 'p2', { send() {}, close() {} }), (e) => e.status === 503 && e.code === 'PARTY_CAPACITY');
+  } finally {
+    svc.stop();
+  }
+
+  // HTTP: at the cap the refusal is a normal JSON error, not a broken stream.
+  const host = await t.userClient();
+  const { code } = (await host.post('/api/parties', { titleId: 'hanami' })).body;
+  const limits = t.services.parties.limits;
+  const saved = limits.maxStreams;
+  limits.maxStreams = 0;
+  try {
+    const busy = await host.get(`/api/parties/${code}/events`);
+    assert.equal(busy.status, 503);
+    assert.equal(busy.body.error.code, 'PARTY_CAPACITY');
+  } finally {
+    limits.maxStreams = saved;
+  }
+
+  // HTTP: opening streams is rate limited per account.
+  const { limiter } = await import('../../server/lib/security.js');
+  process.env.LUMINA_TEST_RATE_LIMITS = '1';
+  limiter.reset();
+  try {
+    const statuses = [];
+    for (let i = 0; i < 31; i++) {
+      const ac = new AbortController();
+      const res = await fetch(`${t.base}/api/parties/${code}/events`, { headers: { Cookie: `lumina_sid=${host.jar.get('lumina_sid')}` }, signal: ac.signal });
+      statuses.push(res.status);
+      ac.abort();
+    }
+    assert.deepEqual(statuses.slice(0, 30), Array(30).fill(200));
+    assert.equal(statuses[30], 429);
+  } finally {
+    delete process.env.LUMINA_TEST_RATE_LIMITS;
+    limiter.reset();
+  }
+});

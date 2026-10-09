@@ -1,8 +1,9 @@
 // Per-viewing-session measurements and progress saving.
 //
 // Telemetry (server mode only) is objective: what this player measured — startup time,
-// rebuffering, bitrate, dropped frames, bytes and errors. It is sent every 60 s and when the
-// viewer leaves, and never mixed with members' subjective quality reports.
+// rebuffering, the measured bitrate of what was played, dropped frames, bytes and errors.
+// The server issues the viewing-session id when loading starts; totals are sent every 60 s
+// and when the viewer leaves, and never mixed with members' subjective quality reports.
 // The latest measurements are also kept in sessionStorage so a member can choose to attach
 // them to a quality report ("Attach playback diagnostics from this device").
 import { api } from '../api/client.js';
@@ -11,19 +12,6 @@ import { clampDelta, uaSummary } from './helpers.js';
 export const DIAGNOSTICS_KEY = 'lumina.player.diagnostics';
 const FLUSH_MS = 60_000;
 const MAX_ERROR_REPORTS = 10;
-
-export function newSessionId() {
-  if (globalThis.crypto?.randomUUID) {
-    try {
-      return crypto.randomUUID();
-    } catch {
-      /* insecure context */
-    }
-  }
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('').replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5');
-}
 
 /** Fire-and-forget request that survives page unload (pagehide). Server mode only. */
 export function keepaliveJson(method, path, body) {
@@ -42,8 +30,9 @@ export function keepaliveJson(method, path, body) {
 
 export class Telemetry {
   constructor({ mode, media, titleId, episodeId }) {
-    this.enabled = mode === 'server' && !!media?.id;
-    this.sessionId = newSessionId();
+    this.enabled = mode === 'server' && !!media?.id && !!titleId;
+    this.reportErrors = mode === 'server' && !!titleId;
+    this.sessionId = null; // issued by the server (see open())
     this.ids = { mediaId: media?.id, titleId, episodeId: episodeId || undefined };
     this.loadStart = performance.now();
     this.startupMs = null;
@@ -61,6 +50,23 @@ export class Telemetry {
     this.errorsSent = 0;
     this.lastSnapshot = '';
     this.timer = this.enabled ? setInterval(() => this.flush(), FLUSH_MS) : null;
+    if (this.enabled) this.open();
+  }
+
+  /** Asks the server for a viewing session. Without one, nothing is reported. */
+  open() {
+    Promise.resolve(api.request?.('POST', '/api/playback/sessions/open', { body: this.ids }))
+      .then((res) => {
+        if (res?.sessionId) this.sessionId = res.sessionId;
+        else this.disable();
+      })
+      .catch(() => this.disable());
+  }
+
+  disable() {
+    this.enabled = false;
+    clearInterval(this.timer);
+    this.timer = null;
   }
 
   /** Autoplay was blocked: measure startup from the viewer's own play press instead. */
@@ -89,7 +95,10 @@ export class Telemetry {
     }
   }
 
-  /** Seconds of content actually played, with the bitrate/height in use at the time. */
+  /**
+   * Seconds of content actually played, with the height in use and the measured bitrate of
+   * that rendition (downloaded bytes over media duration; null when it was not measured).
+   */
   addWatched(delta, { bitrate, height } = {}) {
     if (!(delta > 0)) return;
     this.secondsWatched += delta;
@@ -127,7 +136,7 @@ export class Telemetry {
     this.errorCount++;
     this.errorCodes.push(String(err?.code || err?.type || 'unknown').slice(0, 64));
     if (this.errorCodes.length > 5) this.errorCodes.shift();
-    if (!this.enabled || this.errorsSent >= MAX_ERROR_REPORTS || !this.ids.titleId) return;
+    if (!this.reportErrors || this.errorsSent >= MAX_ERROR_REPORTS) return;
     this.errorsSent++;
     const code = String(err?.code || err?.type || 'unknown').replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 64) || 'unknown';
     api.quality.error({
@@ -168,14 +177,19 @@ export class Telemetry {
   }
 
   flush({ keepalive = false } = {}) {
-    if (!this.enabled) return;
+    if (!this.enabled || !this.sessionId) return;
     if (this.startupMs === null && !this.errorCount && !this.secondsWatched) return;
     const body = this.payload();
     const snapshot = JSON.stringify(body);
     if (snapshot === this.lastSnapshot) return;
     this.lastSnapshot = snapshot;
     if (keepalive) keepaliveJson('POST', '/api/playback/sessions', body);
-    else api.quality.session(body)?.catch?.(() => {});
+    else {
+      api.quality.session(body)?.catch?.((err) => {
+        // The session expired or was refused: stop reporting rather than retrying forever.
+        if (err?.code === 'SESSION_NOT_FOUND' || err?.code === 'SESSION_CONFLICT') this.disable();
+      });
+    }
   }
 
   /** Stores the latest measurements for the optional report attachment. */

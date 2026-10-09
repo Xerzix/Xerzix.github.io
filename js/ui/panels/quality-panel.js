@@ -74,16 +74,16 @@ function measuredCard(m) {
     h('h3', null, 'Measured by Lumina players (last 90 days)'));
   if (!m.sufficient) {
     return h('article', { class: 'lm-panel lm-quality__card' }, head,
-      h('p', { class: 'lm-quality__empty' }, h('strong', null, 'Not enough data yet.'), ` We publish measurements once at least ${m.threshold || 10} viewing sessions have been recorded`, m.sessions ? ` (${m.sessions} so far).` : '.'));
+      h('p', { class: 'lm-quality__empty' }, h('strong', null, 'Not enough data yet.'), ` We publish measurements once the players of at least ${m.threshold || 10} different signed-in members have recorded viewing sessions`, m.viewers ? ` (${m.viewers} so far).` : '.'));
   }
   return h('article', { class: 'lm-panel lm-quality__card' }, head,
     h('dl', { class: 'lm-quality__stats' },
-      stat('Viewing sessions', String(m.sessions)),
+      stat('Members measured', String(m.viewers), `${m.sessions} viewing session${m.sessions === 1 ? '' : 's'}`),
       stat('Time spent buffering', m.rebufferRatio === null ? '—' : pct(m.rebufferRatio, m.rebufferRatio < 0.01 ? 2 : 1), 'of viewing time'),
-      stat('Average bitrate', m.avgBitrateKbps ? formatBitrate(m.avgBitrateKbps * 1000) : '—'),
+      stat('Average bitrate', m.avgBitrateKbps ? formatBitrate(m.avgBitrateKbps * 1000) : '—', m.avgBitrateKbps ? 'of the video played' : null),
       stat('Median start time', m.medianStartupMs === null ? '—' : `${(m.medianStartupMs / 1000).toFixed(1)} s`),
       stat('Sessions with an error', m.errorRate === null ? '—' : pct(m.errorRate, 0))),
-    h('p', { class: 'lm-quality__foot' }, 'Recorded automatically by the player during playback. Varies with each viewer’s device and connection.'));
+    h('p', { class: 'lm-quality__foot' }, 'Recorded automatically by the players of signed-in members during playback, with each member counted once. Varies with each viewer’s device and connection.'));
 }
 
 function reportedCard(r) {

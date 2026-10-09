@@ -7,11 +7,12 @@ import { conflict, forbidden, HttpError, validation } from '../lib/errors.js';
 import { log } from '../lib/log.js';
 import { rateLimit } from '../lib/security.js';
 import { v } from '../lib/validate.js';
-import { AccountService, assertAccountPassword, assertTotp, normalizeEmail, sessionPayload, totpMatches } from '../services/accounts.js';
+import { AccountService, assertAccountPassword, assertTotp, consumeTotp, normalizeEmail, sessionPayload, totpError } from '../services/accounts.js';
 import { declareSettingConsumer, readPlatformSettings } from '../services/admin/settings.js';
 import { audit } from '../services/audit.js';
 import { sendMail } from '../services/mailer.js';
 import { notify } from '../services/notifications.js';
+import { cleanName, isRestricted, PARENTAL_UNLOCK_MINUTES } from '../services/profiles.js';
 import { assertPasswordPolicy, passwordProblem, PASSWORD_MAX } from '../services/passwords.js';
 
 const MIN = 60_000;
@@ -68,6 +69,10 @@ export default function register(app, { db, services, config }) {
       const problem = passwordProblem(raw.password, { email });
       if (problem) errors.password = problem;
     }
+    if (!errors.displayName && body.displayName !== undefined) {
+      body.displayName = cleanName(body.displayName);
+      if (!body.displayName) errors.displayName = 'Use at least one visible character.';
+    }
     // Consent must be an explicit JSON `true`, not a value that merely coerces to one.
     if (raw.acceptTerms !== true) errors.acceptTerms = 'Please accept the Terms of Service and Privacy Policy to continue.';
     if (Object.keys(errors).length) throw validation(errors);
@@ -123,6 +128,11 @@ export default function register(app, { db, services, config }) {
       throw invalidCredentials();
     }
 
+    // Parallel guesses read the row before the lock was set; re-check it now that the
+    // (slow) password check is over, so a lock taken meanwhile still holds.
+    const lockedNow = accounts.lockedUntil(account.id);
+    if (lockedNow) throw locked(lockedNow);
+
     // Only reveal suspension to someone who knows the password.
     if (account.status === 'suspended' && (!account.suspended_until || account.suspended_until > now())) {
       throw new HttpError(403, 'ACCOUNT_SUSPENDED', account.suspended_until
@@ -135,10 +145,11 @@ export default function register(app, { db, services, config }) {
 
     if (account.totp_enabled) {
       if (!body.totp) throw new HttpError(401, 'TOTP_REQUIRED', 'Enter the 6-digit code from your authenticator app.');
-      if (!totpMatches(account, body.totp)) {
+      const result = consumeTotp(db, account, body.totp);
+      if (result !== 'ok') {
         const until = accounts.recordFailedLogin(account);
         if (until) throw locked(until);
-        throw new HttpError(401, 'INVALID_TOTP', 'That code did not match. Check your authenticator app and try again.', { fields: { totp: 'That code did not match.' } });
+        throw totpError(result, 401, 'totp');
       }
     }
 
@@ -218,8 +229,11 @@ export default function register(app, { db, services, config }) {
   app.post('/api/auth/elevate', requireAuth, rateLimit('elevate', { max: 10, windowMs: 15 * MIN, by: 'account' }), async (ctx) => {
     const body = v.parse(v.object({ password: v.string().raw().max(1024), totp: v.string().max(16).optional() }), await ctx.body());
     await assertAccountPassword(ctx.account, body.password);
-    assertTotp(ctx.account, body.totp);
-    const elevatedUntil = accounts.elevate(ctx.session.id);
+    assertTotp(db, ctx.account, body.totp);
+    // While a kids or maturity-limited profile is active this unlocks parental controls, so
+    // keep it short; each parental-control change also ends it (see parentalGuard).
+    const minutes = isRestricted(ctx.profile) ? Math.min(PARENTAL_UNLOCK_MINUTES, config.session.elevatedMinutes) : config.session.elevatedMinutes;
+    const elevatedUntil = accounts.elevate(ctx.session.id, minutes);
     audit(db, ctx, 'auth.elevate', { targetType: 'session', targetId: ctx.session.id });
     return { elevatedUntil };
   });

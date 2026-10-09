@@ -38,6 +38,17 @@ function unavailable(ctx, { title, message, actions }) {
 }
 
 /**
+ * Whether a progress row is worth offering as "Resume": past the first 15 seconds (or 5% of a
+ * short video, so a 12-second episode can resume too) and not already at the end.
+ */
+export function isResumable(p) {
+  if (!p || p.completed || !(p.positionS > 0)) return false;
+  const ratio = p.durationS ? p.positionS / p.durationS : null;
+  if (ratio !== null && ratio >= 0.95) return false;
+  return p.positionS >= 15 || (ratio !== null && ratio >= 0.05);
+}
+
+/**
  * Works out what "Play" should do from per-episode progress rows.
  * Returns { label, href, episode, resume, positionS, durationS, upNextId, lastCompletedId, allDone, anyProgress }.
  */
@@ -45,7 +56,7 @@ export function playbackPlan(t, rows = []) {
   const byEp = new Map(rows.map((r) => [r.episodeId || '', r]));
   if (t.type !== 'series') {
     const p = byEp.get('') || library.progressFor(t.id);
-    const resume = p && !p.completed && p.positionS >= 15 && (!p.durationS || p.positionS / p.durationS < 0.95);
+    const resume = isResumable(p);
     return {
       label: resume ? 'Resume' : p?.completed ? 'Play again' : 'Play',
       href: playHref(t),
@@ -67,9 +78,11 @@ export function playbackPlan(t, rows = []) {
   let lastCompletedId = null;
   if (latest && !allDone) {
     const ep = episodes.find((e) => e.id === latest.episodeId);
-    if (ep && !latest.completed && latest.positionS >= 15) {
+    if (ep && !latest.completed && ep.hasMedia !== false) {
+      // The episode watched most recently is not finished: carry on with it (as the player
+      // does), resuming from the saved position when there is meaningful progress.
       target = ep;
-      resume = true;
+      resume = isResumable(latest);
     } else if (ep) {
       lastCompletedId = ep.id;
       // The next episode after the latest one that has not been finished yet.
@@ -184,6 +197,26 @@ function episodesSection(t, state) {
 }
 
 // ── Details ───────────────────────────────────────────────
+/** An absolute http(s) URL, or null. Licence fields are free text entered by staff. */
+export function webUrl(value) {
+  if (typeof value !== 'string' || !/^https?:\/\//i.test(value.trim())) return null;
+  try {
+    const u = new URL(value.trim());
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/** "Original source": a link when it is a web address, otherwise the text as written. */
+function sourceLine(source) {
+  if (!source || typeof source !== 'string' || !source.trim()) return null;
+  const url = webUrl(source);
+  return url
+    ? h('a', { class: 'lm-link lm-small', href: url, target: '_blank', rel: 'noopener noreferrer' }, 'Original source', icon('external', { size: 14 }))
+    : h('span', { class: 'lm-muted lm-small' }, `Original source: ${source.trim()}`);
+}
+
 function detailsSection(t) {
   const headingId = newUid('details');
   const rows = [];
@@ -227,9 +260,9 @@ function detailsSection(t) {
   if (lic.name || lic.attribution) {
     add('Licence & attribution',
       h('div', { class: 'lm-stack lm-stack--sm' },
-        lic.name ? (lic.url ? h('a', { class: 'lm-link', href: lic.url, target: '_blank', rel: 'noopener noreferrer license' }, lic.name, icon('external', { size: 14 })) : h('span', null, lic.name)) : null,
+        lic.name ? (webUrl(lic.url) ? h('a', { class: 'lm-link', href: webUrl(lic.url), target: '_blank', rel: 'noopener noreferrer license' }, lic.name, icon('external', { size: 14 })) : h('span', null, lic.name)) : null,
         lic.attribution ? h('span', { class: 'lm-muted' }, lic.attribution) : null,
-        lic.source ? h('a', { class: 'lm-link lm-small', href: lic.source, target: '_blank', rel: 'noopener noreferrer' }, 'Original source', icon('external', { size: 14 })) : null));
+        sourceLine(lic.source)));
   }
   return h('section', { class: 'lm-detail__section lm-container', 'aria-labelledby': headingId },
     sectionHead('Details', { id: headingId }),
@@ -293,10 +326,10 @@ export default async function render(ctx) {
   let episodes = null;
 
   const watchedBtn = button('Mark as watched', { variant: 'ghost', size: 'sm', icon: 'eye' });
+  // The label names the action ("Mark unwatched"), so the button is not also a pressed toggle.
   const setWatchedLabel = () => {
     const done = state.plan.allDone;
     watchedBtn.replaceChildren(icon(done ? 'eyeOff' : 'eye'), h('span', null, done ? 'Mark unwatched' : t.type === 'series' ? 'Mark series watched' : 'Mark as watched'));
-    watchedBtn.setAttribute('aria-pressed', String(done));
   };
 
   const renderPrimary = () => {
@@ -396,10 +429,12 @@ export default async function render(ctx) {
     } catch {
       /* follow state is optional */
     }
+    // A toggle button: the label stays "Follow series" and aria-pressed carries the state.
     followBtn = button('Follow series', { variant: 'ghost', size: 'sm', icon: 'bell', attrs: { title: 'Get notified when new episodes arrive' } });
     const paintFollow = () => {
-      followBtn.replaceChildren(icon(following ? 'check' : 'bell'), h('span', null, following ? 'Following' : 'Follow series'));
+      followBtn.replaceChildren(icon(following ? 'check' : 'bell'), h('span', null, 'Follow series'));
       followBtn.setAttribute('aria-pressed', String(following));
+      followBtn.title = following ? 'You are following this series. Select to stop notifications.' : 'Get notified when new episodes arrive';
     };
     paintFollow();
     followBtn.addEventListener('click', async () => {

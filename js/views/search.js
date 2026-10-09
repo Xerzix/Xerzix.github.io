@@ -215,14 +215,20 @@ export default async function render(ctx) {
       results.replaceChildren(startState());
       return;
     }
-    const query = { ...toSearchParams({ q: state.q.trim(), sort: state.sort || undefined, filters: state.filters }), page: state.page, pageSize: PAGE_SIZE };
+    // A fresh search always starts at page 1; "Load more" asks for the page after the last one
+    // shown. state.page only moves once that page has arrived, so a failure never skips one.
+    const page = append ? state.page + 1 : 1;
+    const query = { ...toSearchParams({ q: state.q.trim(), sort: state.sort || undefined, filters: state.filters }), page, pageSize: PAGE_SIZE };
     if (!append) {
       results.setAttribute('aria-busy', 'true');
+      // The old grid may stay visible while the new results load; its pager must not append to it.
+      moreFooter.hidden = true;
       if (!results.querySelector('.lm-grid')) results.replaceChildren(loading('Searching…'));
     }
     try {
       const r = await api.catalog.search(query, { signal: controller.signal });
       if (my !== seq) return;
+      state.page = page;
       results.removeAttribute('aria-busy');
       const term = state.q.trim();
       status.textContent = r.total
@@ -252,6 +258,14 @@ export default async function render(ctx) {
     } catch (err) {
       if (err.name === 'AbortError' || my !== seq) return;
       results.removeAttribute('aria-busy');
+      if (append && results.querySelector('.lm-grid')) {
+        // Keep everything already shown; "Load more" asks for the same page again.
+        moreCount.textContent = `${err.message || 'Something went wrong.'} Choose “Load more” to try again.`;
+        moreBtn.hidden = false;
+        moreFooter.hidden = false;
+        announce(moreCount.textContent);
+        return;
+      }
       results.replaceChildren(errorState(err, { retry: () => run() }));
     }
   }
@@ -265,7 +279,6 @@ export default async function render(ctx) {
     moreFooter.hidden = shown >= r.total;
   };
   moreBtn.addEventListener('click', async () => {
-    state.page += 1;
     moreBtn.classList.add('is-busy');
     try {
       await run({ append: true });

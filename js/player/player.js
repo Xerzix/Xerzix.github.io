@@ -271,6 +271,13 @@ export class LuminaPlayer {
     this.on(root, 'focusin', (e) => {
       if (!this.surface.contains(e.target)) this.showControls();
     });
+    // Keyboard focus keeps the controls up (see shouldStayVisible); once it leaves them, the
+    // usual hide timer starts again.
+    this.on(root, 'focusout', () => {
+      setTimeout(() => {
+        if (!this.destroyed && this.root.dataset.controls === 'visible') this.scheduleHide();
+      }, 0);
+    });
     this.on(root, 'mouseleave', () => {
       if (!this.video.paused) this.hideControls();
     });
@@ -584,7 +591,11 @@ export class LuminaPlayer {
   }
 
   setSpeed(rate) {
-    if (this.party) return;
+    if (this.party) {
+      // Everyone in a party plays at the same speed.
+      this.notify('Playback speed stays at normal in watch parties', 'speed');
+      return;
+    }
     this.video.playbackRate = rate;
     this.notify(`Speed ${rate === 1 ? 'normal' : `${rate}×`}`, 'speed');
   }
@@ -603,7 +614,8 @@ export class LuminaPlayer {
       const d = H.playedDelta(this.lastTime, t, v.playbackRate);
       if (d > 0) {
         this.saver?.addWatched(d);
-        this.telemetry?.addWatched(d, { bitrate: this.engine?.currentBitrate(), height: this.engine?.currentHeight() });
+        // Measured payload bitrate only: a playlist's declared BANDWIDTH is not a measurement.
+        this.telemetry?.addWatched(d, { bitrate: this.engine?.playingBitrate(), height: this.engine?.currentHeight() });
       }
     }
     this.lastTime = t;
@@ -1020,7 +1032,23 @@ export class LuminaPlayer {
 
   shouldStayVisible() {
     const v = this.video;
-    return v.paused || v.ended || !!this.errorShown || this.anyMenuOpen() || !!this.dialog || this.overControls || this.endScreenShown || this.autoplayBlocked || this.scrubbing;
+    return v.paused || v.ended || !!this.errorShown || this.anyMenuOpen() || !!this.dialog || this.overControls || this.endScreenShown || this.autoplayBlocked || this.scrubbing || this.keyboardFocusInChrome();
+  }
+
+  /**
+   * A keyboard user has focus on a player control: hiding the controls would hide the
+   * focused control and its focus ring (WCAG 2.4.7), so they stay up until focus leaves
+   * them or Esc puts them away.
+   */
+  keyboardFocusInChrome() {
+    if (this.pointerFocus) return false;
+    const a = document.activeElement;
+    if (!a || a === this.root || !this.root.contains(a) || !a.closest('.lm-player__chrome')) return false;
+    try {
+      return a.matches(':focus-visible');
+    } catch {
+      return true; // no :focus-visible support: Tab was the last interaction
+    }
   }
 
   showControls() {
@@ -1281,11 +1309,11 @@ export class LuminaPlayer {
       [['P'], 'Picture in picture'],
       [['N'], 'Next episode'],
       [['S'], 'Skip intro'],
-      [['Shift', '.'], 'Faster'],
-      [['Shift', ','], 'Slower'],
+      // Speed is fixed in watch parties (see setSpeed).
+      ...(this.party ? [] : [[['Shift', '.'], 'Faster'], [['Shift', ','], 'Slower']]),
       [['0 … 9'], 'Jump to 0 … 90 %'],
       [['I'], 'Stats for nerds'],
-      [['Esc'], 'Close menus or leave full screen'],
+      [['Esc'], 'Close menus, hide the controls or leave full screen'],
       [['?'], 'This list'],
     ];
     this.openPlayerDialog({
@@ -1548,7 +1576,8 @@ export class LuminaPlayer {
       subtitles: sub ? sub.label : 'Off',
       startup: tel?.startupMs !== null && tel?.startupMs !== undefined ? `${tel.startupMs} ms` : '—',
       rebuffers: tel ? `${tel.rebufferCount} (${tel.rebufferSeconds.toFixed(1)} s)` : '—',
-      session: tel ? tel.sessionId.slice(0, 8) : '—',
+      // Issued by the server once loading starts; never issued in Preview mode.
+      session: tel?.sessionId ? tel.sessionId.slice(0, 8) : '—',
       ahead,
       q,
     };
@@ -1704,6 +1733,11 @@ export class LuminaPlayer {
         } else if (this.statsVisible) {
           handled();
           this.toggleStats(false);
+        } else if (this.keyboardFocusInChrome() && !this.video.paused) {
+          // Put the controls away for keyboard users; Tab brings them back.
+          e.preventDefault();
+          document.activeElement.blur();
+          this.hideControls();
         }
         break;
       default:

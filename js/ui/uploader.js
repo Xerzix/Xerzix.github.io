@@ -3,8 +3,10 @@
 // reload (the upload id is remembered on this device; choosing the same file again continues
 // from the server's offset). Speaks the tus-style protocol through api.uploads.*.
 //
-//   const up = createUploader({ submissionId, role: 'feature' | () => role, onComplete });
+//   const up = createUploader({ submissionId, role: 'feature' | () => role, onComplete, onChange });
 //   container.append(up);   … later: up.refresh() after the role changes; up.destroy() on leave.
+//   up.knownUploadIds() lists the server uploads this uploader is running or offers to resume, so
+//   a page can avoid listing them twice; onChange({ discarded? }) fires when that list changes.
 import { h, announce, newUid } from '../core/dom.js';
 import { api } from '../api/client.js';
 import { store } from '../core/storage.js';
@@ -103,11 +105,25 @@ export async function completeReceivedUpload(uploadId, { shouldStop = () => fals
   }
 }
 
-export function createUploader({ submissionId = null, role, onComplete, purpose = 'submission', multiple = true } = {}) {
+export function createUploader({ submissionId = null, role, onComplete, onChange, purpose = 'submission', multiple = true } = {}) {
   const getRole = typeof role === 'function' ? role : () => role;
   const jobs = new Set();
   let req = null;
   let pendingResume = null;
+  let knownKey = '';
+  const savedHere = () => savedUploads().filter((e) => e.submissionId === submissionId && e.purpose === purpose);
+  const knownUploadIds = () => [...new Set([...[...jobs].filter((j) => j.active && j.id).map((j) => j.id), ...savedHere().map((e) => e.uploadId)])];
+  /** Tells the page when the set of uploads this uploader handles changes. */
+  function changed(detail = {}) {
+    const key = knownUploadIds().sort().join(',');
+    if (key === knownKey && !detail.discarded) return;
+    knownKey = key;
+    try {
+      onChange?.(detail);
+    } catch {
+      /* the page's listener must not break uploads */
+    }
+  }
 
   const inputId = newUid('file');
   const hintId = `${inputId}-hint`;
@@ -185,7 +201,7 @@ export function createUploader({ submissionId = null, role, onComplete, purpose 
 
   // Uploads remembered on this device that are not running in this page.
   async function paintResumable() {
-    const entries = savedUploads().filter((e) => e.submissionId === submissionId && e.purpose === purpose && ![...jobs].some((j) => j.id === e.uploadId));
+    const entries = savedHere().filter((e) => ![...jobs].some((j) => j.id === e.uploadId));
     const rows = [];
     for (const e of entries) {
       let st = null;
@@ -236,6 +252,7 @@ export function createUploader({ submissionId = null, role, onComplete, purpose 
           /* already gone */
         }
         forget(e.uploadId);
+        changed({ discarded: e.uploadId });
         paintResumable();
       });
       rows.push(h('li', { class: 'lm-upload lm-upload--resume', 'data-state': 'paused' },
@@ -250,6 +267,7 @@ export function createUploader({ submissionId = null, role, onComplete, purpose 
     }
     resumeList.replaceChildren(...rows);
     resumeList.hidden = !rows.length;
+    changed();
   }
   paintResumable();
 
@@ -293,6 +311,7 @@ export function createUploader({ submissionId = null, role, onComplete, purpose 
       pauseBtn.setAttribute('aria-label', `${s === 'paused' ? 'Resume' : 'Pause'} ${file.name}`);
       job.active = !(s === 'done' || s === 'error');
       updateUnloadGuard();
+      changed();
     };
     const setIndeterminate = (on) => {
       bar.classList.toggle('is-indeterminate', on);
@@ -435,6 +454,7 @@ export function createUploader({ submissionId = null, role, onComplete, purpose 
           offset = created.offset || 0;
           chunk = Math.min(CHUNK, created.maxChunkSize || CHUNK);
           remember({ uploadId: job.id, submissionId, purpose, role: fileRole, ...job.entry });
+          changed();
         }
         await run();
       } catch (err) {
@@ -514,5 +534,6 @@ export function createUploader({ submissionId = null, role, onComplete, purpose 
   };
   root.hasActiveUploads = () => [...jobs].some((j) => j.active);
   root.activeUploadIds = () => [...jobs].filter((j) => j.active && j.id).map((j) => j.id);
+  root.knownUploadIds = knownUploadIds;
   return root;
 }

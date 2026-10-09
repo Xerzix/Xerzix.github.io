@@ -160,13 +160,21 @@ export default async function render(ctx) {
       const msg = request?.message || s.statusReason || 'The reviewer needs more information.';
       const reply = field({ label: 'Your response', name: 'message', type: 'textarea', rows: 4, maxlength: 5000, hint: 'Explain what you changed or answer the question. You can update details and files before sending.' });
       const send = button('Send response', { variant: 'primary', icon: 'send', type: 'submit' });
-      const form = h('form', { class: 'lm-form', novalidate: true }, reply, h('div', { class: 'lm-cluster' }, send));
+      // Sending the response locks the files, so it waits for uploads that are still running.
+      const waitNote = h('p', { class: 'lm-error-text', role: 'alert', hidden: true });
+      const form = h('form', { class: 'lm-form', novalidate: true }, reply, waitNote, h('div', { class: 'lm-cluster' }, send));
       form.addEventListener('submit', (e) => {
         e.preventDefault();
+        waitNote.hidden = true;
         const text = reply.control.value.trim();
         if (!text) {
           reply.setError('Write a response first.');
           reply.control.focus();
+          return;
+        }
+        if (uploader?.hasActiveUploads()) {
+          waitNote.textContent = 'An upload is still running. Wait for it to finish (or cancel it), then send your response — files cannot be added once it is sent.';
+          waitNote.hidden = false;
           return;
         }
         withBusy(send, async () => {
@@ -175,7 +183,10 @@ export default async function render(ctx) {
             toast('Response sent. The submission is back with the reviewer.', { type: 'success' });
             await reload();
           } catch (err) {
-            if (!applyFieldErrors(form, err)) toastError(err);
+            if (err.code === 'UPLOADS_IN_PROGRESS') {
+              waitNote.textContent = err.message;
+              waitNote.hidden = false;
+            } else if (!applyFieldErrors(form, err)) toastError(err);
           }
         });
       });
@@ -303,6 +314,55 @@ export default async function render(ctx) {
       remove);
   }
 
+  // ── Unfinished uploads not handled by the uploader on this page ──
+  let unfinishedSlotRef = null;
+  function paintUnfinished() {
+    const slot = unfinishedSlotRef;
+    if (!slot) return;
+    const known = new Set(uploader?.knownUploadIds?.() || []);
+    const unfinished = (data.uploads || []).filter((u) => !known.has(u.id));
+    if (!unfinished.length) {
+      slot.replaceChildren();
+      return;
+    }
+    slot.replaceChildren(h('div', { class: 'lm-submission__block' },
+      h('h3', { class: 'lm-h3' }, 'Unfinished uploads'),
+      h('p', { class: 'lm-small lm-muted' }, 'These uploads have not finished. Resume them by choosing the same file again on the device you started from, or discard them.'),
+      h('ul', { class: 'lm-file-list' }, ...unfinished.map((u) => {
+        const discard = button('Discard', { variant: 'ghost', size: 'sm', icon: 'close' });
+        discard.addEventListener('click', () => withBusy(discard, async () => {
+          try {
+            await api.uploads.abort(u.id);
+            await reload();
+          } catch (err) {
+            toastError(err);
+          }
+        }));
+        const pct = u.size ? Math.floor((u.offset / u.size) * 100) : 0;
+        // All bytes arrived but the check was interrupted: it can be finished from any device.
+        let check = null;
+        if (u.size && u.offset >= u.size) {
+          check = button('Finish checking', { variant: 'glass', size: 'sm', icon: 'refresh' });
+          check.addEventListener('click', () => withBusy(check, async () => {
+            try {
+              const st = await completeReceivedUpload(u.id);
+              if (st.status === 'complete') announce(`${u.filename} uploaded`);
+              else toast(st.error || 'The file could not be verified.', { type: 'error', timeout: 7000 });
+            } catch (err) {
+              toastError(err);
+            }
+            await reload();
+          }));
+        }
+        return h('li', { class: 'lm-file' },
+          h('span', { class: 'lm-file__icon', 'aria-hidden': 'true' }, icon('history')),
+          h('div', { class: 'lm-file__main' }, h('strong', { class: 'lm-file__name' }, u.filename), h('span', { class: 'lm-file__meta' }, check
+            ? `${ROLE_LABELS[u.role] || u.role} · ${bytes(u.size)} received · checking was interrupted`
+            : `${ROLE_LABELS[u.role] || u.role} · ${pct}% of ${bytes(u.size)} · expires ${relativeTime(u.expiresAt)}`)),
+          h('div', { class: 'lm-cluster lm-cluster--sm' }, check, discard));
+      }))));
+  }
+
   function filesStep(editable) {
     const s = data.submission;
     const main = MAIN_ROLES(s.contentType);
@@ -313,46 +373,24 @@ export default async function render(ctx) {
     parts.push(h('div', { class: 'lm-submission__block' }, h('h3', { class: 'lm-h3' }, 'Uploaded files'), list,
       !data.files.some((f) => main.includes(f.role)) ? h('p', { class: 'lm-small lm-muted' }, `A ${main.map((r) => ROLE_LABELS[r].toLowerCase()).join(' or ')} file is required before you can submit.`) : null));
 
-    const running = new Set(uploader?.activeUploadIds?.() || []);
-    const unfinished = (data.uploads || []).filter((u) => !running.has(u.id));
-    if (unfinished.length) {
-      parts.push(h('div', { class: 'lm-submission__block' },
-        h('h3', { class: 'lm-h3' }, 'Unfinished uploads'),
-        h('p', { class: 'lm-small lm-muted' }, 'These uploads have not finished. Resume them by choosing the same file again on the device you started from, or discard them.'),
-        h('ul', { class: 'lm-file-list' }, ...unfinished.map((u) => {
-          const discard = button('Discard', { variant: 'ghost', size: 'sm', icon: 'close' });
-          discard.addEventListener('click', () => withBusy(discard, async () => {
-            try {
-              await api.uploads.abort(u.id);
-              await reload();
-            } catch (err) {
-              toastError(err);
-            }
-          }));
-          const pct = u.size ? Math.floor((u.offset / u.size) * 100) : 0;
-          // All bytes arrived but the check was interrupted: it can be finished from any device.
-          let check = null;
-          if (u.size && u.offset >= u.size) {
-            check = button('Finish checking', { variant: 'glass', size: 'sm', icon: 'refresh' });
-            check.addEventListener('click', () => withBusy(check, async () => {
-              try {
-                const st = await completeReceivedUpload(u.id);
-                if (st.status === 'complete') announce(`${u.filename} uploaded`);
-                else toast(st.error || 'The file could not be verified.', { type: 'error', timeout: 7000 });
-              } catch (err) {
-                toastError(err);
-              }
-              await reload();
-            }));
-          }
-          return h('li', { class: 'lm-file' },
-            h('span', { class: 'lm-file__icon', 'aria-hidden': 'true' }, icon('history')),
-            h('div', { class: 'lm-file__main' }, h('strong', { class: 'lm-file__name' }, u.filename), h('span', { class: 'lm-file__meta' }, check
-              ? `${ROLE_LABELS[u.role] || u.role} · ${bytes(u.size)} received · checking was interrupted`
-              : `${ROLE_LABELS[u.role] || u.role} · ${pct}% of ${bytes(u.size)} · expires ${relativeTime(u.expiresAt)}`)),
-            h('div', { class: 'lm-cluster lm-cluster--sm' }, check, discard));
-        }))));
+    // Uploads the uploader below runs or offers to resume (remembered on this device) are listed
+    // there only; this block shows the rest (e.g. started on another device) and is repainted
+    // whenever the uploader picks one up, so a running upload never shows a stale Discard.
+    if (editable) {
+      uploader ||= createUploader({
+        submissionId: s.id,
+        role: () => uploadRole,
+        onComplete: () => reload(),
+        onChange: ({ discarded } = {}) => {
+          if (discarded) data.uploads = (data.uploads || []).filter((u) => u.id !== discarded);
+          paintUnfinished();
+        },
+      });
     }
+    const unfinishedSlot = h('div');
+    unfinishedSlotRef = unfinishedSlot;
+    parts.push(unfinishedSlot);
+    paintUnfinished();
 
     if (!editable) {
       parts.push(notice('Files are locked while the submission is being reviewed.', { title: 'Locked' }));
@@ -376,11 +414,6 @@ export default async function render(ctx) {
       })),
       roleHint);
     paintHint();
-    uploader ||= createUploader({
-      submissionId: s.id,
-      role: () => uploadRole,
-      onComplete: () => reload(),
-    });
     uploader.refresh();
     parts.push(h('div', { class: 'lm-submission__block' }, h('h3', { class: 'lm-h3' }, 'Add files'), picker, uploader),
       h('div', { class: 'lm-submission__actions' }, nextButton('rights', 'Next: rights & ownership')));

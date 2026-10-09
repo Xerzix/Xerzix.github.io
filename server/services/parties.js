@@ -9,6 +9,11 @@
 //
 // Privacy: other members only ever see a member's profile name and avatar. Profile and
 // account ids stay on the server.
+//
+// Kids profiles: user-to-user text is off on kids profiles across Lumina (see reviews.js), so
+// a kids profile cannot start a party, can only join one hosted from its own account, cannot
+// send chat and receives only the room's system messages. If hosting passes to someone from
+// another account, kids profiles of the previous account are taken out of the room.
 import { randomInt } from 'node:crypto';
 import { HttpError, conflict, forbidden, notFound } from '../lib/errors.js';
 
@@ -28,8 +33,19 @@ export const PARTY_LIMITS = {
   chatPerMinute: 20,
   chatHistory: 50,
   presenceGraceMs: 45_000, // a member whose streams all closed is removed after this
+  streamsPerMember: 3, // a fourth event stream replaces that member's oldest one
+  maxStreams: 1000, // event streams open across all rooms (each holds a socket)
   sweepMs: 60_000,
 };
+
+// Removed from chat text: invisible characters that only hide or reorder what others see
+// (zero-width space, word joiner, BOM, soft hyphen, bidirectional embeddings/overrides/isolates).
+// Zero-width (non-)joiners stay: emoji sequences and several scripts need them.
+const STRIP_CHARS = /[\u00AD\u200B\u2060\uFEFF\u202A-\u202E\u2066-\u2069]/g;
+// For the emptiness check only: format characters, combining marks and blank "letters".
+const INVISIBLE = /[\p{Cf}\p{M}\u115F\u1160\u3164\uFFA0\u2800]/gu;
+
+const restricted = (message) => forbidden(message, 'PROFILE_RESTRICTED');
 
 export class PartyService {
   constructor({ limits = {}, clock = () => Date.now() } = {}) {
@@ -86,6 +102,7 @@ export class PartyService {
 
   // ── Lifecycle ─────────────────────────────────────────────────
   create({ titleId, episodeId = null, profile, accountId }) {
+    if (profile.is_kids) throw restricted('Kids profiles cannot start watch parties. A grown-up on this account can start one and invite this profile.');
     this.sweep();
     if (this.rooms.size >= this.limits.maxRooms) throw new HttpError(503, 'PARTY_CAPACITY', 'Watch parties are busy right now. Please try again later.');
     let hosted = 0;
@@ -120,6 +137,7 @@ export class PartyService {
       accountId,
       name: String(profile.name || 'Guest').slice(0, 40),
       avatar: profile.avatar || 'sakura',
+      isKids: !!profile.is_kids,
       joinedAt: t,
       connections: 0,
       graceTimer: null,
@@ -137,6 +155,9 @@ export class PartyService {
       existing.avatar = profile.avatar || existing.avatar;
       return room;
     }
+    if (profile.is_kids && room.members.get(room.hostId)?.accountId !== accountId) {
+      throw restricted('Kids profiles can only join watch parties started on their own account.');
+    }
     if (room.members.size >= this.limits.maxMembers) throw conflict(`This watch party is full (${this.limits.maxMembers} people).`, 'PARTY_FULL', { max: this.limits.maxMembers });
     const m = this.addMember(room, profile, accountId);
     this.touch(room);
@@ -151,15 +172,7 @@ export class PartyService {
     if (!room) return { ended: true };
     const m = room.members.get(profileId);
     if (!m) return { ended: false };
-    clearTimeout(m.graceTimer);
-    room.members.delete(profileId);
-    // Close that member's own streams.
-    for (const sub of [...room.subscribers]) {
-      if (sub.profileId === profileId) {
-        room.subscribers.delete(sub);
-        sub.close?.();
-      }
-    }
+    this.removeMember(room, m);
     if (!room.members.size) {
       this.endRoom(room, 'empty');
       return { ended: true };
@@ -167,14 +180,38 @@ export class PartyService {
     this.touch(room);
     let promoted = null;
     if (room.hostId === profileId) {
-      // Promote the longest-standing remaining member.
-      promoted = [...room.members.values()].sort((a, b) => a.joinedAt - b.joinedAt)[0];
+      // Promote the longest-standing remaining member: preferably a grown-up from the same
+      // account as the host who left, then any grown-up.
+      const byAge = [...room.members.values()].sort((a, b) => a.joinedAt - b.joinedAt);
+      promoted = byAge.find((x) => !x.isKids && x.accountId === m.accountId) || byAge.find((x) => !x.isKids) || byAge[0];
       room.hostId = promoted.key;
     }
     this.system(room, reason === 'disconnected' ? `${m.name} lost connection` : `${m.name} left`);
-    if (promoted) this.system(room, `${promoted.name} is now the host`);
+    if (promoted) {
+      this.system(room, `${promoted.name} is now the host`);
+      // Kids profiles stay only in rooms hosted from their own account.
+      for (const kid of [...room.members.values()]) {
+        if (kid.isKids && kid.accountId !== promoted.accountId) {
+          this.removeMember(room, kid, { notify: 'restricted' });
+          this.system(room, `${kid.name} left`);
+        }
+      }
+    }
     this.broadcastMembers(room);
     return { ended: false, promoted: !!promoted };
+  }
+
+  /** Drops a member and closes their event streams (telling them why, when `notify` is set). */
+  removeMember(room, m, { notify = null } = {}) {
+    clearTimeout(m.graceTimer);
+    room.members.delete(m.key);
+    for (const sub of [...room.subscribers]) {
+      if (sub.profileId === m.key) {
+        room.subscribers.delete(sub);
+        if (notify) sub.send('ended', { reason: notify });
+        sub.close?.();
+      }
+    }
   }
 
   end(code, profileId) {
@@ -262,8 +299,9 @@ export class PartyService {
   chat(code, profileId, text) {
     const room = this.require(code);
     const m = this.requireMember(room, profileId);
-    const clean = String(text || '').replace(/\s+/g, (ws) => (ws.includes('\n') ? '\n' : ' ')).trim();
-    if (!clean) throw new HttpError(422, 'VALIDATION_FAILED', 'Write a message first.', { fields: { text: 'Write a message first.' } });
+    if (m.isKids) throw restricted('Chat is turned off on kids profiles.');
+    const clean = String(text || '').replace(STRIP_CHARS, '').replace(/\s+/g, (ws) => (ws.includes('\n') ? '\n' : ' ')).trim();
+    if (!clean.replace(INVISIBLE, '').trim()) throw new HttpError(422, 'VALIDATION_FAILED', 'Write a message first.', { fields: { text: 'Write a message first.' } });
     if (clean.length > this.limits.chatMaxLength) {
       throw new HttpError(422, 'VALIDATION_FAILED', `Messages can be at most ${this.limits.chatMaxLength} characters.`, { fields: { text: `At most ${this.limits.chatMaxLength} characters.` } });
     }
@@ -288,7 +326,12 @@ export class PartyService {
   pushChat(room, msg) {
     room.chat.push(msg);
     if (room.chat.length > this.limits.chatHistory) room.chat.shift();
-    this.broadcast(room, 'chat', (viewerId) => this.chatDto(room, msg, viewerId));
+    this.broadcast(room, 'chat', (viewerId) => (this.mayRead(room, msg, viewerId) ? this.chatDto(room, msg, viewerId) : null));
+  }
+
+  /** Kids profiles see only the room's system messages. */
+  mayRead(room, msg, viewerId) {
+    return msg.system || !room.members.get(viewerId)?.isKids;
   }
 
   chatDto(room, msg, viewerId) {
@@ -307,9 +350,29 @@ export class PartyService {
    * Adds a subscriber for a member. `sink` = { send(event, data), close() }.
    * Sends the current state, members and recent chat immediately. Returns unsubscribe().
    */
+  /** Throws 503 when the server already holds `maxStreams` event streams (each keeps a socket). */
+  assertStreamCapacity() {
+    let open = 0;
+    for (const r of this.rooms.values()) open += r.subscribers.size;
+    if (open >= this.limits.maxStreams) throw new HttpError(503, 'PARTY_CAPACITY', 'Watch parties are busy right now. Please try again in a moment.', { retryAfter: 30 });
+  }
+
   subscribe(code, profileId, sink) {
     const room = this.require(code);
     const m = this.requireMember(room, profileId);
+    this.assertStreamCapacity();
+    // One member may follow a party from a few tabs or devices; beyond that the oldest
+    // stream is told it was replaced (so it does not reconnect) and closed.
+    const own = [...room.subscribers].filter((x) => x.profileId === profileId);
+    for (const old of own.slice(0, Math.max(0, own.length - this.limits.streamsPerMember + 1))) {
+      room.subscribers.delete(old);
+      try {
+        old.send('replaced', { reason: 'too_many_streams' });
+      } catch {
+        /* already broken */
+      }
+      old.close?.();
+    }
     const sub = { profileId, send: sink.send, close: sink.close };
     room.subscribers.add(sub);
     m.connections++;
@@ -317,7 +380,7 @@ export class PartyService {
     m.graceTimer = null;
     sub.send('state', this.stateDto(room));
     sub.send('members', this.membersDto(room, profileId));
-    for (const msg of room.chat) sub.send('chat', { ...this.chatDto(room, msg, profileId), history: true });
+    for (const msg of room.chat) if (this.mayRead(room, msg, profileId)) sub.send('chat', { ...this.chatDto(room, msg, profileId), history: true });
     if (m.connections === 1) this.broadcastMembers(room);
     let done = false;
     return () => {
@@ -341,7 +404,8 @@ export class PartyService {
   broadcast(room, event, dataFor) {
     for (const sub of room.subscribers) {
       try {
-        sub.send(event, dataFor(sub.profileId));
+        const data = dataFor(sub.profileId);
+        if (data !== null) sub.send(event, data);
       } catch {
         /* a broken stream is cleaned up by its close handler */
       }
@@ -378,7 +442,12 @@ export class PartyService {
 
   youDto(room, viewerId) {
     const isMember = !!viewerId && room.members.has(viewerId);
-    return { isMember, isHost: isMember && room.hostId === viewerId, canControl: isMember && this.canControl(room, viewerId) };
+    return {
+      isMember,
+      isHost: isMember && room.hostId === viewerId,
+      canControl: isMember && this.canControl(room, viewerId),
+      canChat: isMember && !room.members.get(viewerId).isKids,
+    };
   }
 
   partyDto(room, viewerId) {
