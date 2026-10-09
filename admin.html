@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080808">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="Lumina administration dashboard for staff.">
+  <title>Lumina Administration</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="assets/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/fonts.css">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/admin.css">
+  <script type="module" src="js/admin/main.js"></script>
+</head>
+<body class="adm-body">
+  <a class="lm-skip-link" href="#adm-main" data-skip>Skip to content</a>
+  <div id="adm-root" class="adm-root">
+    <div class="adm-boot" role="status" aria-live="polite">Loading the Lumina dashboard…</div>
+  </div>
+  <div id="lm-toasts" class="lm-toasts" aria-live="polite"></div>
+  <div id="lm-modals"></div>
+  <div id="lm-live" class="visually-hidden" aria-live="polite" aria-atomic="true"></div>
+  <noscript>
+    <p style="padding:2rem;color:#f8f5f2;font-family:system-ui">The Lumina dashboard needs JavaScript.</p>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "name": "lumina",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Lumina — a premium streaming platform with a Japanese garden identity and the Velvia Suggestions assistant.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "NODE_ENV=development node --watch --disable-warning=ExperimentalWarning server/index.js",
+    "worker": "node --disable-warning=ExperimentalWarning server/worker.js",
+    "db:migrate": "node --disable-warning=ExperimentalWarning server/db/cli.js migrate",
+    "db:seed": "node --disable-warning=ExperimentalWarning server/db/cli.js seed",
+    "admin:create": "node --disable-warning=ExperimentalWarning server/db/cli.js create-admin",
+    "catalog:export": "node --disable-warning=ExperimentalWarning server/db/cli.js export-catalog",
+    "media:verify": "node scripts/verify-media.mjs",
+    "media:sample": "node scripts/make-sample-media.mjs",
+    "art:build": "node scripts/make-artwork.mjs",
+    "vendor:sync": "node scripts/vendor-sync.mjs",
+    "perf:baseline": "node --disable-warning=ExperimentalWarning scripts/perf-baseline.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"tests/unit/**/*.test.js\" \"tests/server/**/*.test.js\"",
+    "test:e2e": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"tests/e2e/**/*.test.js\""
+  },
+  "devDependencies": {
+    "hls.js": "1.7.3",
+    "playwright": "1.56.1"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": "^0.129.0"
+  }
+}

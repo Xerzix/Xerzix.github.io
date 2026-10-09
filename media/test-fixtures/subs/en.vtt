@@ -1,0 +1,14 @@
+WEBVTT
+
+00:00:00.500 --> 00:00:03.500
+Welcome to the <i>Lumina</i> test pattern.
+
+00:00:04.000 --> 00:00:08.000
+The garden is quiet tonight
+— lanterns glow by the pond.
+
+00:00:09.000 --> 00:00:14.000
+<b>Bold</b> &amp; plain text, <script>safely</script> rendered.
+
+00:00:15.000 --> 00:00:19.500
+Credits roll beneath the maple tree.

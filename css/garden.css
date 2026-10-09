@@ -1,0 +1,391 @@
+/* Garden environments: the layered temple scene, particle canvases and the opening intro. */
+
+/* ─── Environment palettes ─── */
+:root[data-environment='sakura'] {
+  --env-sky-top: #1b0d16; --env-sky-mid: #3a1627; --env-sky-low: #120a0e;
+  --env-mountain-far: #2a1623; --env-mountain-near: #170c13; --env-structure: #0b0609;
+  --env-foliage: #f1a7bd; --env-foliage-2: #c2577a; --env-water: #120a0e;
+  --env-light: #f5c98a; --env-mist: rgb(240 200 215 / 0.09); --env-moon: #f6e3d6;
+}
+
+:root[data-environment='moonlit'] {
+  --env-sky-top: #060a14; --env-sky-mid: #10203a; --env-sky-low: #070a10;
+  --env-mountain-far: #13203a; --env-mountain-near: #0b1220; --env-structure: #05080e;
+  --env-foliage: #d6ddf2; --env-foliage-2: #8394c2; --env-water: #070b12;
+  --env-light: #ffd79a; --env-mist: rgb(190 210 255 / 0.08); --env-moon: #f4f1e6;
+}
+
+:root[data-environment='autumn'] {
+  --env-sky-top: #1a0c07; --env-sky-mid: #45200d; --env-sky-low: #120905;
+  --env-mountain-far: #2e170b; --env-mountain-near: #190c06; --env-structure: #0c0604;
+  --env-foliage: #e36a2f; --env-foliage-2: #b23a1f; --env-water: #120905;
+  --env-light: #ffc36b; --env-mist: rgb(255 190 140 / 0.07); --env-moon: #ffd9a8;
+}
+
+:root[data-environment='snow'] {
+  --env-sky-top: #0b0e14; --env-sky-mid: #202838; --env-sky-low: #0c0f14;
+  --env-mountain-far: #2c3444; --env-mountain-near: #1a1f29; --env-structure: #0a0c11;
+  --env-foliage: #eef3f8; --env-foliage-2: #b9c6d6; --env-water: #0c1016;
+  --env-light: #ffd9a0; --env-mist: rgb(230 240 255 / 0.1); --env-moon: #eef2f7;
+}
+
+:root[data-environment='lantern'] {
+  --env-sky-top: #080506; --env-sky-mid: #22100c; --env-sky-low: #070404;
+  --env-mountain-far: #1c100c; --env-mountain-near: #110907; --env-structure: #070404;
+  --env-foliage: #e3927a; --env-foliage-2: #a8412f; --env-water: #0a0605;
+  --env-light: #ffb45e; --env-mist: rgb(255 170 110 / 0.07); --env-moon: #ffd6a0;
+}
+
+/* ─── Background garden (behind every page) ─── */
+.lm-garden {
+  position: fixed;
+  inset: 0;
+  z-index: var(--lm-z-garden);
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--lm-bg);
+  --gx: 0;
+  --gy: 0;
+  --gs: 0;
+}
+
+.lm-garden__scene {
+  position: absolute;
+  inset: -3% -3% 0;
+  width: 106%;
+  height: 103%;
+  opacity: var(--env-brightness);
+  transition: opacity var(--lm-dur-5) var(--lm-ease), filter var(--lm-dur-5) var(--lm-ease);
+}
+
+.lm-garden__scene svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Parallax: each layer moves by its depth factor. */
+.lm-garden [data-depth] {
+  transform: translate3d(calc(var(--gx) * var(--d) * 1px), calc((var(--gy) * var(--d) + var(--gs) * var(--d)) * 1px), 0);
+  transition: transform 600ms var(--lm-ease-out);
+  will-change: transform;
+}
+
+.lm-garden__veil {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 90% at 50% 20%, transparent 0%, color-mix(in srgb, var(--lm-bg) 45%, transparent) 55%, var(--lm-bg) 100%),
+    linear-gradient(180deg, color-mix(in srgb, var(--lm-bg) 20%, transparent) 0%, color-mix(in srgb, var(--lm-bg) 72%, transparent) 55%, var(--lm-bg) 100%);
+  transition: opacity var(--lm-dur-5) var(--lm-ease);
+}
+
+/* Pages dim the garden further so text stays readable; the home hero lets it breathe. */
+body[data-page='home'] .lm-garden { --env-brightness: 0.72; }
+body[data-layout='bare'] .lm-garden { --env-brightness: 0.82; }
+body[data-reading='true'] .lm-garden { --env-brightness: 0.28; }
+body[data-layout='immersive'] .lm-garden { display: none; }
+:root[data-environment='none'] .lm-garden__scene { display: none; }
+:root[data-ambient-light] .lm-garden__scene { filter: brightness(calc(0.6 + var(--ambient-light, 0.6) * 0.7)); }
+
+/* Scene details */
+.lm-mist {
+  animation: lm-mist-drift 70s linear infinite alternate;
+}
+
+.lm-mist--slow {
+  animation-duration: 110s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes lm-mist-drift {
+  from { transform: translateX(-4%); }
+  to { transform: translateX(4%); }
+}
+
+.lm-lantern-glow {
+  animation: lm-flicker 5.5s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.lm-lantern-glow:nth-of-type(2n) {
+  animation-duration: 7s;
+  animation-delay: -2s;
+}
+
+@keyframes lm-flicker {
+  0%, 100% { opacity: 0.9; }
+  20% { opacity: 0.75; }
+  45% { opacity: 1; }
+  70% { opacity: 0.82; }
+}
+
+.lm-ripple {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lm-ripple 7s ease-out infinite;
+}
+
+.lm-ripple:nth-of-type(2) { animation-delay: -2.3s; }
+.lm-ripple:nth-of-type(3) { animation-delay: -4.6s; }
+
+@keyframes lm-ripple {
+  from { transform: scale(0.3); opacity: 0.5; }
+  to { transform: scale(1.6); opacity: 0; }
+}
+
+.lm-stars circle {
+  animation: lm-twinkle 4s ease-in-out infinite;
+}
+
+.lm-stars circle:nth-child(3n) { animation-delay: -1.3s; }
+.lm-stars circle:nth-child(3n + 1) { animation-delay: -2.6s; }
+
+@keyframes lm-twinkle {
+  50% { opacity: 0.25; }
+}
+
+/* Environment-specific visibility of scene elements */
+.env-only { display: none; }
+:root[data-environment='moonlit'] .env-moonlit,
+:root[data-environment='snow'] .env-snow,
+:root[data-environment='lantern'] .env-lantern,
+:root[data-environment='autumn'] .env-autumn,
+:root[data-environment='sakura'] .env-sakura { display: inline; }
+:root[data-environment='sakura'] .env-night,
+:root[data-environment='moonlit'] .env-night,
+:root[data-environment='snow'] .env-night,
+:root[data-environment='lantern'] .env-night { display: inline; }
+
+/* ─── Particle canvases ─── */
+.lm-petals {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+}
+
+.lm-petals--back { z-index: var(--lm-z-petals-back); }
+.lm-petals--front { z-index: var(--lm-z-petals-front); }
+body[data-layout='immersive'] .lm-petals { display: none; }
+:root[data-animation='off'] .lm-petals { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='full']) .lm-mist,
+  :root:not([data-motion='full']) .lm-lantern-glow,
+  :root:not([data-motion='full']) .lm-ripple,
+  :root:not([data-motion='full']) .lm-stars circle,
+  :root:not([data-motion='full']) .lm-garden [data-depth] {
+    animation: none !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+:root[data-motion='reduced'] .lm-mist,
+:root[data-motion='reduced'] .lm-lantern-glow,
+:root[data-motion='reduced'] .lm-ripple,
+:root[data-motion='reduced'] .lm-stars circle,
+:root[data-animation='off'] .lm-mist,
+:root[data-animation='off'] .lm-lantern-glow,
+:root[data-animation='off'] .lm-ripple,
+:root[data-animation='off'] .lm-stars circle {
+  animation: none !important;
+}
+
+:root[data-motion='reduced'] .lm-garden [data-depth],
+:root[data-parallax='off'] .lm-garden [data-depth] {
+  transform: none !important;
+}
+
+/* ─── Opening intro ─── */
+.lm-intro {
+  position: fixed;
+  inset: 0;
+  z-index: var(--lm-z-intro);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #030203;
+  color: var(--lm-text);
+  transition: opacity 700ms var(--lm-ease), visibility 0s linear 700ms;
+}
+
+.lm-intro.is-done {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.lm-intro__scene {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transform: scale(1.08);
+  filter: brightness(0.2) saturate(0.7);
+  transition:
+    opacity 2400ms var(--lm-ease),
+    transform 6000ms var(--lm-ease-out),
+    filter 3200ms var(--lm-ease);
+}
+
+.lm-intro__scene svg {
+  width: 100%;
+  height: 100%;
+}
+
+.lm-intro[data-stage='1'] .lm-intro__scene,
+.lm-intro[data-stage='2'] .lm-intro__scene,
+.lm-intro[data-stage='3'] .lm-intro__scene {
+  opacity: 1;
+  transform: scale(1);
+  filter: brightness(0.95) saturate(1);
+}
+
+.lm-intro[data-stage='3'] .lm-intro__scene {
+  filter: brightness(0.55) saturate(0.95) blur(2px);
+}
+
+.lm-intro__veil {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(90% 70% at 50% 45%, transparent 30%, rgb(3 2 3 / 0.85) 100%);
+}
+
+.lm-intro canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.lm-intro__center {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 24px;
+}
+
+.lm-intro__logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  transition: transform 1200ms var(--lm-ease-out), opacity 900ms var(--lm-ease);
+}
+
+.lm-intro__mark {
+  width: clamp(44px, 7vw, 72px);
+  height: clamp(44px, 7vw, 72px);
+  color: var(--lm-accent-strong);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 1200ms var(--lm-ease), transform 1200ms var(--lm-ease-out);
+  filter: drop-shadow(0 0 18px var(--lm-accent-glow));
+}
+
+.lm-intro__word {
+  display: flex;
+  font-family: var(--lm-font-display);
+  font-weight: var(--lm-weight-medium);
+  font-size: clamp(3rem, 11vw, 8.5rem);
+  letter-spacing: 0.32em;
+  margin-right: -0.32em;
+  line-height: 1;
+}
+
+.lm-intro__word span {
+  opacity: 0;
+  filter: blur(12px);
+  transform: translateY(10px);
+  text-shadow: 0 0 0 transparent;
+  transition:
+    opacity 1100ms var(--lm-ease),
+    filter 1300ms var(--lm-ease),
+    transform 1300ms var(--lm-ease-out),
+    text-shadow 1800ms var(--lm-ease);
+}
+
+.lm-intro[data-stage='2'] .lm-intro__mark,
+.lm-intro[data-stage='3'] .lm-intro__mark {
+  opacity: 1;
+  transform: none;
+}
+
+.lm-intro[data-stage='2'] .lm-intro__word span,
+.lm-intro[data-stage='3'] .lm-intro__word span {
+  opacity: 1;
+  filter: blur(0);
+  transform: none;
+  text-shadow: 0 0 28px color-mix(in srgb, var(--lm-accent-strong) 70%, transparent), 0 0 70px color-mix(in srgb, var(--lm-accent) 60%, transparent);
+}
+
+.lm-intro__kana {
+  font-family: var(--lm-font-jp);
+  font-size: clamp(0.8rem, 1.4vw, 1rem);
+  letter-spacing: 0.9em;
+  margin-right: -0.9em;
+  color: var(--lm-gold);
+  opacity: 0;
+  transition: opacity 1400ms var(--lm-ease) 600ms;
+}
+
+.lm-intro[data-stage='2'] .lm-intro__kana,
+.lm-intro[data-stage='3'] .lm-intro__kana {
+  opacity: 0.85;
+}
+
+.lm-intro[data-stage='3'] .lm-intro__logo {
+  transform: translateY(-4vh) scale(0.62);
+}
+
+.lm-intro__welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  margin-top: 2vh;
+  opacity: 0;
+  transform: translateY(16px);
+  pointer-events: none;
+  transition: opacity 900ms var(--lm-ease) 250ms, transform 900ms var(--lm-ease-out) 250ms;
+}
+
+.lm-intro[data-stage='3'] .lm-intro__welcome {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.lm-intro__welcome h1 {
+  font-family: var(--lm-font-display);
+  font-weight: var(--lm-weight-medium);
+  font-size: clamp(1.6rem, 4vw, 2.8rem);
+  letter-spacing: 0.24em;
+  margin-right: -0.24em;
+}
+
+.lm-intro__welcome p {
+  color: var(--lm-text-2);
+  font-size: clamp(0.95rem, 1.6vw, 1.15rem);
+  letter-spacing: 0.04em;
+}
+
+.lm-intro__enter {
+  margin-top: 10px;
+  min-width: 220px;
+}
+
+.lm-intro__skip {
+  position: absolute;
+  top: max(20px, env(safe-area-inset-top));
+  right: max(20px, env(safe-area-inset-right));
+  z-index: 3;
+}
+
+.lm-intro__skip[hidden] {
+  display: none;
+}
