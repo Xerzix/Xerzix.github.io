@@ -70,8 +70,8 @@
           }
         ]
       },
-      "poster": "assets/art/sintel-poster.svg",
-      "backdrop": "assets/art/sintel-backdrop.svg",
+      "poster": null,
+      "backdrop": null,
       "palette": [
         "#8FA9B8",
         "#4E5D6C",
@@ -104,7 +104,11 @@
           }
         ],
         "verified": false
-      }
+      },
+      "tmdb": {
+        "type": "movie"
+      },
+      "artwork": {}
     },
     {
       "id": "big-buck-bunny",
@@ -163,8 +167,8 @@
           }
         ]
       },
-      "poster": "assets/art/big-buck-bunny-poster.svg",
-      "backdrop": "assets/art/big-buck-bunny-backdrop.svg",
+      "poster": null,
+      "backdrop": null,
       "palette": [
         "#7DA453",
         "#F2C14E",
@@ -197,7 +201,11 @@
           }
         ],
         "verified": false
-      }
+      },
+      "tmdb": {
+        "type": "movie"
+      },
+      "artwork": {}
     },
     {
       "id": "tears-of-steel",
@@ -265,8 +273,8 @@
           }
         ]
       },
-      "poster": "assets/art/tears-of-steel-poster.svg",
-      "backdrop": "assets/art/tears-of-steel-backdrop.svg",
+      "poster": null,
+      "backdrop": null,
       "palette": [
         "#2E6F8E",
         "#1C2A33",
@@ -299,7 +307,11 @@
           }
         ],
         "verified": false
-      }
+      },
+      "tmdb": {
+        "type": "movie"
+      },
+      "artwork": {}
     },
     {
       "id": "elephants-dream",
@@ -365,8 +377,8 @@
           }
         ]
       },
-      "poster": "assets/art/elephants-dream-poster.svg",
-      "backdrop": "assets/art/elephants-dream-backdrop.svg",
+      "poster": null,
+      "backdrop": null,
       "palette": [
         "#C9772E",
         "#5A3A22",
@@ -393,7 +405,11 @@
           }
         ],
         "verified": false
-      }
+      },
+      "tmdb": {
+        "type": "movie"
+      },
+      "artwork": {}
     },
     {
       "id": "hanami",
@@ -441,8 +457,8 @@
           }
         ]
       },
-      "poster": "assets/art/hanami-poster.svg",
-      "backdrop": "assets/art/hanami-backdrop.svg",
+      "poster": "assets/art/originals/hanami-poster-720.jpg",
+      "backdrop": "assets/art/originals/hanami-backdrop-1920.jpg",
       "palette": [
         "#781B32",
         "#F4B6C7",
@@ -498,6 +514,30 @@
           }
         ],
         "durationS": 16
+      },
+      "artwork": {
+        "source": "lumina",
+        "locked": true,
+        "posterSet": [
+          {
+            "url": "assets/art/originals/hanami-poster-360.jpg",
+            "w": 360
+          },
+          {
+            "url": "assets/art/originals/hanami-poster-720.jpg",
+            "w": 720
+          }
+        ],
+        "backdropSet": [
+          {
+            "url": "assets/art/originals/hanami-backdrop-960.jpg",
+            "w": 960
+          },
+          {
+            "url": "assets/art/originals/hanami-backdrop-1920.jpg",
+            "w": 1920
+          }
+        ]
       }
     },
     {
@@ -545,8 +585,8 @@
           }
         ]
       },
-      "poster": "assets/art/koyo-autumn-pavilion-poster.svg",
-      "backdrop": "assets/art/koyo-autumn-pavilion-backdrop.svg",
+      "poster": "assets/art/originals/koyo-autumn-pavilion-poster-720.jpg",
+      "backdrop": "assets/art/originals/koyo-autumn-pavilion-backdrop-1920.jpg",
       "palette": [
         "#B5432A",
         "#E39B3B",
@@ -600,6 +640,30 @@
           }
         ],
         "durationS": 14
+      },
+      "artwork": {
+        "source": "lumina",
+        "locked": true,
+        "posterSet": [
+          {
+            "url": "assets/art/originals/koyo-autumn-pavilion-poster-360.jpg",
+            "w": 360
+          },
+          {
+            "url": "assets/art/originals/koyo-autumn-pavilion-poster-720.jpg",
+            "w": 720
+          }
+        ],
+        "backdropSet": [
+          {
+            "url": "assets/art/originals/koyo-autumn-pavilion-backdrop-960.jpg",
+            "w": 960
+          },
+          {
+            "url": "assets/art/originals/koyo-autumn-pavilion-backdrop-1920.jpg",
+            "w": 1920
+          }
+        ]
       }
     },
     {
@@ -647,8 +711,8 @@
           }
         ]
       },
-      "poster": "assets/art/garden-hours-poster.svg",
-      "backdrop": "assets/art/garden-hours-backdrop.svg",
+      "poster": "assets/art/originals/garden-hours-poster-720.jpg",
+      "backdrop": "assets/art/originals/garden-hours-backdrop-1920.jpg",
       "palette": [
         "#2B3A55",
         "#F4B6C7",
@@ -890,7 +954,31 @@
             }
           ]
         }
-      ]
+      ],
+      "artwork": {
+        "source": "lumina",
+        "locked": true,
+        "posterSet": [
+          {
+            "url": "assets/art/originals/garden-hours-poster-360.jpg",
+            "w": 360
+          },
+          {
+            "url": "assets/art/originals/garden-hours-poster-720.jpg",
+            "w": 720
+          }
+        ],
+        "backdropSet": [
+          {
+            "url": "assets/art/originals/garden-hours-backdrop-960.jpg",
+            "w": 960
+          },
+          {
+            "url": "assets/art/originals/garden-hours-backdrop-1920.jpg",
+            "w": 1920
+          }
+        ]
+      }
     }
   ]
 }

@@ -1,5 +1,6 @@
 // A personal collection (/collections/:id, editable by its owner profile) and the public,
 // read-only view of an unlisted collection (/shared/:token, server only).
+import { artImg } from '../ui/artwork.js';
 import { h, announce, debounce, newUid } from '../core/dom.js';
 import { api, ServerRequiredError } from '../api/client.js';
 import { bus } from '../core/bus.js';
@@ -76,7 +77,7 @@ export function openTitlePicker({ title = 'Add titles', mode = 'multi', isSelect
       });
     }
     return h('li', { class: 'lm-picker__row' },
-      h('span', { class: 'lm-picker__thumb', style: t.palette?.[0] ? { '--card-tint': t.palette[0] } : undefined }, t.poster ? h('img', { src: t.poster, alt: '', loading: 'lazy', onError: (e) => e.currentTarget.remove() }) : null),
+      h('span', { class: 'lm-picker__thumb', style: t.palette?.[0] ? { '--card-tint': t.palette[0] } : undefined }, artImg({ src: t.poster, srcset: t.posterSrcset, sizes: '64px', title: '', kind: 'poster' })),
       h('span', { class: 'lm-picker__text' }, h('strong', null, t.title), h('span', null, [...titleFacts(t), t.type === 'series' ? 'Series' : 'Film', t.ageRating].filter(Boolean).join(' · '))),
       action);
   };

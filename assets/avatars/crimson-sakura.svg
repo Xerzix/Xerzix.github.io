@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Crimson Sakura">
+  <defs>
+    <radialGradient id="bg" cx="0.5" cy="0.42" r="0.8">
+      <stop offset="0" stop-color="#3a0d1a"/>
+      <stop offset="0.55" stop-color="#14070b"/>
+      <stop offset="1" stop-color="#080808"/>
+    </radialGradient>
+    <linearGradient id="petal" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#e2587a"/>
+      <stop offset="0.55" stop-color="#b52b49"/>
+      <stop offset="1" stop-color="#781b32"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#b52b49" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#b52b49" stop-opacity="0"/>
+    </radialGradient>
+    <path id="p" d="M128 128C102 108 92 70 112 44l16 12 16-12c20 26 10 64-16 84z"/>
+  </defs>
+  <rect width="256" height="256" fill="url(#bg)"/>
+  <circle cx="128" cy="124" r="104" fill="url(#glow)"/>
+  <g fill="url(#petal)" stroke="#f3b7c6" stroke-opacity="0.35" stroke-width="1.5">
+    <use href="#p"/>
+    <use href="#p" transform="rotate(72 128 128)"/>
+    <use href="#p" transform="rotate(144 128 128)"/>
+    <use href="#p" transform="rotate(216 128 128)"/>
+    <use href="#p" transform="rotate(288 128 128)"/>
+  </g>
+  <g stroke="#c6a46a" stroke-width="2" stroke-linecap="round" opacity="0.9">
+    <path d="M128 128l0-20M128 128l17-9M128 128l12 15M128 128l-12 15M128 128l-17-9"/>
+  </g>
+  <g fill="#e8c98f">
+    <circle cx="128" cy="106" r="3.4"/><circle cx="147" cy="118" r="3.4"/><circle cx="141" cy="145" r="3.4"/><circle cx="115" cy="145" r="3.4"/><circle cx="109" cy="118" r="3.4"/>
+  </g>
+  <circle cx="128" cy="128" r="7" fill="#5a0f22"/>
+  <g fill="#d9476a" opacity="0.8">
+    <path d="M40 58c6-8 16-6 18 2-6 6-14 6-18-2z"/>
+    <path d="M206 196c8-4 16 2 14 10-8 2-14-2-14-10z"/>
+    <path d="M196 54c4-6 12-5 13 1-4 5-10 5-13-1z" opacity="0.6"/>
+    <path d="M52 200c5-5 12-3 12 3-5 4-10 3-12-3z" opacity="0.6"/>
+  </g>
+  <rect x="8" y="8" width="240" height="240" rx="30" fill="none" stroke="#c6a46a" stroke-opacity="0.38" stroke-width="2"/>
+</svg>

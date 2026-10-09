@@ -84,6 +84,12 @@ export function createServerBackend() {
       reset: (d) => post('/api/auth/reset', d),
       elevate: (d) => post('/api/auth/elevate', d),
     },
+    // "Who's watching?": the identities (separate accounts) used on this browser.
+    identities: {
+      list: () => get('/api/identities'),
+      switch: (d) => post('/api/identities/switch', d),
+      remove: (accountId) => del(`/api/identities/${enc(accountId)}`),
+    },
     account: {
       update: (d) => patch('/api/account', d),
       changePassword: (d) => post('/api/account/password', d),

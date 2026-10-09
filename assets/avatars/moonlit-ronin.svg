@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Moonlit Ronin">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#151a2b"/>
+      <stop offset="0.6" stop-color="#0c0d14"/>
+      <stop offset="1" stop-color="#080808"/>
+    </linearGradient>
+    <radialGradient id="moon" cx="0.42" cy="0.38" r="0.7">
+      <stop offset="0" stop-color="#fbf7f2"/>
+      <stop offset="0.7" stop-color="#e4ddd6"/>
+      <stop offset="1" stop-color="#b8b3b4"/>
+    </radialGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0.55" stop-color="#f8f5f2" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#f8f5f2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="256" height="256" fill="url(#sky)"/>
+  <circle cx="128" cy="104" r="96" fill="url(#halo)"/>
+  <circle cx="128" cy="104" r="62" fill="url(#moon)"/>
+  <g fill="#c9c2bb" opacity="0.35">
+    <circle cx="108" cy="88" r="9"/><circle cx="150" cy="120" r="6"/><circle cx="140" cy="80" r="4"/>
+  </g>
+  <g fill="#080808">
+    <!-- kasa (straw hat) -->
+    <path d="M78 140c16-14 34-26 50-34 16 8 34 20 50 34-30 5-70 5-100 0z"/>
+    <!-- head and body -->
+    <path d="M114 142c2 10 6 16 14 16s12-6 14-16z"/>
+    <path d="M96 236c2-30 8-54 16-72 6-6 12-8 16-8s10 2 16 8c8 18 14 42 16 72z"/>
+    <!-- katana -->
+    <path d="M150 166l52 64-3 3-53-62z"/>
+    <!-- ground -->
+    <path d="M0 230c40-8 80-10 128-10s88 2 128 10v26H0z"/>
+  </g>
+  <path d="M110 180c12 4 24 4 36 0l2 8c-14 4-26 4-40 0z" fill="#b52b49"/>
+  <rect x="146" y="164" width="12" height="4" rx="1.5" transform="rotate(50 152 166)" fill="#c6a46a"/>
+  <g stroke="#2a2e40" stroke-width="2" stroke-linecap="round" opacity="0.8">
+    <path d="M24 226l6-16M36 224l2-12M216 224l4-14M230 228l6-12"/>
+  </g>
+  <rect x="8" y="8" width="240" height="240" rx="30" fill="none" stroke="#c6a46a" stroke-opacity="0.38" stroke-width="2"/>
+</svg>

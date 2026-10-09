@@ -5,12 +5,15 @@ import { session, library } from '../core/session.js';
 import { api } from '../api/client.js';
 import { icon } from './icons.js';
 import { button, linkButton } from './components.js';
-import { titleMeta, listButton, playHref } from './card.js';
+import { titleMeta, listButton, playHref, canStream } from './card.js';
+import { artImg } from './artwork.js';
 
 const ROTATE_MS = 9000;
 const PREVIEW_DELAY_MS = 3500;
 
-export function hero(items, { autoRotate = true, previews = true } = {}) {
+export function hero(input, { autoRotate = true, previews = true } = {}) {
+  // Titles with real backdrop art lead; those without still appear, on the Lumina fallback.
+  const items = [...input].sort((a, b) => Number(!!b.backdrop) - Number(!!a.backdrop));
   if (!items.length) return h('div');
   let index = 0;
   let timer = 0;
@@ -19,7 +22,7 @@ export function hero(items, { autoRotate = true, previews = true } = {}) {
   let userPaused = false;
 
   const slides = items.map((t, i) => h('div', { class: ['lm-hero__slide', i === 0 && 'is-active'], 'aria-hidden': 'true' },
-    h('img', { src: t.backdrop || t.poster, srcset: (t.backdrop ? t.backdropSrcset : t.posterSrcset) || undefined, sizes: '100vw', alt: '', decoding: 'async', fetchpriority: i === 0 ? 'high' : 'low', loading: i === 0 ? 'eager' : 'lazy' })));
+    artImg({ src: t.backdrop, srcset: t.backdropSrcset, sizes: '100vw', title: '', kind: 'backdrop', fetchpriority: i === 0 ? 'high' : 'low', loading: i === 0 ? 'eager' : 'lazy' })));
   const content = h('div', { class: 'lm-hero__content' });
   const dots = h('div', { class: 'lm-hero__dots', role: 'group', 'aria-label': 'Featured titles' });
   const pauseBtn = h('button', { class: 'lm-icon-btn', type: 'button' });
@@ -46,7 +49,9 @@ export function hero(items, { autoRotate = true, previews = true } = {}) {
       h('div', { class: 'lm-meta' }, (t.genres || []).map((g) => h('span', { class: 'lm-tag' }, g))),
       h('p', { class: 'lm-hero__synopsis' }, t.synopsis),
       h('div', { class: 'lm-hero__actions' },
-        linkButton(resuming ? 'Resume' : 'Play', playHref(t), { variant: 'primary', size: 'lg', icon: 'play' }),
+        canStream(t)
+          ? linkButton(resuming ? 'Resume' : 'Play', playHref(t), { variant: 'primary', size: 'lg', icon: 'play' })
+          : h('span', { class: 'lm-badge lm-hero__notice' }, 'Not available to stream on Lumina'),
         listButton(t, { size: 'lg', variant: 'glass', label: true }),
         linkButton('More Information', `#/title/${encodeURIComponent(t.id)}`, { variant: 'glass', size: 'lg', icon: 'info' })));
     content.replaceChildren(inner);

@@ -3,6 +3,7 @@
 //   node server/db/cli.js seed
 //   node server/db/cli.js create-admin <email>        (password read from LUMINA_ADMIN_PASSWORD or prompted)
 //   node server/db/cli.js export-catalog [outfile]    (writes the Preview-mode snapshot)
+//   node server/db/cli.js artwork-sync [--force] [id…] (real posters/backdrops from TMDB; needs TMDB_API_TOKEN)
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
@@ -10,7 +11,9 @@ import { config, ROOT } from '../config.js';
 import { openDatabase, now } from './index.js';
 import { seedIfEmpty, exportCatalog } from '../seed/seed.js';
 import { CatalogService } from '../services/catalog.js';
+import { ArtworkService } from '../services/artwork.js';
 import { hashPassword, newId } from '../lib/crypto.js';
+import { uniqueUsername } from '../services/identities.js';
 
 const [cmd, ...args] = process.argv.slice(2);
 const db = openDatabase(config.dbPath);
@@ -44,13 +47,13 @@ switch (cmd) {
       const id = newId('acc');
       db.tx(() => {
         db.run(
-          `INSERT INTO accounts (id, email, display_name, password_hash, role, created_at, updated_at, terms_accepted_at) VALUES (?, ?, ?, ?, 'admin', ?, ?, ?)`,
-          id, email, 'Administrator', '', ts, ts, ts,
+          `INSERT INTO accounts (id, username, email, display_name, password_hash, role, avatar, created_at, updated_at, terms_accepted_at) VALUES (?, ?, ?, ?, ?, 'admin', 'golden-pavilion', ?, ?, ?)`,
+          id, uniqueUsername(db, email.split('@')[0]), email, 'Administrator', '', ts, ts, ts,
         );
-        db.run('INSERT INTO profiles (id, account_id, name, avatar, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', newId('prf'), id, 'Administrator', 'lantern', ts, ts);
+        db.run('INSERT INTO profiles (id, account_id, name, avatar, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', newId('prf'), id, 'Administrator', 'golden-pavilion', ts, ts);
       });
       db.run('UPDATE accounts SET password_hash = ? WHERE id = ?', await hashPassword(password), id);
-      console.log(`Created admin ${email}.`);
+      console.log(`Created admin ${email} (username ${db.get('SELECT username FROM accounts WHERE id = ?', id).username}).`);
     }
     break;
   }
@@ -62,7 +65,23 @@ switch (cmd) {
     console.log(`Wrote ${snapshot.titles.length} titles to ${out}`);
     break;
   }
+  case 'artwork-sync': {
+    seedIfEmpty(db);
+    const force = args.includes('--force');
+    const ids = args.filter((a) => !a.startsWith('--'));
+    const artwork = new ArtworkService(db, config);
+    if (!artwork.configured()) {
+      console.error('TMDB is not configured. Set TMDB_API_TOKEN (v4 read access token) or TMDB_API_KEY in .env — see README → Real artwork.');
+      process.exitCode = 1;
+      break;
+    }
+    const { results, summary } = await artwork.syncAll({ ids, force });
+    for (const r of results) console.log(`${r.status.padEnd(10)} ${r.id}${r.matchedTitle ? ` → “${r.matchedTitle}” (${r.matchedYear ?? '?'}), TMDB ${r.tmdbType}/${r.tmdbId}` : r.message ? ` — ${r.message}` : ''}`);
+    console.log(`\n${summary.matched} matched, ${summary.notFound} not found, ${summary.noArtwork} without artwork, ${summary.skipped} skipped, ${summary.errors} errors.`);
+    console.log('Run `npm run catalog:export` to refresh the Preview-mode snapshot.');
+    break;
+  }
   default:
-    console.log('Commands: migrate | seed | create-admin <email> | export-catalog [outfile]');
+    console.log('Commands: migrate | seed | create-admin <email> | export-catalog [outfile] | artwork-sync [--force] [id…]');
 }
 db.close();

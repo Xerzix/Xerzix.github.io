@@ -123,7 +123,7 @@ test('names: invisible, control and bidi characters are removed, so look-alike d
   // Account display names follow the same rules.
   assert.equal((await c.patch('/api/account', { displayName: 'Bob\nSmith\u200B' })).body.account.displayName, 'Bob Smith');
   assert.equal((await c.patch('/api/account', { displayName: '\u200B' })).status, 422);
-  const reg = await t.client().post('/api/auth/register', { email: email(), password: PW, displayName: '\u202EMei\u202C', acceptTerms: true });
+  const reg = await t.client().post('/api/auth/register', { username: `mei${Date.now().toString(36)}`, email: email(), password: PW, displayName: '\u202EMei\u202C', acceptTerms: true });
   assert.equal(reg.status, 200);
   assert.equal(reg.body.account.displayName, 'Mei');
   assert.equal(reg.body.profile.name, 'Mei');

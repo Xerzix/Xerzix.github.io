@@ -19,7 +19,8 @@ after(async () => { await t.close(); });
 const PW = 'velvet lanterns at dusk';
 let seq = 0;
 const email = (p = 'user') => `${p}${++seq}.${Date.now().toString(36)}@example.com`;
-const register = (c, overrides = {}) => c.post('/api/auth/register', { email: email(), password: PW, displayName: 'Aiko', acceptTerms: true, ...overrides });
+const uname = () => `aiko${++seq}x${Date.now().toString(36)}`;
+const register = (c, overrides = {}) => c.post('/api/auth/register', { username: uname(), email: email(), password: PW, displayName: 'Aiko', acceptTerms: true, ...overrides });
 const lastMailTo = (to) => [...devOutbox()].reverse().find((m) => m.to === to);
 
 test('register returns the session payload, creates the first profile and selects it', async () => {
@@ -60,7 +61,7 @@ test('register validates the password policy, display name and terms', async () 
   assert.ok(all.body.error.fields.email);
   assert.ok(all.body.error.fields.displayName);
   assert.ok(all.body.error.fields.acceptTerms);
-  const noTerms = await c.post('/api/auth/register', { email: email(), password: PW, displayName: 'Aiko' });
+  const noTerms = await c.post('/api/auth/register', { username: uname(), email: email(), password: PW, displayName: 'Aiko' });
   assert.equal(noTerms.status, 422);
   assert.ok(noTerms.body.error.fields.acceptTerms);
   // Consent must be an explicit JSON true, not a value that merely coerces to one.
@@ -437,7 +438,7 @@ test('deleting the account needs the password and DELETE, removes data and prote
   t.db.run('DELETE FROM accounts WHERE id = ?', second.accountId);
   for (const a of existingAdmins) t.db.run("UPDATE accounts SET role = 'admin' WHERE id = ?", a.id);
 
-  assert.equal(c.jar.size, 0, 'cookie cleared');
+  assert.equal(c.jar.has('lumina_sid'), false, 'session cookie cleared');
   assert.equal(t.db.get('SELECT COUNT(*) AS n FROM accounts WHERE id = ?', accountId).n, 0);
   assert.equal(t.db.get('SELECT COUNT(*) AS n FROM profiles WHERE account_id = ?', accountId).n, 0);
   assert.equal(t.db.get('SELECT COUNT(*) AS n FROM sessions WHERE account_id = ?', accountId).n, 0);

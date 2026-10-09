@@ -9,6 +9,7 @@ import { bus } from '../../core/bus.js';
 import { runtime as fmtRuntime } from '../../core/format.js';
 import { icon } from '../icons.js';
 import { notice, spinner } from '../components.js';
+import { artImg } from '../artwork.js';
 
 // ───────────────────────── Conversation state ─────────────────────────
 const MAX_STORED_TURNS = 40;
@@ -155,7 +156,7 @@ export function miniRec(rec) {
   const t = rec.title;
   const href = `#/title/${encodeURIComponent(t.id)}`;
   return h('li', { class: 'lm-vmini' },
-    h('a', { class: 'lm-vmini__poster', href, tabindex: '-1', 'aria-hidden': 'true' }, t.poster ? h('img', { src: t.poster, alt: '', loading: 'lazy', decoding: 'async' }) : null),
+    h('a', { class: 'lm-vmini__poster', href, tabindex: '-1', 'aria-hidden': 'true' }, artImg({ src: t.poster, srcset: t.posterSrcset, sizes: '96px', title: t.title, kind: 'poster' })),
     h('div', { class: 'lm-vmini__body' },
       h('a', { class: 'lm-vmini__title', href }, t.title),
       h('span', { class: 'lm-vmini__meta' }, [t.genres?.[0], lengthLabel(t), t.quality === '4K' ? '4K' : null].filter(Boolean).join(' · ')),

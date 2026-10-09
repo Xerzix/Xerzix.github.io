@@ -57,6 +57,10 @@ export const titleSchema = v.object({
   featured: v.boolean().optional(),
   editorialRank: v.int().min(0).max(100000).optional(),
   creatorAccountId: v.string().max(80).nullable().optional(),
+  // 'catalog' = listed for reference only (no media, never playable); 'stream' needs ready media.
+  availability: v.enum(['stream', 'catalog']).optional(),
+  tmdbId: v.int().min(1).max(100_000_000).nullable().optional(),
+  tmdbType: v.enum(['movie', 'tv']).nullable().optional(),
 });
 export const titlePatchSchema = titleSchema.partial();
 
@@ -138,6 +142,10 @@ export function titleDto(r) {
     awards: parseJson(r.awards, []),
     poster: r.poster,
     backdrop: r.backdrop,
+    artworkSource: parseJson(r.artwork, {}).source || (r.poster ? 'manual' : null),
+    availability: r.availability,
+    tmdbId: r.tmdb_id,
+    tmdbType: r.tmdb_type,
     palette: parseJson(r.palette, []),
     license: parseJson(r.license, {}),
     status: r.status,
@@ -312,6 +320,7 @@ function titleColumns(input) {
     type: 'type', title: 'title', originalTitle: 'original_title', tagline: 'tagline', year: 'year', releaseDate: 'release_date',
     runtimeMin: 'runtime_min', ratingSource: 'rating_source', originalLanguage: 'original_language', poster: 'poster', backdrop: 'backdrop',
     editorialRank: 'editorial_rank', creatorAccountId: 'creator_account_id',
+    availability: 'availability', tmdbId: 'tmdb_id', tmdbType: 'tmdb_type',
   };
   for (const [k, col] of Object.entries(map)) if (input[k] !== undefined) cols[col] = input[k];
   if (input.synopsis !== undefined) cols.synopsis = input.synopsis ?? '';
@@ -358,6 +367,10 @@ export function updateTitle(db, id, patch) {
   if (patch.creatorAccountId !== undefined) assertCreator(db, patch.creatorAccountId);
   const { id: _ignored, ...rest } = patch;
   const cols = titleColumns(rest);
+  // Staff-chosen artwork replaces synced artwork and is kept by later syncs.
+  const isSynced = (url) => typeof url === 'string' && url.startsWith('media/artwork/tmdb/');
+  const artChanged = (col) => cols[col] !== undefined && cols[col] !== row[col] && !isSynced(cols[col]);
+  if (artChanged('poster') || artChanged('backdrop')) cols.artwork = toJson({ source: 'manual', locked: true });
   const changed = [];
   const before = titleDto(row);
   for (const key of Object.keys(rest)) if (JSON.stringify(before[key]) !== JSON.stringify(rest[key])) changed.push(key);
@@ -372,7 +385,9 @@ export function updateTitle(db, id, patch) {
 export function publishMissing(db, row) {
   const missing = [];
   if (!String(row.synopsis || '').trim()) missing.push({ field: 'synopsis', message: 'Add a synopsis.' });
-  if (!row.poster) missing.push({ field: 'poster', message: 'Add poster artwork.' });
+  if (!row.poster) missing.push({ field: 'poster', message: 'Add poster artwork (or sync it from TMDB).' });
+  // Reference-only titles are never streamed, so they need neither a streaming licence nor media.
+  if (row.availability === 'catalog') return missing;
   const license = parseJson(row.license, {});
   if (!license.name || !license.attribution) missing.push({ field: 'license', message: 'Add the licence name and the attribution line.' });
   if (row.type === 'movie') {

@@ -7,6 +7,7 @@
 // host is the reference clock: when its own playback drifts from the timeline (it was
 // buffering, say), it re-publishes its real position so guests wait for it instead of
 // running ahead. Guests only control playback when the host allows it.
+import { artImg } from '../ui/artwork.js';
 import { h, newUid, announce } from '../core/dom.js';
 import { api } from '../api/client.js';
 import { session } from '../core/session.js';
@@ -97,7 +98,7 @@ export default async function render(ctx) {
 function gate({ eyebrow = 'Watch party', title, message, art, extra = [], actions = [], role }) {
   const headingId = newUid('pg');
   return h('section', { class: 'lm-party-gate', 'aria-labelledby': headingId, role },
-    art ? h('div', { class: 'lm-party-gate__bg', 'aria-hidden': 'true' }, h('img', { src: art, alt: '', decoding: 'async' })) : null,
+    art ? h('div', { class: 'lm-party-gate__bg', 'aria-hidden': 'true' }, artImg({ src: art, kind: 'backdrop', loading: 'eager' })) : null,
     h('div', { class: 'lm-party-gate__card' },
       h('span', { class: 'lm-party-gate__mark', 'aria-hidden': 'true' }, icon('users')),
       h('span', { class: 'lm-eyebrow' }, eyebrow),
@@ -240,7 +241,7 @@ function inviteGate(ctx, party, detail, enter) {
   const el = gate({
     eyebrow: `Watch party · ${party.code}`,
     title: titleName,
-    art: detail?.backdrop || detail?.poster || null,
+    art: detail?.backdrop || null,
     message: ep ? episodeLabel(ep) : null,
     extra: [
       party.host ? h('div', { class: 'lm-party-gate__host' }, avatar(party.host.avatar), h('span', null, 'Hosted by ', h('strong', null, party.host.name))) : null,

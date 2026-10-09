@@ -142,20 +142,24 @@ export function mapSearchResult(r, forcedType) {
 }
 
 export function isConfigured(config) {
-  return !!config.tmdb?.token;
+  return !!(config.tmdb?.token || config.tmdb?.apiKey);
 }
 
 function notConfigured() {
-  return new HttpError(503, 'TMDB_NOT_CONFIGURED', 'TMDB import is not configured. Set TMDB_API_TOKEN on the server to enable it.');
+  return new HttpError(503, 'TMDB_NOT_CONFIGURED', 'TMDB is not configured. Set TMDB_API_TOKEN (or TMDB_API_KEY) on the server to enable metadata and artwork.');
 }
 
-async function tmdbGet(config, path, params = {}, fetchImpl = fetch) {
+export async function tmdbGet(config, path, params = {}, fetchImpl = fetch) {
   if (!isConfigured(config)) throw notConfigured();
-  const url = new URL(API + path);
+  const url = new URL((config.tmdb.apiBase || API) + path);
   for (const [k, val] of Object.entries(params)) if (val !== undefined && val !== null && val !== '') url.searchParams.set(k, String(val));
+  // The credential never leaves the server: a Bearer header (v4 token) or the api_key parameter (v3 key).
+  const headers = { Accept: 'application/json' };
+  if (config.tmdb.token) headers.Authorization = `Bearer ${config.tmdb.token}`;
+  else url.searchParams.set('api_key', config.tmdb.apiKey);
   let res;
   try {
-    res = await fetchImpl(url, { headers: { Authorization: `Bearer ${config.tmdb.token}`, Accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
+    res = await fetchImpl(url, { headers, signal: AbortSignal.timeout(10_000) });
   } catch {
     throw new HttpError(502, 'TMDB_UNAVAILABLE', 'TMDB could not be reached. Try again later.');
   }

@@ -6,13 +6,13 @@
 
 <h2 id="summary">1. Summary</h2>
 <ul>
-  <li>Lumina sets <strong>one cookie</strong>, <code>lumina_sid</code>, and only when you sign in. It is strictly necessary to keep you signed in.</li>
+  <li>Lumina sets <strong>two cookies</strong>, and only when you sign in: <code>lumina_sid</code> keeps you signed in, and <code>lumina_device</code> lets “Who’s watching?” list the identities used on this browser. Both are strictly necessary for those features.</li>
   <li>Lumina uses <strong>no analytics, advertising, social-media or tracking cookies</strong>, and no similar technologies such as tracking pixels or fingerprinting.</li>
   <li>Your preferences and, in Preview mode, your list and progress are kept in your browser’s <strong>local storage</strong> and <strong>session storage</strong>. These entries never leave your device unless the feature that uses them sends them as part of a request you make (described below).</li>
   <li>Because everything Lumina stores is needed for features you use, there is no consent banner. If analytics or advertising cookies were ever added, we would ask for your consent first and update this policy.</li>
 </ul>
 
-<h2 id="cookie">2. The session cookie</h2>
+<h2 id="cookie">2. The session and device cookies</h2>
 <table>
   <caption>Cookies set by Lumina</caption>
   <thead>
@@ -24,6 +24,12 @@
       <td>Keeps you signed in and remembers the profile you selected. It holds a random token; the server stores only a hash of it. It is HttpOnly (page scripts cannot read it), SameSite=Lax, and Secure when the service runs over HTTPS.</td>
       <td>First-party, strictly necessary</td>
       <td>Up to 30 days. Deleted when you sign out, when the session is revoked from Account settings or by staff, or when it expires.</td>
+    </tr>
+    <tr>
+      <td><code>lumina_device</code></td>
+      <td>Recognises this browser so “Who’s watching?” can show the (up to five) identities used here, and whether you chose “Keep me signed in on this device” for any of them. It holds a random token; the server stores only a hash of it and the list of identities (username, display name and picture). It is HttpOnly, SameSite=Lax, and Secure over HTTPS.</td>
+      <td>First-party, strictly necessary</td>
+      <td>About 13 months from the last sign-in on this browser. Removing an identity from “Who’s watching?” takes it off the list; clearing the cookie forgets the list.</td>
     </tr>
   </tbody>
 </table>
@@ -38,6 +44,7 @@
   </thead>
   <tbody>
     <tr><td><code>lumina.introSeen</code></td><td>Local</td><td>That you have seen the opening sequence, so it is not shown again.</td><td>Until cleared</td></tr>
+    <tr><td><code>lumina.identityChosen</code></td><td>Session</td><td>That you answered “Who’s watching?” in this browser session, so it is not asked again until you next open Lumina.</td><td>Until the tab or browser is closed</td></tr>
     <tr><td><code>lumina.appearance</code></td><td>Local</td><td>Theme, garden environment, motion, density and similar appearance choices on this device.</td><td>Until cleared</td></tr>
     <tr><td><code>lumina.local.*</code> (<code>local.profile</code>, <code>local.library</code>)</td><td>Local</td><td>Preview mode only: your preferences, My List, progress, history, collections and follows, kept on this device instead of an account.</td><td>Until cleared</td></tr>
     <tr><td><code>lumina.recentSearches.*</code></td><td>Local</td><td>Your recent searches for each profile on this device, so you can repeat them.</td><td>Until cleared</td></tr>

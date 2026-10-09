@@ -33,9 +33,11 @@ export async function startBrowser() {
  * New page. options: { skipIntro = true, viewport, reducedMotion, cookies: [{name, value}], base }
  * Collects console errors and page errors in page.errors.
  */
-export async function newPage(browser, { base, skipIntro = true, viewport = { width: 1440, height: 900 }, reducedMotion = 'no-preference', cookies = [] } = {}) {
+export async function newPage(browser, { base, skipIntro = true, skipWho = true, viewport = { width: 1440, height: 900 }, reducedMotion = 'no-preference', cookies = [] } = {}) {
   const context = await browser.newContext({ viewport, ignoreHTTPSErrors: true, reducedMotion });
   if (skipIntro) await context.addInitScript(() => localStorage.setItem('lumina.introSeen', '1'));
+  // "Who's watching?" opens each browser session; most tests start past it.
+  if (skipWho) await context.addInitScript(() => sessionStorage.setItem('lumina.identityChosen', '1'));
   if (cookies.length) await context.addCookies(cookies.map((c) => ({ ...c, url: base })));
   // External media/font hosts are unreachable in CI sandboxes; fail them fast.
   await context.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());

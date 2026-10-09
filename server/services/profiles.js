@@ -7,10 +7,11 @@ import { newId } from '../lib/crypto.js';
 import { patterns, v } from '../lib/validate.js';
 import { isElevated } from './accounts.js';
 import { mergePreferences } from './dto.js';
+import { AVATAR_IDS } from '../../js/core/avatar-ids.js';
 
 // Mirrors of the browser-side catalogues (js/ui/avatars.js, js/theme.js, js/fx/garden.js,
 // js/core/i18n.js, js/core/ratings.js). tests/server/profiles.test.js fails if they drift.
-export const AVATAR_IDS = ['sakura', 'lantern', 'moon', 'maple', 'koi', 'crane', 'wave', 'fuji', 'torii', 'bamboo', 'fox', 'snow'];
+export { AVATAR_IDS } from '../../js/core/avatar-ids.js';
 export const PRESET_IDS = ['velvet-garden', 'midnight-sakura', 'crimson-temple', 'moonlit-garden', 'golden-pavilion', 'minimal-black'];
 export const ENVIRONMENT_IDS = ['sakura', 'moonlit', 'autumn', 'snow', 'lantern', 'none'];
 export const THEME_KEYS = ['bg', 'bg2', 'surface', 'accent', 'accentStrong', 'button', 'text', 'text2', 'gold'];

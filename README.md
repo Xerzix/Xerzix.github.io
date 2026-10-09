@@ -17,7 +17,27 @@ npm start                   # http://localhost:8080  (creates var/lumina.db and 
 npm run admin:create -- you@example.com   # prompts for a password; creates an administrator
 ```
 
-Open http://localhost:8080. The intro plays on the first visit only; Settings → About can replay it. The admin dashboard is at `/admin.html`: sign in as an admin, then confirm your password.
+Open http://localhost:8080. The intro plays on the first visit only (Settings → About can replay it); then Lumina asks **“Who’s watching?”**. Use an empty slot to create an identity (or sign in to an existing account). The admin dashboard is at `/admin.html`: sign in as an admin, then confirm your password.
+
+## Accounts and “Who’s watching?”
+
+- Each of the five slots on the opening screen is a **separate account**: its own unique username, password (scrypt-hashed), sessions, watchlist, history, reviews and ratings, language, theme and Velvia preferences. This is different from *profiles*, which still exist **inside** an account (for example a kids profile a parent manages) and share that account’s sign-in.
+- A browser lists at most **five identities**. The database enforces it, and so does the API, which returns `409 IDENTITY_LIMIT` for a sixth. Remove one under “Manage identities” (the account and its data are kept) to add another.
+- **Switching** (opening screen, the avatar menu → *Switch account*, or *Settings → Account & profiles*) asks for that account’s password, unless “Keep me signed in on this device” was chosen there (30 days, cleared on sign-out). Every switch ends the current session and creates a new one on the server; nothing is just relabelled in the browser.
+- Usernames are unique regardless of case (a unique database index). Accounts created before usernames existed get one automatically on first start (e.g. `hana.sato`); it can be changed under Settings → Account & profiles → Edit profile.
+- Separate accounts need the Lumina server. On static hosting (Preview mode, e.g. GitHub Pages) the opening screen explains this and lets visitors continue to the open catalog.
+
+## Real artwork (TMDB)
+
+- **Lumina Originals** use key art made from their own frames: each backdrop is a frame from the film, and the posters are the films’ own title cards (Garden Hours’ title is set over a frame by `npm run art:key-art`).
+- **Other titles** get their real posters, backdrops and episode stills from [The Movie Database (TMDB)](https://www.themoviedb.org/):
+  1. Create a free TMDB account and an API key at https://www.themoviedb.org/settings/api.
+  2. Put the **API Read Access Token** in `.env` as `TMDB_API_TOKEN=…` (or the v3 key as `TMDB_API_KEY=…`). It is used only by the server and never reaches the browser.
+  3. Run `npm run artwork:sync` (or Admin → Content → **Sync artwork**; per title: *Sync artwork from TMDB*). Then `npm run catalog:export` to refresh the Preview snapshot.
+- Matching is strict: same title (ignoring accents, punctuation and a leading “The”) and a release year within one. Staff can pin a TMDB id in the title editor. Without a match a title keeps **no** artwork and shows the Lumina fallback — never a guessed or unrelated poster. Lumina key art and staff-chosen images are never overwritten.
+- Metadata responses are cached in the database (7 days); images are downloaded once and served from `/media/artwork/tmdb/…` with long-lived caching, in responsive sizes (`srcset`, lazy loading). If TMDB is down, the site keeps working: cached images still load, and anything missing shows the fallback.
+- **Attribution and terms:** TMDB requires the notice “This product uses the TMDB API but is not endorsed or certified by TMDB” (shown in Settings → About) and credit where its data appears (title pages link “Artwork: TMDB”). TMDB images belong to their rights holders; use them under TMDB’s terms of use (non-commercial use is free; commercial use needs a TMDB licence).
+- **Artwork is not a streaming licence.** A title is playable only when it has authorised, ready media. Titles added for reference can be marked **Catalog only** in the title editor: they show their metadata and artwork with “Not available to stream on Lumina”, never a Play button.
 
 For **Preview mode**, serve the repository root with any static file server (GitHub Pages does this). The frontend detects that `/api` is missing and switches modes on its own.
 
@@ -31,6 +51,8 @@ For **Preview mode**, serve the repository root with any static file server (Git
 | `npm run db:migrate` / `db:seed` | Apply migrations / seed an empty catalog |
 | `npm run admin:create -- <email>` | Create or promote an administrator |
 | `npm run catalog:export` | Write `data/catalog.json` (the Preview-mode snapshot) from the database |
+| `npm run artwork:sync [-- --force] [-- <id>…]` | Match titles to TMDB by title and year and store their real artwork (needs `TMDB_API_TOKEN`) |
+| `npm run art:key-art` | Render the Garden Hours poster from a frame of the series (Playwright) |
 | `npm run media:sample` | Render and encode the Lumina Originals (needs `FFMPEG_PATH`) |
 | `npm run media:verify [-- --write]` | Read the stream manifests of seed titles and record their real renditions |
 | `npm run art:build` | Regenerate the key-art SVGs |
@@ -55,7 +77,7 @@ Optional integrations (each degrades gracefully when absent):
 | `MAIL_TRANSPORT=webhook` + `MAIL_WEBHOOK_URL` | Password-reset and security email. In development, mail goes to the server log. |
 | `FFMPEG_PATH`, `FFPROBE_PATH` | Transcoding creator uploads into HLS ladders, and detailed media probing |
 | `UPLOAD_SCAN_COMMAND` | Malware scanning of uploads (e.g. ClamAV) |
-| `TMDB_API_TOKEN` | Admin-only metadata import from TMDB |
+| `TMDB_API_TOKEN` (or `TMDB_API_KEY`) | Real posters, backdrops and episode stills from TMDB (`npm run artwork:sync`), and the admin metadata import |
 
 ## Database
 SQLite through `node:sqlite`, stored in `var/lumina.db`, with WAL mode and foreign keys on. Migrations are the numbered SQL files in `server/db/migrations/`. They are applied automatically at startup, or with `npm run db:migrate`. To change the schema, add a new file; never edit an applied one. For multiple instances, port the SQL to PostgreSQL (the queries are standard).
@@ -99,7 +121,8 @@ SQLite through `node:sqlite`, stored in `var/lumina.db`, with WAL mode and forei
 ## Content and licensing
 - The seed catalog contains four **Blender Foundation open movies** (Creative Commons Attribution). They are streamed from public hosts, and each title page shows its attribution.
 - It also contains **Lumina Originals**: Hanami, Kōyō and the series Garden Hours. These were rendered from Lumina's own garden artwork by `npm run media:sample`. Hanami is a true 3840×2160 master and is the only title offered in 4K.
-- Key art is original and generated by `scripts/make-artwork.mjs`.
+- Lumina Originals’ key art comes from the films’ own frames (`assets/art/originals/`). The open movies show real artwork once synced from TMDB, and the Lumina fallback until then.
+- The five identity pictures (`assets/avatars/`) are original artwork made for Lumina.
 - Fonts (Cormorant Garamond, Inter) are self-hosted under the SIL Open Font License.
 - hls.js is Apache-2.0.
 

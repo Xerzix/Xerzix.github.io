@@ -1,6 +1,6 @@
 {
  "version": 1,
- "generatedAt": "2026-09-29T03:51:02.594Z",
+ "generatedAt": "2026-10-09T11:53:34.634Z",
  "titles": [
   {
    "id": "hanami",
@@ -42,8 +42,8 @@
    "directors": [],
    "cast": [],
    "awards": [],
-   "poster": "assets/art/hanami-poster.svg",
-   "backdrop": "assets/art/hanami-backdrop.svg",
+   "poster": "assets/art/originals/hanami-poster-720.jpg",
+   "backdrop": "assets/art/originals/hanami-backdrop-1920.jpg",
    "palette": [
     "#781B32",
     "#F4B6C7",
@@ -72,14 +72,18 @@
    ],
    "seasonCount": null,
    "episodeCount": null,
+   "availability": "stream",
    "playable": true,
+   "artworkSource": "lumina",
    "hasTrailer": false,
    "memberRating": null,
    "featured": true,
    "editorialRank": 5,
    "status": "published",
-   "addedAt": "2026-09-29T03:51:02.589Z",
-   "publishedAt": "2026-09-29T03:51:02.589Z",
+   "addedAt": "2026-10-09T11:53:34.344Z",
+   "publishedAt": "2026-10-09T11:53:34.344Z",
+   "posterSrcset": "assets/art/originals/hanami-poster-360.jpg 360w, assets/art/originals/hanami-poster-720.jpg 720w",
+   "backdropSrcset": "assets/art/originals/hanami-backdrop-960.jpg 960w, assets/art/originals/hanami-backdrop-1920.jpg 1920w",
    "credits": {
     "directors": [],
     "cast": [],
@@ -94,6 +98,7 @@
     "name": "Lumina Original",
     "attribution": "© Lumina"
    },
+   "artworkCredit": null,
    "trailerMediaId": null,
    "creator": null,
    "seasons": []
@@ -148,8 +153,8 @@
     "Thom Hoffman"
    ],
    "awards": [],
-   "poster": "assets/art/sintel-poster.svg",
-   "backdrop": "assets/art/sintel-backdrop.svg",
+   "poster": null,
+   "backdrop": null,
    "palette": [
     "#8FA9B8",
     "#4E5D6C",
@@ -167,14 +172,16 @@
    "audioFormats": [],
    "seasonCount": null,
    "episodeCount": null,
+   "availability": "stream",
    "playable": true,
+   "artworkSource": null,
    "hasTrailer": false,
    "memberRating": null,
    "featured": true,
    "editorialRank": 10,
    "status": "published",
-   "addedAt": "2026-09-29T03:51:02.589Z",
-   "publishedAt": "2026-09-29T03:51:02.589Z",
+   "addedAt": "2026-10-09T11:53:34.344Z",
+   "publishedAt": "2026-10-09T11:53:34.344Z",
    "credits": {
     "directors": [
      "Colin Levy"
@@ -210,6 +217,7 @@
     "attribution": "© copyright Blender Foundation | durian.blender.org",
     "source": "https://durian.blender.org/"
    },
+   "artworkCredit": null,
    "trailerMediaId": null,
    "creator": null,
    "seasons": []
@@ -254,8 +262,8 @@
    "directors": [],
    "cast": [],
    "awards": [],
-   "poster": "assets/art/garden-hours-poster.svg",
-   "backdrop": "assets/art/garden-hours-backdrop.svg",
+   "poster": "assets/art/originals/garden-hours-poster-720.jpg",
+   "backdrop": "assets/art/originals/garden-hours-backdrop-1920.jpg",
    "palette": [
     "#2B3A55",
     "#F4B6C7",
@@ -283,14 +291,18 @@
    ],
    "seasonCount": 2,
    "episodeCount": 4,
+   "availability": "stream",
    "playable": true,
+   "artworkSource": "lumina",
    "hasTrailer": false,
    "memberRating": null,
    "featured": true,
    "editorialRank": 15,
    "status": "published",
-   "addedAt": "2026-09-29T03:51:02.589Z",
-   "publishedAt": "2026-09-29T03:51:02.589Z",
+   "addedAt": "2026-10-09T11:53:34.344Z",
+   "publishedAt": "2026-10-09T11:53:34.344Z",
+   "posterSrcset": "assets/art/originals/garden-hours-poster-360.jpg 360w, assets/art/originals/garden-hours-poster-720.jpg 720w",
+   "backdropSrcset": "assets/art/originals/garden-hours-backdrop-960.jpg 960w, assets/art/originals/garden-hours-backdrop-1920.jpg 1920w",
    "credits": {
     "directors": [],
     "cast": [],
@@ -305,6 +317,7 @@
     "name": "Lumina Original",
     "attribution": "© Lumina"
    },
+   "artworkCredit": null,
    "trailerMediaId": null,
    "creator": null,
    "seasons": [
@@ -418,8 +431,8 @@
    ],
    "cast": [],
    "awards": [],
-   "poster": "assets/art/big-buck-bunny-poster.svg",
-   "backdrop": "assets/art/big-buck-bunny-backdrop.svg",
+   "poster": null,
+   "backdrop": null,
    "palette": [
     "#7DA453",
     "#F2C14E",
@@ -437,14 +450,16 @@
    "audioFormats": [],
    "seasonCount": null,
    "episodeCount": null,
+   "availability": "stream",
    "playable": true,
+   "artworkSource": null,
    "hasTrailer": false,
    "memberRating": null,
    "featured": true,
    "editorialRank": 20,
    "status": "published",
-   "addedAt": "2026-09-29T03:51:02.589Z",
-   "publishedAt": "2026-09-29T03:51:02.589Z",
+   "addedAt": "2026-10-09T11:53:34.344Z",
+   "publishedAt": "2026-10-09T11:53:34.344Z",
    "credits": {
     "directors": [
      "Sacha Goedegebure"
@@ -467,6 +482,7 @@
     "attribution": "© copyright 2008, Blender Foundation | www.bigbuckbunny.org",
     "source": "https://peach.blender.org/"
    },
+   "artworkCredit": null,
    "trailerMediaId": null,
    "creator": null,
    "seasons": []
@@ -522,8 +538,8 @@
     "Rogier Schippers"
    ],
    "awards": [],
-   "poster": "assets/art/tears-of-steel-poster.svg",
-   "backdrop": "assets/art/tears-of-steel-backdrop.svg",
+   "poster": null,
+   "backdrop": null,
    "palette": [
     "#2E6F8E",
     "#1C2A33",
@@ -541,14 +557,16 @@
    "audioFormats": [],
    "seasonCount": null,
    "episodeCount": null,
+   "availability": "stream",
    "playable": true,
+   "artworkSource": null,
    "hasTrailer": false,
    "memberRating": null,
    "featured": true,
    "editorialRank": 30,
    "status": "published",
-   "addedAt": "2026-09-29T03:51:02.589Z",
-   "publishedAt": "2026-09-29T03:51:02.589Z",
+   "addedAt": "2026-10-09T11:53:34.344Z",
+   "publishedAt": "2026-10-09T11:53:34.344Z",
    "credits": {
     "directors": [
      "Ian Hubert"
@@ -583,6 +601,7 @@
     "attribution": "(CC) Blender Foundation | mango.blender.org",
     "source": "https://mango.blender.org/"
    },
+   "artworkCredit": null,
    "trailerMediaId": null,
    "creator": null,
    "seasons": []
@@ -636,8 +655,8 @@
     "Cas Jansen"
    ],
    "awards": [],
-   "poster": "assets/art/elephants-dream-poster.svg",
-   "backdrop": "assets/art/elephants-dream-backdrop.svg",
+   "poster": null,
+   "backdrop": null,
    "palette": [
     "#C9772E",
     "#5A3A22",
@@ -655,14 +674,16 @@
    "audioFormats": [],
    "seasonCount": null,
    "episodeCount": null,
+   "availability": "stream",
    "playable": true,
+   "artworkSource": null,
    "hasTrailer": false,
    "memberRating": null,
    "featured": false,
    "editorialRank": 40,
    "status": "published",
-   "addedAt": "2026-09-29T03:51:02.589Z",
-   "publishedAt": "2026-09-29T03:51:02.589Z",
+   "addedAt": "2026-10-09T11:53:34.344Z",
+   "publishedAt": "2026-10-09T11:53:34.344Z",
    "credits": {
     "directors": [
      "Bassam Kurdali"
@@ -694,6 +715,7 @@
     "attribution": "© copyright 2006, Blender Foundation | Netherlands Media Art Institute | www.elephantsdream.org",
     "source": "https://orange.blender.org/"
    },
+   "artworkCredit": null,
    "trailerMediaId": null,
    "creator": null,
    "seasons": []
@@ -737,8 +759,8 @@
    "directors": [],
    "cast": [],
    "awards": [],
-   "poster": "assets/art/koyo-autumn-pavilion-poster.svg",
-   "backdrop": "assets/art/koyo-autumn-pavilion-backdrop.svg",
+   "poster": "assets/art/originals/koyo-autumn-pavilion-poster-720.jpg",
+   "backdrop": "assets/art/originals/koyo-autumn-pavilion-backdrop-1920.jpg",
    "palette": [
     "#B5432A",
     "#E39B3B",
@@ -766,14 +788,18 @@
    ],
    "seasonCount": null,
    "episodeCount": null,
+   "availability": "stream",
    "playable": true,
+   "artworkSource": "lumina",
    "hasTrailer": false,
    "memberRating": null,
    "featured": false,
    "editorialRank": 50,
    "status": "published",
-   "addedAt": "2026-09-29T03:51:02.589Z",
-   "publishedAt": "2026-09-29T03:51:02.589Z",
+   "addedAt": "2026-10-09T11:53:34.344Z",
+   "publishedAt": "2026-10-09T11:53:34.344Z",
+   "posterSrcset": "assets/art/originals/koyo-autumn-pavilion-poster-360.jpg 360w, assets/art/originals/koyo-autumn-pavilion-poster-720.jpg 720w",
+   "backdropSrcset": "assets/art/originals/koyo-autumn-pavilion-backdrop-960.jpg 960w, assets/art/originals/koyo-autumn-pavilion-backdrop-1920.jpg 1920w",
    "credits": {
     "directors": [],
     "cast": [],
@@ -788,6 +814,7 @@
     "name": "Lumina Original",
     "attribution": "© Lumina"
    },
+   "artworkCredit": null,
    "trailerMediaId": null,
    "creator": null,
    "seasons": []

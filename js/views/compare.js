@@ -7,6 +7,7 @@ import { icon } from '../ui/icons.js';
 import { button, emptyState, loading, notice, stars } from '../ui/components.js';
 import { velviaCompare } from '../ui/panels/velvia-panel.js';
 import { openTitlePicker } from './collection.js';
+import { artImg } from '../ui/artwork.js';
 
 const MAX = 3;
 const enc = encodeURIComponent;
@@ -100,7 +101,7 @@ export default async function render(ctx) {
       h('td', { class: 'lm-cmp__corner' }),
       ...titles.map((t) => h('th', { scope: 'col', class: 'lm-cmp__head', 'data-col': t.id, style: t.palette?.[0] ? { '--card-tint': t.palette[0] } : undefined },
         h('a', { class: 'lm-cmp__poster', href: `#/title/${enc(t.id)}` },
-          t.poster ? h('img', { src: t.poster, alt: '', loading: 'lazy', onError: (e) => e.currentTarget.remove() }) : null,
+          artImg({ src: t.poster, srcset: t.posterSrcset, sizes: '200px', title: t.title, kind: 'poster' }),
           h('span', { class: 'lm-cmp__title' }, t.title)),
         h('span', { class: 'lm-cmp__sub' }, [t.year, t.type === 'series' ? 'Series' : 'Film'].filter(Boolean).join(' · ')),
         button('Remove', { variant: 'ghost', size: 'sm', icon: 'close', ariaLabel: `Remove ${t.title} from the comparison`, onClick: () => removeId(t.id, t.title) }))),

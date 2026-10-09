@@ -15,6 +15,7 @@ import { sendMail } from '../services/mailer.js';
 import { notify } from '../services/notifications.js';
 import { assertPasswordPolicy, PASSWORD_MAX } from '../services/passwords.js';
 import { cleanNameField, parentalGuard } from '../services/profiles.js';
+import { AVATAR_IDS, IdentityService, usernameProblem, usernameTaken } from '../services/identities.js';
 
 const MIN = 60_000;
 const password = () => v.string().raw().max(1024);
@@ -29,6 +30,7 @@ function securityNotice(db, account, title, body) {
 
 export default function register(app, { db, services, config }) {
   const accounts = (services.accounts ??= new AccountService(db));
+  const identities = (services.identities ??= new IdentityService(db));
   const fresh = (ctx) => accounts.byId(ctx.account.id);
   // Account settings are the grown-ups' while a kids or maturity-limited profile is active.
   // Endpoints that take the account password in the same request need no extra check.
@@ -40,9 +42,16 @@ export default function register(app, { db, services, config }) {
   app.patch('/api/account', requireAuth, async (ctx) => {
     const body = v.parse(v.object({
       displayName: v.string().min(1).max(40).optional(),
+      username: v.string().max(40).optional(),
+      avatar: v.enum(AVATAR_IDS).optional(),
       email: v.string().email().optional(),
       currentPassword: password().optional(),
     }), await ctx.body());
+    if (body.username !== undefined) {
+      const problem = usernameProblem(body.username);
+      if (problem) throw validation({ username: problem });
+      body.username = body.username.trim();
+    }
     cleanNameField(body, 'displayName');
     adultsOnly(ctx);
     const account = ctx.account;
@@ -70,6 +79,23 @@ export default function register(app, { db, services, config }) {
     }
     if (body.displayName !== undefined && body.displayName !== account.display_name) {
       db.run('UPDATE accounts SET display_name = ?, updated_at = ? WHERE id = ?', body.displayName, ts, account.id);
+    }
+    if (body.username !== undefined && body.username !== account.username) {
+      const other = accounts.byUsername(body.username);
+      if (other && other.id !== account.id) throw usernameTaken();
+      try {
+        db.run('UPDATE accounts SET username = ?, updated_at = ? WHERE id = ?', body.username, ts, account.id);
+      } catch (err) {
+        if (/UNIQUE constraint failed: accounts\.username/.test(err.message)) throw usernameTaken();
+        throw err;
+      }
+      audit(db, ctx, 'account.username_change', { targetType: 'account', targetId: account.id, details: { from: account.username, to: body.username } });
+    }
+    if (body.avatar !== undefined && body.avatar !== account.avatar) {
+      if (identities.avatarsInUse(ctx, account.id).has(body.avatar)) throw validation({ avatar: 'Another identity on this device already uses this picture.' });
+      db.run('UPDATE accounts SET avatar = ?, updated_at = ? WHERE id = ?', body.avatar, ts, account.id);
+      // A single-profile account shows the same picture everywhere.
+      if (db.get('SELECT COUNT(*) AS n FROM profiles WHERE account_id = ?', account.id).n === 1) db.run('UPDATE profiles SET avatar = ?, updated_at = ? WHERE account_id = ?', body.avatar, ts, account.id);
     }
     return { account: accountDto(fresh(ctx)) };
   });

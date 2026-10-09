@@ -20,7 +20,7 @@ JSON over HTTPS, same-origin, cookie session. The browser client lives in `js/ap
 
 ## Shapes
 
-**TitleSummary**: `{ id, type: 'movie'|'series', title, originalTitle, tagline, synopsis, year, releaseDate, runtimeMin, ageRating, ratingSource: 'official'|'advisory', minAge, genres[], tags[], moods[], keywords[], countries[], originalLanguage, directors[], cast[] (names), awards[], poster, backdrop, palette[], resolutions[] (verified heights, desc), quality: '4K'|'HD'|'SD'|null, hdr, audioLanguages[], subtitleLanguages[], hasSubtitles, audioFormats[], seasonCount, episodeCount, playable, hasTrailer, memberRating: {average, count}|null, featured, editorialRank, status, addedAt, publishedAt }`
+**TitleSummary**: `{ id, type: 'movie'|'series', title, originalTitle, tagline, synopsis, year, releaseDate, runtimeMin, ageRating, ratingSource: 'official'|'advisory', minAge, genres[], tags[], moods[], keywords[], countries[], originalLanguage, directors[], cast[] (names), awards[], poster, backdrop, posterSrcset?, backdropSrcset?, artworkSource: 'lumina'|'tmdb'|'upload'|'manual'|null, availability: 'stream'|'catalog', palette[], resolutions[] (verified heights, desc), quality: '4K'|'HD'|'SD'|null, hdr, audioLanguages[], subtitleLanguages[], hasSubtitles, audioFormats[], seasonCount, episodeCount, playable, hasTrailer, memberRating: {average, count}|null, featured, editorialRank, status, addedAt, publishedAt }`
 
 **TitleDetail**: TitleSummary plus `{ credits: {directors[], cast[{name, role?}], crew[{name, job}]}, license: {name, url?, attribution, source?}, trailerMediaId, creator: {id|null, name}|null (`id` is the creator's account id to follow; null once creator access is removed), seasons: [{ number, name, synopsis, year, episodes: [Episode] }] }`
 
@@ -70,14 +70,14 @@ JSON over HTTPS, same-origin, cookie session. The browser client lives in `js/ap
 | GET / PUT / DELETE | `/api/follows` · `/api/follows/:type/:id` (`series`\|`creator`\|`genre`) | `{items:[{type, id, createdAt}]}` / `{ok}` |
 
 ## Auth & account
-| POST | `/api/auth/register` `{email, password, displayName, acceptTerms: true}` | public, rate limited | session payload; creates the first profile |
+| POST | `/api/auth/register` `{username, email, password, displayName?, avatar?, remember?, acceptTerms: true}` | public, rate limited | session payload; creates the account and its first profile and adds it to this device's identities · 409 `USERNAME_TAKEN` (unique, case-insensitive, enforced by the database) · 409 `EMAIL_TAKEN` · 409 `IDENTITY_LIMIT` (this device already lists five identities) · 422 `avatar` when another identity on this device uses that picture |
 |---|---|---|---|
-| POST | `/api/auth/login` `{email, password, totp?}` | public, rate limited | session payload · 401 `INVALID_CREDENTIALS` · 401 `TOTP_REQUIRED` · 401 `INVALID_TOTP` (`reused: true` when the code was already accepted once — each code works once) · 423 `ACCOUNT_LOCKED` · 403 `ACCOUNT_SUSPENDED` |
-| POST | `/api/auth/logout` | account | 204 |
+| POST | `/api/auth/login` `{identifier (username or email), password, totp?, remember?}` (`email` is still accepted) | public, rate limited | session payload; adds the account to this device's identities (`remember` keeps it switchable without a password for 30 days) · 409 `IDENTITY_LIMIT` · 401 `INVALID_CREDENTIALS` · 401 `TOTP_REQUIRED` · 401 `INVALID_TOTP` (`reused: true` when the code was already accepted once — each code works once) · 423 `ACCOUNT_LOCKED` · 403 `ACCOUNT_SUSPENDED` |
+| POST | `/api/auth/logout` | account | 204; the identity stays on this device but needs its password next time |
 | POST | `/api/auth/forgot` `{email}` | public | 202 always (no account enumeration) |
 | POST | `/api/auth/reset` `{token, password}` | public | 200; revokes every session |
 | POST | `/api/auth/elevate` `{password, totp?}` | account | `{elevatedUntil}`. While a restricted profile is active (see Profiles) the confirmation lasts at most 5 minutes and covers one parental-control change |
-| PATCH | `/api/account` `{displayName?, email?, currentPassword (required for email)}` | account | `{account}` |
+| PATCH | `/api/account` `{displayName?, username?, avatar?, email?, currentPassword (required for email)}` | account | `{account}` · 409 `USERNAME_TAKEN` · 422 `avatar` when another identity on this device uses it |
 | POST | `/api/account/password` `{currentPassword, newPassword}` | account | `{ok}`; revokes other sessions |
 | GET / DELETE | `/api/account/sessions` · `/api/account/sessions/:id` · DELETE `/api/account/sessions` (all others) | account | `{items: [{id, current, userAgent, ip, createdAt, lastSeenAt}]}` |
 | POST | `/api/account/2fa/setup` (elevated) → `{secret, otpauthUrl}` · `/2fa/enable {code}` · `/2fa/disable {password, code}` | account | |
@@ -86,6 +86,13 @@ JSON over HTTPS, same-origin, cookie session. The browser client lives in `js/ap
 | GET | `/api/account/plan` | account | `{mode, plan, billing, cancellable}` |
 
 While a restricted profile is active, `PATCH /api/account`, the sessions list and revocations, `2fa/setup`, `GET /api/account/export` and `PUT /api/notifications/preferences` answer `403 PARENTAL_CONTROL` unless a grown-up has just confirmed the account password; endpoints that take the password in the request itself are unaffected. Display names and profile names are NFC-normalised, with control, zero-width and bidi-control characters removed and spaces collapsed.
+
+## Identities ("Who's watching?")
+An identity is a separate account (own username, password and data). A browser is recognised by the HttpOnly `lumina_device` cookie (random token; the server stores its SHA-256) and lists at most five identities; the database enforces the limit (`device_identities.slot` 0–4, unique per device).
+| GET | `/api/identities` | public | `{max: 5, freeSlots, identities: [{id, slot, username, displayName, avatar, active, remembered, suspended}]}` — only identities used on this browser, only these public fields |
+|---|---|---|---|
+| POST | `/api/identities/switch` `{accountId, password?, totp?, remember?}` | public, rate limited | session payload for the chosen account: the current session is deleted and a new one created. 401 `PASSWORD_REQUIRED` unless the identity was remembered on this device · 401 `INVALID_CREDENTIALS` / `TOTP_REQUIRED` / `INVALID_TOTP` · 423 `ACCOUNT_LOCKED` (failures count towards the account lockout) · 404 `IDENTITY_NOT_FOUND` when the account is not on this device |
+| DELETE | `/api/identities/:accountId` | public, rate limited | the updated list; takes the identity off this browser only (the account is kept). Removing the signed-in identity also signs it out here |
 
 ## Profiles (account)
 | GET | `/api/profiles` | `{profiles: Profile[], max}` |
@@ -167,7 +174,10 @@ All admin routes are under `/api/admin/*`. Every mutation writes an audit log en
 - `GET /api/admin/overview`: counts, open queues, health summary
 - Titles: `GET/POST /api/admin/titles`, `GET/PATCH/DELETE /api/admin/titles/:id`, `POST /api/admin/titles/:id/publish|unpublish`, seasons and episodes (`POST /api/admin/titles/:id/seasons`, `PATCH/DELETE /api/admin/seasons/:id`, `POST /api/admin/titles/:id/episodes`, `PATCH/DELETE /api/admin/episodes/:id`)
 - Media: `GET/POST /api/admin/media`, `PATCH/DELETE /api/admin/media/:id`, `POST /api/admin/media/:id/verify` (the server reads the manifest or file and records the real renditions and tracks), `POST /api/admin/media/:id/transcode`. A `storage:` source (or transcode `sourceKey`) must be under `media/`, or a video/subtitle file of an approved or published submission linked to the same title (422 otherwise). Deleting a season, episode or media row, or changing a media row, that would leave a published title with nothing playable answers `409 TITLE_WOULD_BE_UNPLAYABLE` (unpublish first). Title ids are slugs; `new` is reserved
-- Artwork: there is no separate artwork endpoint. Staff upload images through the uploads API (`POST /api/uploads` with `purpose:'artwork'`, then `PATCH` chunks); the finished upload's `url` (`media/art/upl_<id>.<ext>`) goes into the title's `poster`/`backdrop`. Poster and backdrop accept a site path or an `https` URL whose origin is in `MEDIA_ORIGINS` (anything else would be blocked by the Content-Security-Policy)
+- Artwork sync (TMDB): `GET /api/admin/artwork` (`{configured, titles: [{id, source, locked, hasPoster, hasBackdrop, tmdbId, syncedAt, lastResult}]}`), `POST /api/admin/artwork/sync` `{ids?, force?}` → `{results: [{id, status: matched|not_found|no_artwork|mismatch|skipped|error, …}], summary}`, `POST /api/admin/titles/:id/artwork` `{tmdbId?, tmdbType?, force?, unlock?}`. A title is matched only to a TMDB entry with the same title (accents, punctuation and a leading article ignored) and a year within one; no match leaves it without artwork. Lumina key art and staff-chosen artwork are locked. 503 `TMDB_NOT_CONFIGURED` without `TMDB_API_TOKEN`/`TMDB_API_KEY`; when TMDB is unreachable each title reports `error` and keeps its artwork
+- Cached artwork images: `GET /media/artwork/tmdb/:size/:file` (public). Serves a TMDB image referenced by the catalog from Lumina's own cache, downloading it from TMDB's CDN once; anything not referenced, or unreachable, is a 404 (the interface shows the Lumina fallback)
+- Titles have `availability: 'stream' | 'catalog'`, `tmdbId`, `tmdbType`. Catalog-only titles are listed for reference: they publish without media or a streaming licence, report `playable: false`, and `GET /api/playback/:id` answers 404 `NOT_STREAMING`
+- Uploaded artwork: staff upload images through the uploads API (`POST /api/uploads` with `purpose:'artwork'`, then `PATCH` chunks); the finished upload's `url` (`media/art/upl_<id>.<ext>`) goes into the title's `poster`/`backdrop`. Poster and backdrop accept a site path or an `https` URL whose origin is in `MEDIA_ORIGINS` (anything else would be blocked by the Content-Security-Policy)
 - TMDB (metadata only): `GET /api/admin/tmdb/search?q&type`, `GET /api/admin/tmdb/:type/:id`
 - Taxonomy: `GET/PUT /api/admin/taxonomy` (genres and editorial collections)
 - Creators: `GET /api/admin/creator-applications?status`, `POST /api/admin/creator-applications/:id/decision {decision, note}` (pending or info_required applications only; `409 INVALID_TRANSITION` once approved or rejected — creator access is then changed on the account)

@@ -14,6 +14,7 @@ import { mountHeader } from './ui/header.js';
 import { mountFooter } from './ui/footer.js';
 import { serverRequired } from './ui/components.js';
 import { store } from './core/storage.js';
+import { identityChosen } from './ui/identity.js';
 
 // Route table. `server: true` routes need the Lumina server; `auth` enforces sign-in/profile.
 export const ROUTES = [
@@ -40,7 +41,8 @@ export const ROUTES = [
   { path: '/register', load: () => import('./views/auth.js'), title: 'Create account', page: 'auth', layout: 'bare', server: true, feature: 'Creating an account' },
   { path: '/forgot', load: () => import('./views/auth.js'), title: 'Reset password', page: 'auth', layout: 'bare', server: true, feature: 'Password recovery' },
   { path: '/reset', load: () => import('./views/auth.js'), title: 'Choose a new password', page: 'auth', layout: 'bare', server: true, feature: 'Password recovery' },
-  { path: '/profiles', load: () => import('./views/profiles.js'), title: 'Who’s watching?', page: 'profiles', layout: 'bare', server: true, feature: 'Choosing a profile', auth: 'account' },
+  { path: '/whos-watching', load: () => import('./views/identities.js'), title: 'Who’s watching?', page: 'whos-watching', layout: 'bare' },
+  { path: '/profiles', load: () => import('./views/profiles.js'), title: 'Choose a profile', page: 'profiles', layout: 'bare', server: true, feature: 'Choosing a profile', auth: 'account' },
   { path: '/profiles/manage', load: () => import('./views/profiles.js'), title: 'Manage profiles', page: 'profiles', layout: 'bare', server: true, feature: 'Managing profiles', auth: 'account' },
   { path: '/account', load: () => import('./views/account.js'), title: 'Account', page: 'account', server: true, feature: 'Account management', auth: 'account' },
   { path: '/settings', load: () => import('./views/settings.js'), title: 'Settings', page: 'settings' },
@@ -102,7 +104,7 @@ async function guard(route, ctx) {
   if ((route.auth === 'account' || route.auth === 'profile') && !session.account) return `/login?next=${next}`;
   if (route.auth === 'profile' && !session.profile) return `/profiles?next=${next}`;
   // Signed-in accounts choose a profile before browsing (like any multi-profile service).
-  if (session.isServer && session.account && !session.profile && !['auth', 'profiles', 'account', 'legal'].includes(route.page)) {
+  if (session.isServer && session.account && !session.profile && !['auth', 'profiles', 'account', 'legal', 'whos-watching'].includes(route.page)) {
     return `/profiles?next=${next}`;
   }
   return undefined;
@@ -153,6 +155,10 @@ export async function boot() {
   });
 
   await introDone;
+  // Opening Lumina (no deep link) starts at "Who's watching?", once per browser session.
+  if ((!location.hash || location.hash === '#/' || location.hash === '#') && !identityChosen()) {
+    history.replaceState(null, '', '#/whos-watching');
+  }
   defineRoutes(ROUTES);
   await startRouter({ outlet: document.getElementById('main'), guard });
 }

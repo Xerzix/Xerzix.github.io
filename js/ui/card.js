@@ -1,5 +1,5 @@
 // Title cards (poster and landscape), the shared metadata line, and the touch quick-view.
-import { h, loadImage } from '../core/dom.js';
+import { h } from '../core/dom.js';
 import { bus } from '../core/bus.js';
 import { library, toggleList, session } from '../core/session.js';
 import { titleFacts, timeLeft, languageName } from '../core/format.js';
@@ -7,6 +7,7 @@ import { ratingLabel } from '../core/ratings.js';
 import { navigate } from '../core/router.js';
 import { icon } from './icons.js';
 import { button, openModal, toast, toastError, stars } from './components.js';
+import { artImg } from './artwork.js';
 
 export function qualityBadge(t) {
   if (!t.quality) return null;
@@ -92,11 +93,8 @@ bus.on('library:changed', () => {
 // cards stretch a little; uploaded artwork offers smaller copies through srcset.
 const CARD_SIZES = { poster: '(max-width: 640px) 34vw, 260px', landscape: '(max-width: 640px) 80vw, 420px' };
 
-function artImage(src, alt = '', srcset = null, sizes = undefined) {
-  const img = h('img', { src, alt, srcset: srcset || undefined, sizes: srcset ? sizes : undefined, loading: 'lazy', decoding: 'async', 'data-loading': '' });
-  loadImage(img).then(() => img.removeAttribute('data-loading'));
-  return img;
-}
+/** True when Lumina can actually stream the title (catalog-only titles never can). */
+export const canStream = (t) => t?.playable !== false && t?.availability !== 'catalog';
 
 /**
  * A title card.
@@ -109,19 +107,20 @@ export function titleCard(t, o = {}) {
   const facts = titleFacts(t);
   const kind = t.type === 'series' ? 'series' : 'film';
   const episodeLabel = o.episode ? `S${o.episode.seasonNumber}:E${o.episode.number} “${o.episode.name}”` : '';
-  const href = landscape ? playHref(t, o.episode?.id) : `#/title/${encodeURIComponent(t.id)}`;
-  const ariaLabel = landscape
+  const streamable = canStream(t);
+  const href = landscape && streamable ? playHref(t, o.episode?.id) : `#/title/${encodeURIComponent(t.id)}`;
+  const ariaLabel = landscape && streamable
     ? `${o.upNext ? 'Play next' : 'Resume'} ${t.title}${episodeLabel ? `, ${episodeLabel}` : ''}${o.durationS ? `, ${timeLeft(o.positionS, o.durationS)}` : ''}`
-    : `${t.title}, ${[facts[0], kind, t.ageRating, t.quality].filter(Boolean).join(', ')}`;
+    : `${t.title}, ${[facts[0], kind, t.ageRating, t.quality, streamable ? null : 'not available to stream'].filter(Boolean).join(', ')}`;
   const tint = t.palette?.[0];
   const progress = o.progress ?? (library.progressFor(t.id)?.durationS ? library.progressFor(t.id).positionS / library.progressFor(t.id).durationS : null);
 
   const art = h('div', { class: 'lm-card__art' },
     landscape
-      ? artImage(o.episode?.still || t.backdrop || t.poster, '', o.episode?.still ? null : t.backdrop ? t.backdropSrcset : t.posterSrcset, CARD_SIZES.landscape)
-      : artImage(t.poster || t.backdrop, '', t.poster ? t.posterSrcset : t.backdropSrcset, CARD_SIZES.poster),
-    h('div', { class: 'lm-card__badges' }, qualityBadge(t)),
-    landscape ? h('div', { class: 'lm-card__play-hint', 'aria-hidden': 'true' }, h('span', null, icon('play'))) : null,
+      ? artImg({ src: o.episode?.still || t.backdrop, srcset: o.episode?.still ? null : t.backdropSrcset, sizes: CARD_SIZES.landscape, title: t.title, kind: o.episode?.still ? 'still' : 'backdrop' })
+      : artImg({ src: t.poster, srcset: t.posterSrcset, sizes: CARD_SIZES.poster, title: t.title, kind: 'poster' }),
+    h('div', { class: 'lm-card__badges' }, qualityBadge(t), streamable ? null : h('span', { class: 'lm-badge', title: 'Listed for reference: not available to stream on Lumina' }, 'Info only')),
+    landscape && streamable ? h('div', { class: 'lm-card__play-hint', 'aria-hidden': 'true' }, h('span', null, icon('play'))) : null,
     progress && progress > 0.01 && progress < 0.99 ? h('div', { class: 'lm-card__progress' }, h('div', { class: 'lm-progress', role: 'progressbar', 'aria-label': 'Watched', 'aria-valuenow': String(Math.round(progress * 100)), 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('span', { style: { width: `${Math.round(progress * 100)}%` } }))) : null);
 
   const overlay = h('div', { class: 'lm-card__overlay' },
@@ -131,7 +130,7 @@ export function titleCard(t, o = {}) {
     h('div', { class: 'lm-card__genres' }, (t.genres || []).slice(0, 3).join(' · ')),
     o.reason ? h('div', { class: 'lm-card__genres' }, o.reason) : null,
     h('div', { class: 'lm-card__actions' },
-      button('', { variant: 'light', size: 'sm', icon: 'play', ariaLabel: `Play ${t.title}`, attrs: { title: 'Play' }, onClick: (e) => { e.preventDefault(); navigate(playHref(t, o.episode?.id).slice(1)); } }),
+      streamable ? button('', { variant: 'light', size: 'sm', icon: 'play', ariaLabel: `Play ${t.title}`, attrs: { title: 'Play' }, onClick: (e) => { e.preventDefault(); navigate(playHref(t, o.episode?.id).slice(1)); } }) : null,
       listButton(t),
       button('', { variant: 'glass', size: 'sm', icon: 'chevronDown', ariaLabel: `More about ${t.title}`, attrs: { title: 'More information' }, onClick: (e) => { e.preventDefault(); navigate(`/title/${encodeURIComponent(t.id)}`); } })));
 
@@ -158,12 +157,14 @@ export function skeletonCard(variant = 'poster') {
 export function quickView(t, o = {}) {
   let modal;
   const content = h('div', { class: 'lm-stack' },
-    t.backdrop ? h('img', { src: t.backdrop, alt: '', style: { borderRadius: 'var(--lm-radius-md)', aspectRatio: '16/9', objectFit: 'cover', width: '100%' } }) : null,
+    h('div', { class: 'lm-quickview__art' }, artImg({ src: t.backdrop, srcset: t.backdropSrcset, sizes: '(max-width: 640px) 92vw, 560px', title: t.title, kind: 'backdrop' })),
     titleMeta(t, { extended: true }),
     h('p', { class: 'lm-muted' }, t.synopsis),
     h('p', { class: 'lm-small lm-muted' }, (t.genres || []).join(' · ')),
     h('div', { class: 'lm-cluster' },
-      button(o.progress ? 'Resume' : 'Play', { variant: 'primary', icon: 'play', onClick: () => { modal.close(); navigate(playHref(t, o.episode?.id).slice(1)); } }),
+      canStream(t)
+        ? button(o.progress ? 'Resume' : 'Play', { variant: 'primary', icon: 'play', onClick: () => { modal.close(); navigate(playHref(t, o.episode?.id).slice(1)); } })
+        : h('span', { class: 'lm-badge' }, 'Not available to stream on Lumina'),
       listButton(t, { size: undefined, variant: undefined, label: true }),
       button('Details', { variant: 'ghost', icon: 'info', onClick: () => { modal.close(); navigate(`/title/${encodeURIComponent(t.id)}`); } })));
   modal = openModal({ title: t.title, content, sheet: true });

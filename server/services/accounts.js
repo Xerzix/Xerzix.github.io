@@ -123,19 +123,29 @@ export class AccountService {
   }
 
   /** Creates the account and its first profile. `passwordHash` is computed by the caller. */
-  create({ email, passwordHash, displayName }) {
+  byUsername(username) {
+    return this.db.get('SELECT * FROM accounts WHERE username = ? COLLATE NOCASE', String(username || '').trim());
+  }
+
+  /** By username, or by email when the identifier contains "@". */
+  byIdentifier(identifier) {
+    const id = String(identifier || '').trim();
+    return id.includes('@') ? this.byEmail(id) : this.byUsername(id);
+  }
+
+  create({ email, passwordHash, displayName, username = null, avatar = 'crimson-sakura' }) {
     const ts = now();
     const accountId = newId('acc');
     const profileId = newId('prf');
     this.db.tx(() => {
       this.db.run(
-        `INSERT INTO accounts (id, email, display_name, password_hash, max_profiles, terms_accepted_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        accountId, normalizeEmail(email), displayName, passwordHash, Math.min(5, Math.max(1, config.profiles.maxPerAccount)), ts, ts, ts,
+        `INSERT INTO accounts (id, username, email, display_name, password_hash, avatar, max_profiles, terms_accepted_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        accountId, username, normalizeEmail(email), displayName, passwordHash, avatar, Math.min(5, Math.max(1, config.profiles.maxPerAccount)), ts, ts, ts,
       );
       this.db.run(
         'INSERT INTO profiles (id, account_id, name, avatar, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-        profileId, accountId, displayName, 'sakura', ts, ts,
+        profileId, accountId, displayName, avatar, ts, ts,
       );
     });
     return { account: this.byId(accountId), profile: this.db.get('SELECT * FROM profiles WHERE id = ?', profileId) };
