@@ -17,11 +17,21 @@ export const userPatchSchema = v.object({
   isCreator: v.boolean().optional(),
 });
 
+/**
+ * A timed suspension ends by itself (sign-in and sessions treat a past suspended_until as
+ * active), so the dashboard does too: SQL condition for "currently suspended".
+ */
+export const SUSPENDED_NOW = `(status = 'suspended' AND (suspended_until IS NULL OR suspended_until > ?))`;
+const lapsed = (a, ts = now()) => a.status === 'suspended' && !!a.suspended_until && a.suspended_until <= ts;
+
 export function adminAccountDto(a) {
+  const ended = lapsed(a);
   return {
     ...accountDto(a),
-    suspendedReason: a.suspended_reason,
-    suspendedUntil: a.suspended_until,
+    status: ended ? 'active' : a.status,
+    suspendedReason: ended ? null : a.suspended_reason,
+    suspendedUntil: ended ? null : a.suspended_until,
+    suspensionEndedAt: ended ? a.suspended_until : null,
     lastLoginAt: a.last_login_at,
     updatedAt: a.updated_at,
     lockedUntil: a.locked_until,
@@ -43,8 +53,8 @@ export function listUsers(db, query) {
   }
   if (query.role === 'staff') where.push(`a.role IN ('moderator', 'admin')`);
   if (['active', 'suspended'].includes(query.status)) {
-    where.push('a.status = ?');
-    args.push(query.status);
+    where.push(`${query.status === 'active' ? 'NOT ' : ''}${SUSPENDED_NOW.replace(/\b(status|suspended_until)\b/g, 'a.$1')}`);
+    args.push(now());
   }
   if (query.creator === '1') where.push('a.is_creator = 1');
   const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -60,7 +70,7 @@ export function listUsers(db, query) {
   const counts = {
     total: db.get('SELECT COUNT(*) AS n FROM accounts').n,
     staff: db.get(`SELECT COUNT(*) AS n FROM accounts WHERE role IN ('moderator', 'admin')`).n,
-    suspended: db.get(`SELECT COUNT(*) AS n FROM accounts WHERE status = 'suspended'`).n,
+    suspended: db.get(`SELECT COUNT(*) AS n FROM accounts WHERE ${SUSPENDED_NOW}`, now()).n,
     creators: db.get('SELECT COUNT(*) AS n FROM accounts WHERE is_creator = 1').n,
   };
   return {
@@ -114,8 +124,13 @@ function activeAdmins(db) {
  * `changes` lists changed fields so the route can audit exactly what happened.
  */
 export function updateUser(db, actor, id, patch) {
-  const target = db.get('SELECT * FROM accounts WHERE id = ?', id);
+  let target = db.get('SELECT * FROM accounts WHERE id = ?', id);
   if (!target) throw notFound('That account does not exist.');
+  if (lapsed(target)) {
+    // The timed suspension already ended; record that so this edit starts from "active".
+    db.run(`UPDATE accounts SET status = 'active', suspended_reason = NULL, suspended_until = NULL WHERE id = ?`, id);
+    target = db.get('SELECT * FROM accounts WHERE id = ?', id);
+  }
   const isAdmin = actor.role === 'admin';
   const self = target.id === actor.id;
 
@@ -136,7 +151,8 @@ export function updateUser(db, actor, id, patch) {
     const n = db.get('SELECT COUNT(*) AS n FROM profiles WHERE account_id = ?', id).n;
     if (patch.maxProfiles < n) throw validation({ maxProfiles: `This account already has ${n} profiles. Delete profiles first or choose ${n} or more.` });
   }
-  if (patch.suspendedUntil && Date.parse(patch.suspendedUntil) <= Date.now()) throw validation({ suspendedUntil: 'Choose a date in the future, or leave it empty for an indefinite suspension.' });
+  const untilChanged = patch.suspendedUntil && new Date(patch.suspendedUntil).toISOString() !== target.suspended_until;
+  if (untilChanged && Date.parse(patch.suspendedUntil) <= Date.now()) throw validation({ suspendedUntil: 'Choose a date in the future, or leave it empty for an indefinite suspension.' });
 
   const cols = {};
   const changes = {};

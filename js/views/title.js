@@ -15,6 +15,7 @@ import { navigate } from '../core/router.js';
 import { reviewsPanel } from '../ui/panels/reviews-panel.js';
 import { velviaPanel } from '../ui/panels/velvia-panel.js';
 import { qualityPanel, qualityReportButton } from '../ui/panels/quality-panel.js';
+import { creatorFollowButton, followedIds } from '../ui/follow-button.js';
 
 const enc = encodeURIComponent;
 const epLabel = (e) => `S${e.seasonNumber}:E${e.number}`;
@@ -119,10 +120,10 @@ function heroSection(t, parts) {
   const tint = t.palette?.[0];
   return h('section', { class: 'lm-detail__hero', style: tint ? { '--detail-tint': tint } : undefined },
     h('div', { class: 'lm-detail__backdrop', 'aria-hidden': 'true' },
-      t.backdrop || t.poster ? h('img', { src: t.backdrop || t.poster, alt: '', decoding: 'async', fetchpriority: 'high', onError: hideBroken }) : null),
+      t.backdrop || t.poster ? h('img', { src: t.backdrop || t.poster, srcset: (t.backdrop ? t.backdropSrcset : t.posterSrcset) || undefined, sizes: '100vw', alt: '', decoding: 'async', fetchpriority: 'high', onError: hideBroken }) : null),
     h('div', { class: 'lm-detail__shade', 'aria-hidden': 'true' }),
     h('div', { class: 'lm-container lm-detail__hero-inner' },
-      h('div', { class: 'lm-detail__poster' }, t.poster ? h('img', { src: t.poster, alt: `${t.title} poster`, decoding: 'async' }) : h('span', { 'aria-hidden': 'true' }, t.title.slice(0, 1))),
+      h('div', { class: 'lm-detail__poster' }, t.poster ? h('img', { src: t.poster, srcset: t.posterSrcset || undefined, sizes: t.posterSrcset ? '(max-width: 640px) 40vw, 300px' : undefined, alt: `${t.title} poster`, decoding: 'async' }) : h('span', { 'aria-hidden': 'true' }, t.title.slice(0, 1))),
       h('div', { class: 'lm-detail__intro' },
         h('p', { class: 'lm-eyebrow lm-detail__eyebrow' }, eyebrow),
         h('h1', { class: 'lm-detail__title' }, t.title),
@@ -453,6 +454,9 @@ export default async function render(ctx) {
     });
   }
 
+  // Follow the creator of a title published through Lumina Creators (server mode, with a profile).
+  const creatorFollow = t.creator?.id ? creatorFollowButton(t.creator, await followedIds('creator')) : null;
+
   // Panels owned by the community, Velvia and playback areas.
   panels.reviews = mountPanel(() => reviewsPanel(t));
   panels.velvia = mountPanel(() => velviaPanel({ title: t }));
@@ -483,6 +487,7 @@ export default async function render(ctx) {
     rateBtn,
     shareBtn,
     followBtn,
+    creatorFollow,
     linkButton('Compare', `#/compare?ids=${enc(t.id)}`, { variant: 'ghost', size: 'sm', icon: 'columns' }),
     velviaBtn,
     reportBtn,

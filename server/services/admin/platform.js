@@ -163,7 +163,7 @@ export async function overview(db, config) {
     accounts: {
       total: count('SELECT COUNT(*) AS n FROM accounts'),
       staff: count(`SELECT COUNT(*) AS n FROM accounts WHERE role IN ('moderator', 'admin')`),
-      suspended: count(`SELECT COUNT(*) AS n FROM accounts WHERE status = 'suspended'`),
+      suspended: count(`SELECT COUNT(*) AS n FROM accounts WHERE status = 'suspended' AND (suspended_until IS NULL OR suspended_until > ?)`, now()),
       newLast7d: count('SELECT COUNT(*) AS n FROM accounts WHERE created_at >= ?', new Date(Date.now() - 7 * 86_400_000).toISOString()),
     },
     creators: count('SELECT COUNT(*) AS n FROM accounts WHERE is_creator = 1'),
@@ -234,7 +234,26 @@ export async function usage(db, config, { days = 30 } = {}) {
 export function logs(query) {
   const level = ['debug', 'info', 'warn', 'error'].includes(query.level) ? query.level : 'info';
   const limit = Math.max(1, Math.min(1000, Number.parseInt(query.limit, 10) || 200));
-  return { items: recentLogs({ level, limit, contains: String(query.q || '').slice(0, 200) }), level, limit, note: 'The last 2,000 log entries of this server process, kept in memory only (they are lost on restart).' };
+  const needle = String(query.q || '').slice(0, 200).toLowerCase();
+  // Search the scrubbed entries, so a query can never probe a redacted value.
+  const items = recentLogs({ level, limit: 2000 }).map(scrubLogEntry)
+    .filter((e) => !needle || JSON.stringify(e).toLowerCase().includes(needle))
+    .slice(0, limit);
+  return { items, level, limit, note: 'The last 2,000 log entries of this server process, kept in memory only (they are lost on restart).' };
+}
+
+// Defence in depth: the logger is told never to record secrets, but a field that could carry
+// one (a mail body with a one-time link, a token, a password) is never shown to staff.
+const SECRET_FIELD = /^(text|html|body|token|password|secret|authorization|cookie|sig|code)$/i;
+const TOKEN_PARAM = /([?&#](?:token|sig|code)=)[^&\s"']+/gi;
+function scrubLogEntry(entry) {
+  const out = {};
+  for (const [key, value] of Object.entries(entry)) {
+    if (SECRET_FIELD.test(key)) out[key] = '[redacted]';
+    else if (typeof value === 'string') out[key] = value.replace(TOKEN_PARAM, '$1[redacted]');
+    else out[key] = value;
+  }
+  return out;
 }
 
 export function playbackErrors(db, query) {

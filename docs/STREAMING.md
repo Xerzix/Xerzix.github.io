@@ -73,7 +73,60 @@ Targets are for representative devices at the 75th percentile. Measure them with
 | Average delivered bitrate | Tracked per device class. Watch for ABR stuck at low rungs. |
 | Home page (Lighthouse, mid-range mobile) | LCP < 2.5 s, CLS < 0.1, INP < 200 ms |
 
-These are targets, not measured results. Measure them on real devices before quoting them.
+The streaming rows are targets only: they need the production telemetry from real viewers and
+real devices. The Chromium used for this repository's tests cannot decode H.264 through MSE, so
+time to first frame and rebuffering could not be measured here.
+
+#### Measured page-load baseline (lab, not field data)
+`npm run perf:baseline` (`scripts/perf-baseline.mjs`) loads the home page and a title page in
+Playwright's Chromium against a seeded local server. It reads LCP, CLS, FCP and one click's
+event-to-paint time (the interaction INP is built from) with `PerformanceObserver`, and counts
+the bytes transferred. The browser cache is disabled and each figure is the median of 5 runs.
+The phone profile uses Lighthouse's mobile throttling: 4× CPU slowdown, 150 ms RTT, 1.6 Mbps
+down and 750 kbps up.
+
+Recorded 2026-10-09 on a 4-core Intel Xeon @ 2.10 GHz Linux container (Node 22.22, headless
+Chromium from Playwright 1.56.1). This is an emulated phone, not a real device.
+
+| Page | Conditions | LCP | CLS | FCP | Click → next paint | Transferred |
+|---|---|---|---|---|---|---|
+| Home | Desktop 1440×900, no throttling | 1472 ms | 0 | 432 ms | 152 ms | 912 KB |
+| Title | Desktop 1440×900, no throttling | 592 ms | 0 | 428 ms | 216 ms | 813 KB |
+| Home | Phone 390×844, throttled | **6132 ms** | 0 | 3536 ms | 256 ms | 912 KB |
+| Title | Phone 390×844, throttled | **5924 ms** | 0 | 3464 ms | 136 ms | 813 KB |
+| Home | Desktop, reduced motion | 500 ms | 0 | 300 ms | 80 ms | 912 KB |
+| Home | Phone, throttled, reduced motion | 5944 ms | 0 | 3436 ms | 168 ms | 912 KB |
+
+What this shows:
+- **CLS meets the target (0) everywhere.**
+- **Desktop LCP meets the target.** With motion on, the garden and petal animations push the
+  home page's LCP from about 0.5 s to about 1.5 s.
+- **Phone LCP does not meet the 2.5 s target** (about 6 s). The cause is transfer size, not
+  script time. About 900 KB loads before the first render, including about 290 KB of CSS
+  across 13 stylesheets, about 145 KB of web fonts (six files) and the SVG artwork. Node
+  serves all of it **uncompressed**. At 1.6 Mbps that alone takes about 4.5 s.
+- **Clicks meet the INP target on desktop.** One phone click (opening the menu drawer under 4× CPU
+  slowdown) came in at about 250 ms, just over the 200 ms target.
+
+Next steps, in order of effect:
+1. Serve text assets with Brotli or gzip, either at the CDN or reverse proxy (recommended) or in
+   `server/lib/static.js`.
+2. Combine the stylesheets and defer the ones a route does not need. Player, account, community
+   and admin CSS are not needed on the home page.
+3. Load fewer font files on first paint. Today that is four Inter weights and two Cormorant
+   Garamond weights.
+
+Then measure again on real mid-range Android and iOS devices.
+
+### 5. Artwork delivery
+Seed artwork is SVG and scales to any size. When `FFMPEG_PATH` is set, a staff-uploaded poster
+or backdrop (PNG, JPEG or WebP, up to 15 MB) also gets 360, 720 and 1280 px wide copies
+(`server/services/media/artwork.js`). Copies are never wider than the original. JPEG originals
+give JPEG copies; PNG and WebP originals give PNG copies, so transparency is kept. Title
+summaries carry `posterSrcset` / `backdropSrcset`, and cards, the hero and the title page emit
+`srcset` and `sizes`, so a phone downloads the 360 or 720 px copy instead of the original.
+Without ffmpeg, only the original is served. In production, a CDN image-resizing service
+(with WebP/AVIF negotiation) can replace these copies.
 
 ## Checklist to go from this repository to production 4K
 1. Object storage plus CDN, with `server/services/storage.js` switched to presigned or edge-token URLs.

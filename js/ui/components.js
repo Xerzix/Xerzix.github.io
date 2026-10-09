@@ -116,7 +116,8 @@ export function bindMenu(trigger, menu, { onOpen } = {}) {
   trigger.setAttribute('aria-haspopup', 'true');
   trigger.setAttribute('aria-expanded', 'false');
   trigger.setAttribute('aria-controls', id);
-  const items = () => [...menu.querySelectorAll('a[href], button:not([disabled]), [role="menuitem"]')];
+  // Only items that are rendered: a menu may hide some entries at some widths.
+  const items = () => [...menu.querySelectorAll('a[href], button:not([disabled]), [role="menuitem"]')].filter((el) => el.getClientRects().length > 0);
   const open = () => {
     menu.hidden = false;
     trigger.setAttribute('aria-expanded', 'true');

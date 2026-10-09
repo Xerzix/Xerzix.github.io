@@ -467,6 +467,13 @@ test('follow-ups about earlier picks are answered, not refused', () => {
   const more = convo('I loved Star Song', 'Tell me more about it');
   assert.equal(more.intent, 'discuss');
   assert.doesNotMatch(more.reply, /different directions/);
+  // With no list to count from (a client that sends only the reply text), Velvia asks which
+  // title is meant instead of refusing or answering about something else.
+  const none = ask('Tell me about the second one');
+  assert.equal(none.intent, 'which');
+  assert.doesNotMatch(none.reply, /can’t answer/);
+  assert.equal(none.recommendations.length, 0);
+  assert.ok(none.clarifyingQuestion);
 });
 
 test('ruled-out genres stay out, including in open picks', () => {
@@ -552,3 +559,27 @@ test('stays fast on a large catalog, even with long messages full of names', () 
 function pick(c) {
   return { minRuntime: c.minRuntime, maxRuntime: c.maxRuntime };
 }
+
+test('"if I enjoyed this movie" with no title in view: ask which, or start from the last title watched', () => {
+  const q = 'What should I watch if I enjoyed this movie?';
+  const none = ask(q);
+  assert.equal(none.intent, 'whichTitle');
+  assert.equal(none.recommendations.length, 0);
+  assert.ok(none.clarifyingQuestion);
+  const signals = { history: [{ titleId: 'bunny-hop', watchedAt: '2026-08-01T00:00:00Z' }, { titleId: 'mind-maze', watchedAt: '2026-09-01T00:00:00Z' }], watchlist: [], ratings: {} };
+  const fromHistory = ask(q, {}, signals);
+  assert.equal(fromHistory.intent, 'similar');
+  assert.match(fromHistory.reply, /Mind Maze, the last title you watched/);
+  assert.ok(fromHistory.recommendations.length > 0);
+  assert.ok(fromHistory.recommendations.every((r) => IDS.has(r.title.id) && r.title.id !== 'mind-maze'));
+  // History switched off: never guessed from it.
+  const privateAsk = ask(q, { options: { useHistory: false } }, signals);
+  assert.equal(privateAsk.intent, 'whichTitle');
+  assert.doesNotMatch(privateAsk.reply, /Mind Maze/);
+  // With the title on screen, "this movie" is that title.
+  const onPage = ask(q, { context: { titleId: 'star-song' } });
+  assert.equal(onPage.intent, 'similar');
+  assert.match(onPage.reply, /Star Song/);
+  // "The one I just watched" also uses history.
+  assert.equal(ask('Something like the one I just watched', {}, signals).intent, 'similar');
+});

@@ -2,7 +2,7 @@
 // ETags, and a strict allowlist so server code, the database and uploads are never exposed.
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { extname, join, normalize, resolve, sep } from 'node:path';
+import { extname, join, normalize, relative, resolve, sep } from 'node:path';
 import { HttpError } from './errors.js';
 
 export const MIME = {
@@ -38,9 +38,14 @@ export const MIME = {
 
 /**
  * Resolves `relPath` inside `root`, refusing traversal and dotfiles.
- * Returns null when the path escapes the root.
+ * Returns null when the path contains a "." / ".." / dotfile segment or a NUL byte, or
+ * escapes the root. The RAW path is checked before normalize(): normalizing first would
+ * collapse "css/../var/db" into "var/db", silently stepping out of the directory the
+ * caller meant to confine to.
  */
 export function safeJoin(root, relPath) {
+  if (typeof relPath !== 'string' || relPath.includes('\0')) return null;
+  if (relPath.split(/[\\/]/).some((seg) => seg.startsWith('.'))) return null;
   const cleaned = normalize(relPath).replace(/^(\.\.(\/|\\|$))+/, '');
   if (cleaned.split(/[\\/]/).some((seg) => seg.startsWith('.'))) return null;
   const full = resolve(join(root, cleaned));
@@ -123,6 +128,10 @@ export function staticHandler(root) {
     if (!PUBLIC_ENTRIES.has(top)) throw new HttpError(404, 'NOT_FOUND', 'We could not find that.');
     const full = safeJoin(root, rel);
     if (!full) throw new HttpError(404, 'NOT_FOUND', 'We could not find that.');
+    // Enforce the allowlist on the RESOLVED location too, so no encoding trick can turn
+    // "css/<something>" into a file outside the public entries.
+    const resolvedTop = relative(resolve(root), full).split(sep)[0];
+    if (!PUBLIC_ENTRIES.has(resolvedTop)) throw new HttpError(404, 'NOT_FOUND', 'We could not find that.');
     const ext = extname(full).toLowerCase();
     // HTML is revalidated on every load; versioned static assets can be cached briefly;
     // media segments are immutable once written.

@@ -1,7 +1,8 @@
 // Outbound email boundary. Lumina does not ship an SMTP client; production deployments
 // point MAIL_TRANSPORT=webhook at a transactional mail provider (or a small relay) that
 // accepts {from, to, subject, text} JSON. The default "log" transport writes messages to the
-// server log and keeps the last few in memory for local development and tests.
+// server's standard output (not the dashboard log ring) and keeps the last few in memory for
+// local development and tests.
 import { config } from '../config.js';
 import { log } from '../lib/log.js';
 
@@ -30,7 +31,12 @@ export async function sendMail({ to, subject, text }) {
   // Development transport: never used when NODE_ENV=production unless explicitly chosen.
   outbox.push(message);
   if (outbox.length > 50) outbox.shift();
-  if (!config.isTest) log.info('mail (log transport)', { to: redact(to), subject, text });
+  if (config.isTest) return;
+  // The message body can hold one-time links (password reset, email change), so it goes
+  // to this process's own output only — never into the in-memory log ring that staff can
+  // read from the dashboard.
+  log.info('mail (log transport)', { to: redact(to), subject });
+  process.stdout.write(`--- mail (log transport) to ${redact(to)}: ${subject}\n${text}\n--- end of mail\n`);
 }
 
 /** Test/dev helper: messages captured by the log transport. */

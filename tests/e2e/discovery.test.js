@@ -304,3 +304,69 @@ test('Preview mode: statistics switch off for real, and a collection description
     await site.close();
   }
 });
+
+test('creators can be followed, Discover is in the header at every desktop width, and search finds countries by name', async () => {
+  const creator = await app.userClient({ isCreator: true, displayName: 'Mika Studio' });
+  app.db.run('UPDATE titles SET creator_account_id = ? WHERE id = ?', creator.accountId, 'garden-hours');
+  app.services.catalog.invalidate();
+  const u = await app.userClient({ displayName: 'Ren' });
+  const page = await newPage(browser, { base: app.base, cookies: [sessionCookie(u)] });
+  try {
+    // Title page of a creator-published title: a "Follow <creator>" toggle.
+    await page.goto(`${app.base}/#/title/garden-hours`);
+    const follow = page.locator('[data-follow-creator]');
+    await follow.waitFor();
+    assert.equal(await follow.innerText(), 'Follow Mika Studio');
+    assert.equal(await follow.getAttribute('aria-pressed'), 'false');
+    await follow.click();
+    await page.waitForFunction(() => document.querySelector('[data-follow-creator]')?.getAttribute('aria-pressed') === 'true');
+    assert.ok((await u.get('/api/follows')).body.items.some((f) => f.type === 'creator' && f.id === creator.accountId));
+
+    // Discover: the Creator spotlight row names the creator, with the same toggle (already on).
+    await page.goto(`${app.base}/#/discover`);
+    const strip = page.locator('[data-row="creator-spotlight"] [data-follow-creator]');
+    await strip.waitFor();
+    assert.equal(await strip.getAttribute('aria-pressed'), 'true');
+    await strip.click();
+    await page.waitForFunction(() => document.querySelector('[data-row="creator-spotlight"] [data-follow-creator]')?.getAttribute('aria-pressed') === 'false');
+    assert.ok(!(await u.get('/api/follows')).body.items.some((f) => f.type === 'creator'));
+
+    // Wide desktop: Discover and Creators are in the Browse menu; Trending is not repeated.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole('button', { name: 'Browse' }).click();
+    assert.deepEqual(await page.locator('.lm-nav__more .lm-menu__item:visible').allInnerTexts(), ['Discover', 'Creators']);
+    await page.keyboard.press('Escape');
+
+    // Search: a country by name, and the Country of origin filter.
+    await page.goto(`${app.base}/#/search?q=Netherlands`);
+    await page.waitForFunction(() => /result/.test(document.querySelector('.lm-srch__status')?.textContent || ''));
+    assert.ok(await page.locator('.lm-srch__results a[href="#/title/sintel"]').count());
+    await page.getByRole('button', { name: /Filters/ }).click();
+    const country = page.getByLabel('Country of origin');
+    assert.ok((await country.locator('option').allInnerTexts()).includes('Netherlands'));
+
+    // The account page never prints a stray "null".
+    await page.goto(`${app.base}/#/account`);
+    await page.locator('.lm-account__sections').waitFor();
+    assert.ok(!(await page.locator('main').innerText()).split('\n').some((l) => l.trim() === 'null'));
+    assert.deepEqual(page.errors, []);
+  } finally {
+    app.db.run('UPDATE titles SET creator_account_id = NULL WHERE id = ?', 'garden-hours');
+    app.services.catalog.invalidate();
+    await page.context().close();
+  }
+});
+
+test('signed out on the server: Settings is one click away in the header', async () => {
+  const page = await newPage(browser, { base: app.base });
+  try {
+    await page.goto(`${app.base}/#/`);
+    const gear = page.locator('.lm-header__guest a[href="#/settings"]');
+    await gear.waitFor();
+    assert.equal(await gear.getAttribute('aria-label'), 'Settings');
+    await gear.click();
+    await page.waitForURL(/#\/settings/);
+  } finally {
+    await page.context().close();
+  }
+});

@@ -254,6 +254,14 @@ test('discover: creator spotlight lists titles published by creators', async () 
     const spot = r.body.sections.find((s) => s.id === 'creator-spotlight');
     assert.deepEqual(spot.items.map((i) => i.title.id), ['hanami']);
     assert.equal(spot.items[0].reason, 'By Mika Studio');
+    // The row names its creators so members can follow them, and the title page carries the id
+    // the follow route accepts.
+    assert.deepEqual(spot.creators, [{ id: creator.accountId, name: 'Mika Studio' }]);
+    const detail = await t.client().get('/api/titles/hanami');
+    assert.deepEqual(detail.body.creator, { id: creator.accountId, name: 'Mika Studio' });
+    const fan = await t.userClient();
+    assert.equal((await fan.put(`/api/follows/creator/${spot.creators[0].id}`)).status, 200);
+    assert.ok((await fan.get('/api/follows')).body.items.some((f) => f.type === 'creator' && f.id === creator.accountId));
   } finally {
     t.db.run('UPDATE titles SET creator_account_id = NULL WHERE id = ?', 'hanami');
     t.services.catalog.invalidate();
@@ -301,6 +309,73 @@ test('follows: a profile cannot follow a series above its maturity limit', async
     assert.equal(r.body.error.code, 'PROFILE_RESTRICTED');
   } finally {
     t.db.run('UPDATE titles SET min_age = 0 WHERE id = ?', 'garden-hours');
+    t.services.catalog.invalidate();
+  }
+});
+
+// ───────────────────────── Admin taxonomy on the public site ─────────────────────────
+
+test('admin taxonomy: curated collections become home and Discover rows, and genre order is kept', async () => {
+  const admin = await t.userClient({ role: 'admin', elevated: true });
+  const before = (await t.client().get('/api/genres')).body.genres.map((g) => g.name);
+  const last = before[before.length - 1];
+  const original = t.db.get('SELECT tags FROM titles WHERE id = ?', 'hanami').tags;
+  t.db.run('UPDATE titles SET tags = ? WHERE id = ?', JSON.stringify([...JSON.parse(original || '[]'), 'tea-break']), 'hanami');
+  try {
+    const put = await admin.put('/api/admin/taxonomy', {
+      genres: [last],
+      collections: [
+        { id: 'tea-break', name: 'Films for a Tea Break', description: 'Short, calm and unhurried.' },
+        { id: 'empty-shelf', name: 'Nothing Here Yet' },
+        { id: 'hidden-gem', name: 'Quiet Treasures', description: 'Picked by the Lumina team.' },
+      ],
+    });
+    assert.equal(put.status, 200);
+
+    const home = (await t.client().get('/api/home')).body;
+    const row = home.rows.find((r) => r.id === 'collection-tea-break');
+    assert.ok(row, 'the curated collection is a home row');
+    assert.equal(row.title, 'Films for a Tea Break');
+    assert.equal(row.subtitle, 'Short, calm and unhurried.');
+    assert.deepEqual(row.items.map((i) => i.title.id), ['hanami']);
+    assert.ok(!home.rows.some((r) => r.id === 'collection-empty-shelf'), 'a collection with no titles is not shown');
+    const gems = home.rows.find((r) => r.id === 'hidden-gems');
+    if (gems) assert.equal(gems.title, 'Quiet Treasures', 'built-in tag rows take the curated name');
+
+    const disc = (await t.client().get('/api/discover')).body.sections.find((s) => s.id === 'collection-tea-break');
+    assert.equal(disc?.title, 'Films for a Tea Break');
+    assert.equal(disc.description, 'Short, calm and unhurried.');
+
+    assert.equal((await t.client().get('/api/genres')).body.genres[0].name, last, 'admin genre order leads the Genres page');
+  } finally {
+    t.db.run('UPDATE titles SET tags = ? WHERE id = ?', original, 'hanami');
+    t.db.run(`DELETE FROM platform_settings WHERE key = 'taxonomy'`);
+    t.services.catalog.invalidate();
+  }
+});
+
+test('uploaded artwork with resized copies is offered as a srcset', async () => {
+  const admin = await t.userClient({ role: 'admin', elevated: true });
+  const id = 'upl_srcsettest0000000001';
+  const url = `/media/art/${id}.jpg`;
+  const ts = new Date().toISOString();
+  t.db.run(
+    `INSERT INTO uploads (id, account_id, purpose, file_role, filename, size_bytes, offset_bytes, storage_key, status, created_at, updated_at, expires_at, result)
+     VALUES (?, ?, 'artwork', 'poster', 'poster.jpg', 10, 10, ?, 'complete', ?, ?, ?, ?)`,
+    id, admin.accountId, `public/art/${id}.jpg`, ts, ts, ts,
+    JSON.stringify({ url, width: 1500, height: 2250, variants: [{ width: 360, url: `/media/art/${id}-w360.jpg` }, { width: 720, url: `/media/art/${id}-w720.jpg` }] }),
+  );
+  const prev = t.db.get('SELECT poster FROM titles WHERE id = ?', 'hanami').poster;
+  t.db.run('UPDATE titles SET poster = ? WHERE id = ?', url, 'hanami');
+  t.services.catalog.invalidate();
+  try {
+    const d = (await t.client().get('/api/titles/hanami')).body;
+    assert.equal(d.poster, url);
+    assert.equal(d.posterSrcset, `/media/art/${id}-w360.jpg 360w, /media/art/${id}-w720.jpg 720w, ${url} 1500w`);
+    assert.equal(d.backdropSrcset, undefined, 'seed SVG artwork has no srcset');
+  } finally {
+    t.db.run('UPDATE titles SET poster = ? WHERE id = ?', prev, 'hanami');
+    t.db.run('DELETE FROM uploads WHERE id = ?', id);
     t.services.catalog.invalidate();
   }
 });

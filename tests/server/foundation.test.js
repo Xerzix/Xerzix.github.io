@@ -1,6 +1,22 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { request as httpRequest } from 'node:http';
+import { safeJoin } from '../../server/lib/static.js';
 import { startTestServer } from '../helpers/server.js';
+
+/** Sends a request with the path exactly as written (fetch would normalise it). */
+function rawGet(base, path) {
+  const { hostname, port } = new URL(base);
+  return new Promise((resolve, reject) => {
+    const req = httpRequest({ hostname, port, path, method: 'GET', agent: false }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
 
 let t;
 before(async () => { t = await startTestServer(); });
@@ -31,6 +47,40 @@ test('static allowlist hides server code, database and config', async () => {
     assert.equal(res.status, 404, p);
   }
   assert.equal((await fetch(`${t.base}/`)).status, 200);
+});
+
+test('static handler cannot be walked out of an allowed directory', async () => {
+  const paths = [
+    '/css/..%2fpackage.json', '/css/..%2Fpackage.json', '/css/..%2fserver%2fconfig.js', '/media/..%2fserver%2fapp.js',
+    '/content/..%2fdocs%2fSECURITY.md', '/js/..%2f..%2fetc%2fpasswd', '/css/%2e%2e%2fpackage.json', '/data/..%5cpackage.json',
+    '/assets/.%2f..%2fpackage.json', '/css/x%00.css', '/css/..%2fvar%2flumina.db',
+  ];
+  for (const p of paths) {
+    const res = await rawGet(t.base, p);
+    assert.ok(res.status === 404 || res.status === 400, `${p} -> ${res.status}`);
+    assert.doesNotMatch(res.body, /"name":\s*"lumina"|export const config|SESSION_SECRET/, p);
+  }
+  // Legitimate nested public files still load.
+  assert.equal((await rawGet(t.base, '/index.html')).status, 200);
+  assert.equal((await rawGet(t.base, '/css/base.css')).status, 200);
+});
+
+test('safeJoin refuses dot segments before normalising', () => {
+  assert.equal(safeJoin('/srv/root', 'css/../var/lumina.db'), null);
+  assert.equal(safeJoin('/srv/root', '../etc/passwd'), null);
+  assert.equal(safeJoin('/srv/root', 'a\\..\\b'), null);
+  assert.equal(safeJoin('/srv/root', 'media/x/.hidden'), null);
+  assert.equal(safeJoin('/srv/root', 'media/x\0y'), null);
+  assert.equal(safeJoin('/srv/root', 'media/abc/master.m3u8'), '/srv/root/media/abc/master.m3u8');
+});
+
+test('malformed request targets get 400 instead of crashing the server', async () => {
+  for (const p of ['//', '/%E0%A4%A', '/api/%', '/css/%ZZ.css', '/%00']) {
+    const res = await rawGet(t.base, p);
+    assert.equal(res.status, 400, p);
+  }
+  // The process is still serving.
+  assert.equal((await fetch(`${t.base}/api/health`)).status, 200);
 });
 
 test('security headers are present', async () => {

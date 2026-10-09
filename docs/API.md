@@ -22,7 +22,7 @@ JSON over HTTPS, same-origin, cookie session. The browser client lives in `js/ap
 
 **TitleSummary**: `{ id, type: 'movie'|'series', title, originalTitle, tagline, synopsis, year, releaseDate, runtimeMin, ageRating, ratingSource: 'official'|'advisory', minAge, genres[], tags[], moods[], keywords[], countries[], originalLanguage, directors[], cast[] (names), awards[], poster, backdrop, palette[], resolutions[] (verified heights, desc), quality: '4K'|'HD'|'SD'|null, hdr, audioLanguages[], subtitleLanguages[], hasSubtitles, audioFormats[], seasonCount, episodeCount, playable, hasTrailer, memberRating: {average, count}|null, featured, editorialRank, status, addedAt, publishedAt }`
 
-**TitleDetail**: TitleSummary plus `{ credits: {directors[], cast[{name, role?}], crew[{name, job}]}, license: {name, url?, attribution, source?}, trailerMediaId, creator: {name}|null, seasons: [{ number, name, synopsis, year, episodes: [Episode] }] }`
+**TitleDetail**: TitleSummary plus `{ credits: {directors[], cast[{name, role?}], crew[{name, job}]}, license: {name, url?, attribution, source?}, trailerMediaId, creator: {id|null, name}|null (`id` is the creator's account id to follow; null once creator access is removed), seasons: [{ number, name, synopsis, year, episodes: [Episode] }] }`
 
 **Episode**: `{ id, seasonNumber, number, name, synopsis, runtimeMin, still, airDate, hasMedia }`
 
@@ -48,7 +48,7 @@ JSON over HTTPS, same-origin, cookie session. The browser client lives in `js/ap
 | GET | `/api/search?q&type&genres&tags&yearFrom&yearTo&runtimeMin&runtimeMax&ageRatings&language&subtitles&country&resolution&minRating&recent&sort&page&pageSize` | `{query, sort, total, page, pageSize, items: TitleSummary+{match}, facets: {type, genres, languages, subtitles, decades, ageRatings, resolutions}, didYouMean}` |
 | GET | `/api/search/suggest?q` | `{suggestions: [{kind:'title'|'person'|'genre', id?, label, sub, poster?}]}` |
 | GET | `/api/playback/:titleId?episodeId&role=trailer` | Playback (402 `ENTITLEMENT_REQUIRED` in paid modes, 404 `MEDIA_UNAVAILABLE`) |
-| GET | `/api/discover` | `{sections: [{id, title, description?, items: [{title}]}]}` (personalised discovery page) |
+| GET | `/api/discover` | `{sections: [{id, title, description?, items: [{title, reason?}], creators?: [{id, name}]}]}` (personalised discovery page; `creators` on the creator-spotlight section lists the followable creators named in the row) |
 
 ## Library (profile)
 | GET | `/api/library/summary` | `{watchlistIds[], progress: {[titleId]: {episodeId, positionS, durationS, completed, updatedAt}}, ratings: {[titleId]: 1-5}}` |
@@ -107,7 +107,7 @@ Parental controls: a profile is *restricted* when it is a kids profile or has a 
 | PUT / DELETE | `/api/reviews/:id/helpful` | account (not the author) | `{helpfulCount, voted}` |
 | GET / POST | `/api/reviews/:id/comments` `{body}` | public / profile | `{items: Comment[]}` / `{comment}` |
 | DELETE | `/api/comments/:id` | author | 204 |
-| POST | `/api/reports` `{targetType:'review'|'comment'|'collection', targetId, reason, details?}` | account, rate limited | `{ok}` |
+| POST | `/api/reports` `{targetType:'review'|'comment'|'collection', targetId, reason, details?}` (for a shared collection `targetId` may be its share token — the shared view never exposes the id) | account, rate limited | `{ok, autoHidden}` |
 | GET / POST / DELETE | `/api/blocks` `{reviewId}` · `/api/blocks/:id` | account | blocked authors are hidden from your review lists |
 
 Review: `{ id, titleId, rating, body, containsSpoilers, status, author: {name, avatar}, isMine, fromYourAccount, helpfulCount, votedHelpful, commentCount, createdAt, updatedAt, edited, editedAt }` (`fromYourAccount`: written by another profile of the viewer's account — no helpful votes, reports or blocks). The list also returns `sort` and `commentsEnabled`.
@@ -147,7 +147,7 @@ Moderation: reviews and replies are scored by spam heuristics (links, shouting, 
 Submission statuses: `draft → uploading → submitted → under_review → info_required ↔ submitted → approved → published`, or `rejected`. Only the admin API moves a submission past `submitted`. Nothing is published automatically.
 
 ## Notifications (account)
-| GET | `/api/notifications?page` | `{items: [{id, type, title, body, link, createdAt, readAt}], unread, total}` (includes active announcements) |
+| GET | `/api/notifications?unread=1&beforeAt&beforeId` (or `?page`) | `{items: [{id, type, title, body, link, createdAt, readAt}], unread, total, remaining}` (includes active announcements; newest first; `beforeAt`/`beforeId` = the last item shown, so later pages never skip rows). A kids or maturity-limited profile sees only notifications sent to that profile (plus replies to its own reviews), never account, moderation or creator notices; read, read-all, delete and the unread count use the same scope |
 |---|---|---|
 | GET | `/api/notifications/unread-count` | `{unread}` |
 | POST | `/api/notifications/:id/read` · `/api/notifications/read-all` · DELETE `/api/notifications/:id` | `{ok}` |
@@ -166,11 +166,11 @@ Submission statuses: `draft → uploading → submitted → under_review → inf
 All admin routes are under `/api/admin/*`. Every mutation writes an audit log entry.
 - `GET /api/admin/overview`: counts, open queues, health summary
 - Titles: `GET/POST /api/admin/titles`, `GET/PATCH/DELETE /api/admin/titles/:id`, `POST /api/admin/titles/:id/publish|unpublish`, seasons and episodes (`POST /api/admin/titles/:id/seasons`, `PATCH/DELETE /api/admin/seasons/:id`, `POST /api/admin/titles/:id/episodes`, `PATCH/DELETE /api/admin/episodes/:id`)
-- Media: `GET/POST /api/admin/media`, `PATCH/DELETE /api/admin/media/:id`, `POST /api/admin/media/:id/verify` (the server reads the manifest or file and records the real renditions and tracks), `POST /api/admin/media/:id/transcode`
-- Artwork: `POST /api/admin/artwork` (image upload through the uploads API with `purpose:'artwork'`)
+- Media: `GET/POST /api/admin/media`, `PATCH/DELETE /api/admin/media/:id`, `POST /api/admin/media/:id/verify` (the server reads the manifest or file and records the real renditions and tracks), `POST /api/admin/media/:id/transcode`. A `storage:` source (or transcode `sourceKey`) must be under `media/`, or a video/subtitle file of an approved or published submission linked to the same title (422 otherwise). Deleting a season, episode or media row, or changing a media row, that would leave a published title with nothing playable answers `409 TITLE_WOULD_BE_UNPLAYABLE` (unpublish first). Title ids are slugs; `new` is reserved
+- Artwork: there is no separate artwork endpoint. Staff upload images through the uploads API (`POST /api/uploads` with `purpose:'artwork'`, then `PATCH` chunks); the finished upload's `url` (`media/art/upl_<id>.<ext>`) goes into the title's `poster`/`backdrop`. Poster and backdrop accept a site path or an `https` URL whose origin is in `MEDIA_ORIGINS` (anything else would be blocked by the Content-Security-Policy)
 - TMDB (metadata only): `GET /api/admin/tmdb/search?q&type`, `GET /api/admin/tmdb/:type/:id`
 - Taxonomy: `GET/PUT /api/admin/taxonomy` (genres and editorial collections)
-- Creators: `GET /api/admin/creator-applications?status`, `POST /api/admin/creator-applications/:id/decision {decision, note}`
+- Creators: `GET /api/admin/creator-applications?status`, `POST /api/admin/creator-applications/:id/decision {decision, note}` (pending or info_required applications only; `409 INVALID_TRANSITION` once approved or rejected — creator access is then changed on the account)
 - Submissions: `GET /api/admin/submissions?status`, `GET /api/admin/submissions/:id`, `POST /api/admin/submissions/:id/status {status, message}`, `POST /api/admin/submissions/:id/publish`, `GET /api/admin/submissions/:id/files/:fileId/url` (signed, short-lived)
 - Moderation: `GET /api/admin/reports?status`, `POST /api/admin/reports/:id/resolve {action: dismiss|hide|remove|suspend_author, note}`, `GET /api/admin/reviews?status&q`, `PATCH /api/admin/reviews/:id {status, note}`, `GET /api/admin/moderation/history`
 - Users *(role changes are admin only)*: `GET /api/admin/users?q&role&status`, `GET/PATCH /api/admin/users/:id {role?, status?, suspendedReason?, suspendedUntil?, maxProfiles?, isCreator?}`, `POST /api/admin/users/:id/revoke-sessions`

@@ -234,6 +234,11 @@ export function resolveReport(db, ctx, id, input) {
           ? `Your account is suspended until ${result.suspended.until.slice(0, 10)} for breaking the Community Guidelines.`
           : 'Your account is suspended for breaking the Community Guidelines.',
       };
+      if (report.target_type === 'collection') {
+        // Moderators never delete a collection: hiding or removing it turns off its share link.
+        titles.hide = titles.remove = 'Your shared collection was made private';
+        bodies.hide = bodies.remove = 'A moderator turned off the share link of your collection because it did not follow the Community Guidelines. The collection itself was not deleted.';
+      }
       notify(db, {
         accountId: target.author.accountId,
         type: 'moderation',

@@ -41,18 +41,28 @@ export function uniqueId(base, exists) {
 const SAFE_PATH = /^[A-Za-z0-9][A-Za-z0-9._\-/]*$/;
 const hasTraversal = (p) => p.split('/').some((seg) => seg === '..' || seg === '.' || seg.startsWith('.'));
 
-/** Artwork: a public site path (assets/…) or an http(s) URL. */
-export function isImageRef(s) {
-  if (/^https?:\/\//i.test(s)) {
+/**
+ * Artwork: a public site path (assets/…) or an https URL on an origin the
+ * Content-Security-Policy lets browsers load images from (MEDIA_ORIGINS). Anything else would
+ * be stored but never render. Returns an error message or null.
+ */
+export function imageRefProblem(s) {
+  if (typeof s !== 'string' || !s) return 'Enter an image location.';
+  if (/^[a-z][a-z0-9+.-]*:/i.test(s)) {
+    let u;
     try {
-      const u = new URL(s);
-      return u.protocol === 'https:' || u.protocol === 'http:';
+      u = new URL(s);
     } catch {
-      return false;
+      return 'Enter a valid URL.';
     }
+    if (u.protocol !== 'https:') return 'External artwork must use https.';
+    if (!allowedMediaOrigins().includes(u.origin)) return `${u.origin} is not in MEDIA_ORIGINS, so browsers would block the image. Upload the artwork or add the origin to MEDIA_ORIGINS first.`;
+    return null;
   }
-  return SAFE_PATH.test(s) && !hasTraversal(s) && s.length <= 500;
+  return SAFE_PATH.test(s) && !hasTraversal(s) && s.length <= 500 ? null : 'Use a site path such as assets/art/poster.svg or an allowed https URL.';
 }
+
+export const isImageRef = (s) => imageRefProblem(s) === null;
 
 /** Origins (besides this server) that browsers may load media from under the CSP. */
 export function allowedMediaOrigins() {

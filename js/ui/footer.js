@@ -11,7 +11,7 @@ export function mountFooter(root) {
       h('div', { class: 'lm-footer__brand' },
         h('a', { class: 'lm-logo', href: '#/', 'aria-label': 'Lumina home' }, logoMark(), h('span', { class: 'lm-logo__word', 'aria-hidden': 'true' }, 'LUMINA')),
         h('p', null, 'A streaming garden for film and television.')),
-      col('Browse', [['Movies', '#/movies'], ['TV Shows', '#/tv'], ['Genres', '#/genres'], ['New Releases', '#/new'], ['Velvia Suggestions', '#/velvia']]),
+      col('Browse', [['Discover', '#/discover'], ['Movies', '#/movies'], ['TV Shows', '#/tv'], ['Genres', '#/genres'], ['New Releases', '#/new'], ['Velvia Suggestions', '#/velvia']]),
       col('Your Lumina', [['My List', '#/my-list'], ['Viewing history', '#/my-list/history'], ['Settings', '#/settings'], ['Viewing statistics', '#/stats']]),
       col('Creators', [['Submit your work', '#/creators'], ['Creator dashboard', '#/creators/dashboard'], ['Submission agreement', '#/legal/creator-agreement']]),
       col('Legal & help', [['Terms of Service', '#/legal/terms'], ['Privacy Policy', '#/legal/privacy'], ['Cookie Policy', '#/legal/cookies'], ['Copyright & Takedown', '#/legal/copyright'], ['Community Guidelines', '#/legal/community'], ['Accessibility', '#/legal/accessibility'], ['Contact & Support', '#/legal/contact']])),

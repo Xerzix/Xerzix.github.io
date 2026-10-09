@@ -8,7 +8,7 @@
 // Honesty rules: the quality menu lists only renditions the stream really has, the audio
 // and subtitle menus only tracks that really exist, and measured telemetry is kept apart
 // from anything a member reports. See engine.js, subtitles.js and telemetry.js.
-import { h } from '../core/dom.js';
+import { h, replace } from '../core/dom.js';
 import { bus } from '../core/bus.js';
 import { clock, languageName } from '../core/format.js';
 import { store } from '../core/storage.js';
@@ -865,7 +865,7 @@ export class LuminaPlayer {
     if (this.stallHint || this.errorShown) return;
     this.stallHint = true;
     const lower = this.engine?.canLowerQuality?.();
-    this.stallEl.replaceChildren(
+    replace(this.stallEl,
       h('span', null, 'Still buffering — your connection may be slow'),
       lower ? h('button', { type: 'button', class: 'lm-player__stall-btn', onClick: () => this.lowerQuality() }, 'Lower quality') : null);
     this.stallEl.hidden = false;

@@ -105,6 +105,9 @@ const GREETING_RE = /^\s*(?:hi|hello|hey|hiya|good (?:morning|afternoon|evening|
 const QUESTION_RE = /\?\s*$|^\s*(?:what|who|where|when|why|how|which|can|could|would|will|do|does|did|is|are|tell me|explain|write|translate|calculate|define)\b/;
 const DOMAIN_RE = /\b(?:tonight|watch\w*|movies?|films?|series|shows?|tv|episodes?|seasons?|titles?|catalog(?:ue)?|lumina|cinema|stream\w*|recommend\w*|suggest\w*|actors?|actress(?:es)?|direct\w*|genres?|trailers?|velvia|play\w*|screen\w*|cartoons?|anime|documentar\w+)\b/;
 const PRONOUN_RE = /\b(?:it|its|it's|this|that|this one|that one|the (?:film|movie|series|show|title))\b/;
+// "If I enjoyed this movie", "the one I just watched": a specific title the message never names.
+const DEICTIC_RE = /\b(?:this|that) (?:movie|film|show|series|title|documentary|episode|one)\b/;
+const WATCHED_REF_RE = /\bthe (?:one|movie|film|show|series|title|thing) i (?:just |last |recently )?(?:watched|saw|finished)\b|\bthe last (?:one|movie|film|show|series|title|thing) i (?:watched|saw|finished)\b|\bwhat i (?:just |last )?(?:watched|saw|finished)\b/;
 // "What is Sintel like?" asks about Sintel; it is not a request for titles like Sintel.
 const LIKE_QUESTION_RE = /\b(?:what|how)\b[^?]*\blike\s*[?.!]*$/;
 // Questions about a title's suitability ("is it right for kids?") versus a worry ("is it too scary?").
@@ -1068,6 +1071,30 @@ export function analyze(titles, payload = {}, signals = {}) {
   } else if (state.prevRecs.length && !contextTitle && PRONOUN_RE.test(lower) && (parsed.topics.length || /\?/.test(lower) || /\b(?:tell me|more about|describe|explain)\b/.test(lower)) && !parsed.flags.request) {
     prevRef = state.prevRecs[0];
   }
+  // "The second one" with no list of picks to count from: ask which title, never refuse.
+  if (ord && !prevRef && !mentions.length && !parsed.refs.length && compareTitles.length < 2) {
+    a.intent = 'which';
+    a.ordWord = ord[0];
+    a.ordList = ordList;
+    return a;
+  }
+
+  // "What should I watch if I enjoyed this movie?" with no title on screen and nothing named:
+  // use the last title in this profile's history (when history may be used), otherwise ask.
+  const watchedRef = WATCHED_REF_RE.test(lower);
+  if (!contextTitle && !prevRef && !mentions.length && !parsed.refs.length && compareTitles.length < 2
+    && (watchedRef || (DEICTIC_RE.test(lower) && !state.prevRecs.length))) {
+    const last = useHistory ? latestWatched(sig) : null;
+    if (last) {
+      a.intent = 'similar';
+      a.target = last;
+      a.fromHistory = true;
+      a.ranked = rankTitles(a, { similarTo: last });
+      return a;
+    }
+    a.intent = 'whichTitle';
+    return a;
+  }
 
   // 0. Messages that are not a request about a title: questions about Velvia, thanks, and
   //    questions that have nothing to do with watching (answered honestly, never with picks).
@@ -1488,6 +1515,8 @@ export function composeResponse(a) {
   } else if (a.intent === 'about') out = composeAbout(a);
   else if (a.intent === 'thanks') out = composeThanks();
   else if (a.intent === 'offtopic') out = composeOffTopic();
+  else if (a.intent === 'which') out = composeWhich(a);
+  else if (a.intent === 'whichTitle') out = composeWhichTitle(a);
   else if (a.intent === 'compare') out = composeCompare(a);
   else if (a.intent === 'discuss' && a.target) out = composeDiscuss(a);
   else if (a.unknown && !a.ranked.length) out = composeUnknown(a);
@@ -1570,6 +1599,16 @@ function composeOffTopic() {
     recommendations: [],
     clarifyingQuestion: '',
     suggestions: ['What should I watch tonight?', 'Something calm', 'Something funny'],
+  };
+}
+
+function composeWhich(a) {
+  const names = (a.ordList || []).map((t) => t.title);
+  return {
+    reply: `I’m not sure which title you mean by ${quote(a.ordWord)}${names.length ? ` — my last reply only named ${list(names)}` : ' — I don’t have an earlier list of picks to count from'}. Tell me the title, and I’ll answer from its catalog details.`,
+    recommendations: [],
+    clarifyingQuestion: 'Which title do you mean?',
+    suggestions: names.length ? names.slice(0, 3).map((n) => `Tell me about ${n}`) : ['What should I watch tonight?', 'Something calm', 'Something funny'],
   };
 }
 
@@ -1688,7 +1727,33 @@ function composeRecommend(a) {
   };
 }
 
+/** The most recently watched title in the viewer's history, if any. */
+function latestWatched(sig) {
+  const latest = [...sig.history].sort((x, y) => (Date.parse(y.watchedAt) || 0) - (Date.parse(x.watchedAt) || 0))[0];
+  return latest ? sig.byId.get(latest.titleId) || null : null;
+}
+
+function composeWhichTitle(a) {
+  return {
+    reply: a.useHistory
+      ? 'Which title do you mean? Tell me its name and I’ll find the closest matches in the Lumina catalog. (Once you’ve watched something here, I can start from your viewing history.)'
+      : 'Which title do you mean? Tell me its name and I’ll find the closest matches in the Lumina catalog — you’ve asked me not to use your viewing history, so I won’t guess from it.',
+    recommendations: [],
+    clarifyingQuestion: 'Which title did you enjoy?',
+    suggestions: ['What should I watch tonight?', 'Something calm', 'Something with a complex plot'],
+  };
+}
+
 function composeSimilar(a) {
+  const out = composeSimilarTo(a);
+  if (a.fromHistory) {
+    // Say which title "this movie" was taken to mean, and how to correct it.
+    out.reply = `I’ve taken that to mean ${a.target.title}, the last title you watched — if you meant a different one, tell me its name. ${out.reply}`;
+  }
+  return out;
+}
+
+function composeSimilarTo(a) {
   const t = a.target;
   const closest = !a.full.length;
   const ranked = closest ? a.closest : a.full;

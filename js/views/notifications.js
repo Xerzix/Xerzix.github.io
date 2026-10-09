@@ -52,12 +52,15 @@ export default async function render(ctx) {
     filter: ctx.query.get('filter') === 'unread' ? 'unread' : 'all',
     items: [],
     total: 0,
+    remaining: 0,
     unread: 0,
     pageSize: 20,
   };
 
-  const fetchPage = (page, signal) => api.request('GET', '/api/notifications', {
-    query: { page, unread: state.filter === 'unread' ? 1 : undefined },
+  // Pages continue after the last item shown (a cursor), so rows marked read or deleted
+  // above never push unseen rows past the reader.
+  const fetchPage = (after, signal) => api.request('GET', '/api/notifications', {
+    query: { unread: state.filter === 'unread' ? 1 : undefined, beforeAt: after?.createdAt, beforeId: after?.id },
     signal,
   });
 
@@ -121,6 +124,7 @@ export default async function render(ctx) {
       if (state.filter === 'unread') {
         state.items = [];
         state.total = 0;
+        state.remaining = 0;
       }
       paint();
       announce('All notifications marked as read');
@@ -155,13 +159,13 @@ export default async function render(ctx) {
   async function loadMore(btn) {
     await withBusy(btn, async () => {
       try {
-        const page = Math.floor(state.items.length / state.pageSize) + 1;
-        const res = await fetchPage(page);
+        const res = await fetchPage(state.items.at(-1));
         const known = new Set(state.items.map((n) => n.id));
         const fresh = res.items.filter((n) => !known.has(n.id));
         const firstNew = state.items.length;
         state.items.push(...fresh);
         state.total = res.total;
+        state.remaining = res.remaining ?? 0;
         state.unread = res.unread;
         paint();
         listHost.querySelectorAll('li[data-id]')[firstNew]?.querySelector('a, button')?.focus();
@@ -181,6 +185,7 @@ export default async function render(ctx) {
     if (target) {
       actions.append(h('a', {
         class: 'lm-btn lm-btn--ghost lm-btn--sm',
+        style: { minHeight: '40px' }, // same touch target as the icon buttons beside it
         href: target.href,
         ...(target.external ? { target: '_blank', rel: 'noopener noreferrer' } : {}),
         'aria-label': `Open: ${n.title}${target.external ? ' (opens in a new tab)' : ''}`,
@@ -239,7 +244,7 @@ export default async function render(ctx) {
     }
     listHost.replaceChildren(h('ul', { class: 'lm-stack lm-stack--sm', role: 'list', 'aria-label': 'Notifications', style: { listStyle: 'none', margin: 0, padding: 0 } },
       ...state.items.map(row)));
-    const remaining = state.total - state.items.length;
+    const remaining = state.remaining;
     if (remaining > 0) {
       const more = button(`Load more (${remaining})`, { variant: 'ghost', icon: 'chevronDown' });
       more.addEventListener('click', () => loadMore(more));
@@ -254,9 +259,10 @@ export default async function render(ctx) {
     listHost.replaceChildren(loading('Loading your notifications…'));
     moreHost.replaceChildren();
     try {
-      const res = await fetchPage(1, ctx.signal);
+      const res = await fetchPage(null, ctx.signal);
       state.items = res.items;
       state.total = res.total;
+      state.remaining = res.remaining ?? Math.max(0, res.total - res.items.length);
       state.unread = res.unread;
       state.pageSize = res.pageSize || state.pageSize;
       paint();

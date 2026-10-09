@@ -9,11 +9,43 @@ import { appLink, badge, confirmWithNote, dataTable, filterBar, jsonDetails, lis
 
 const ACTIONS = [
   { value: 'dismiss', label: 'Dismiss', hint: 'No violation. Reports are closed; the content stays.' },
-  { value: 'hide', label: 'Hide', hint: 'Hidden from everyone but its author. Reversible from the Reviews tab.' },
-  { value: 'remove', label: 'Remove', hint: 'Removed for a clear violation. The author is notified.', danger: true },
+  { value: 'hide', label: 'Hide', hint: 'Hidden from everyone but its author. Reversible: once the report is settled, this card offers “Reinstate”.' },
+  { value: 'remove', label: 'Remove', hint: 'Removed for a clear violation. The author is notified. A moderator can still reinstate it from this card.', danger: true },
   { value: 'suspend_author', label: 'Suspend author', hint: 'Hides the content and suspends the author’s account, signing them out everywhere.', danger: true },
 ];
 const TYPE_LABEL = { review: 'Review', comment: 'Comment', collection: 'Shared collection' };
+// Collections have no hidden/removed state: both actions turn off the share link.
+const COLLECTION_HINT = 'Turns off the share link (the collection becomes private; it is not deleted). The owner is notified and can share it again.';
+
+const hintFor = (targetType, action) => (targetType === 'collection' && (action.value === 'hide' || action.value === 'remove') ? COLLECTION_HINT : action.hint);
+
+/** Settled reports about a hidden or removed review/comment can be undone here. */
+function reinstateButton(group, onDone) {
+  const t = group.target;
+  if (!t.exists || !['review', 'comment'].includes(group.targetType) || !['hidden', 'removed'].includes(t.status)) return null;
+  if (group.reports.some((r) => r.status === 'open')) return null;
+  const what = group.targetType === 'review' ? 'review' : 'comment';
+  const btn = button('Reinstate', { variant: 'ghost', size: 'sm', icon: 'check', attrs: { 'aria-label': `Reinstate this ${what}` } });
+  btn.addEventListener('click', () => withBusy(btn, async () => {
+    const res = await confirmWithNote({
+      title: `Reinstate this ${what}?`,
+      message: `It becomes visible to everyone again${what === 'review' ? ' and counts towards the member rating' : ''}.`,
+      confirmLabel: 'Reinstate',
+      noteLabel: 'Internal note (optional)',
+    });
+    if (!res) return;
+    try {
+      if (what === 'review') await adminApi.moderation.setReview(t.id, { status: 'visible', note: res.note });
+      else await adminApi.moderation.setComment(t.id, { status: 'visible', note: res.note });
+      toast(`${what === 'review' ? 'Review' : 'Comment'} reinstated.`, { type: 'success' });
+      bus.emit('admin:queues-changed');
+      onDone();
+    } catch (err) {
+      toastError(err);
+    }
+  }));
+  return h('div', { class: 'lm-cluster' }, btn, h('span', { class: 'lm-hint' }, `This ${what} is ${t.status}.`));
+}
 
 function reportCard(group, onDone) {
   const t = group.target;
@@ -29,7 +61,7 @@ function reportCard(group, onDone) {
   const submit = button('Apply decision', { variant: 'primary' });
   const sync = () => {
     const a = radios.querySelector('input:checked').value;
-    hint.textContent = ACTIONS.find((x) => x.value === a).hint;
+    hint.textContent = hintFor(group.targetType, ACTIONS.find((x) => x.value === a));
     days.hidden = a !== 'suspend_author';
     toAuthor.hidden = a === 'dismiss';
   };
@@ -81,7 +113,7 @@ function reportCard(group, onDone) {
         h('strong', null, r.reasonLabel), ' · ', r.reporter?.email || 'deleted account', ' · ', time(r.createdAt),
         r.details ? h('p', { class: 'lm-muted' }, r.details) : null,
         r.status !== 'open' ? h('p', { class: 'lm-hint' }, `${r.status} ${r.resolvedBy ? `by ${r.resolvedBy}` : ''} ${r.resolutionNote ? `— ${r.resolutionNote}` : ''}`) : null)))),
-    group.reports.some((r) => r.status === 'open') ? form : null));
+    group.reports.some((r) => r.status === 'open') ? form : reinstateButton(group, onDone)));
 }
 
 function reportsTab(ctx) {

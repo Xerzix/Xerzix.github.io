@@ -36,6 +36,7 @@ For **Preview mode**, serve the repository root with any static file server (Git
 | `npm run art:build` | Regenerate the key-art SVGs |
 | `npm run worker` | Run the transcoding worker as a separate process |
 | `npm run vendor:sync` | Copy hls.js from node_modules into `js/vendor/` |
+| `npm run perf:baseline` | Measure LCP, CLS and click latency of the home and title pages (desktop and throttled phone) |
 
 ## Configuration
 Every setting comes from environment variables or a `.env` file (see **`.env.example`**, which documents each one). Production needs at least:
@@ -67,6 +68,33 @@ SQLite through `node:sqlite`, stored in `var/lumina.db`, with WAL mode and forei
 - `docs/STREAMING.md`: media pipeline and **what production 4K requires**
 - `docs/SECURITY.md`: security model and production checklist
 - `docs/MONETIZATION.md`: how subscriptions or ads would plug in (none are active)
+
+## Status and next steps
+*Last updated 2026-10-09.*
+
+**Built and covered by tests**
+- Discovery: home rows, personalised Discover, browse, genres, typo-tolerant search with filters (including country and language by name), My List, history and collections.
+- Player: HLS with adaptive quality, subtitles, resume, watch parties, and playback-quality reports.
+- Accounts: profiles and parental controls, two-factor sign-in, sessions, appearance and accessibility settings.
+- Velvia Suggestions: built-in catalog engine, with an optional Claude provider.
+- Community: reviews, creator applications and submissions, resumable uploads and the transcoding pipeline.
+- Admin dashboard: notifications (including follows of series, genres and creators), curated genres and editorial collections, and draft legal pages.
+
+**Tests:** `npm test` passes 300 of 308 tests. The other 8 are ffmpeg integration tests, which are skipped unless `FFMPEG_PATH` is set. `npm run test:e2e` passes 57 of 57 in Chromium.
+
+**Known gaps**
+- **Phone page load misses its target.** Measured LCP is about 6 s on an emulated mid-range phone, against a 2.5 s target. Text assets are served uncompressed and 13 stylesheets load up front. Measurements and causes are in `docs/STREAMING.md` §4.
+- **Streaming metrics are not measured.** Time to first frame and rebuffering need real devices and the production telemetry. This test Chromium cannot decode H.264.
+- **External services are not connected:** email delivery, malware scanning, payments, DRM, and multi-instance pub/sub (see `docs/AUDIT.md` §6). Velvia's AI conversation needs an API key; otherwise the built-in engine answers.
+- **Legal pages are drafts** awaiting legal review.
+- **Legacy pages still contain hard-coded credentials.** `watch.html`, `media.html` and `stream.html` should be removed and their credentials rotated.
+
+**Recommended next phase**
+1. Turn on Brotli or gzip at the CDN, split CSS by route, then measure again on real Android and iOS devices.
+2. Move media to object storage behind a CDN, using a managed transcoder (`docs/STREAMING.md` checklist).
+3. Connect a mail provider and a malware scanner. Then run a security review against `docs/SECURITY.md`.
+4. Move to PostgreSQL and Redis before running more than one server instance.
+5. Complete the legal review, then decide on monetisation (`docs/MONETIZATION.md`).
 
 ## Content and licensing
 - The seed catalog contains four **Blender Foundation open movies** (Creative Commons Attribution). They are streamed from public hosts, and each title page shows its attribution.

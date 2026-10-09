@@ -73,7 +73,7 @@ export async function verify(m, btn, onChange) {
 
 export async function transcode(m, onChange) {
   const suggested = m.source?.startsWith('storage:') && !m.source.endsWith('.m3u8') ? m.source.slice(8) : '';
-  const key = field({ label: 'Source file (private storage key)', name: 'sourceKey', value: suggested, hint: 'The original upload to transcode, e.g. submissions/sub_…/file.mp4. The result replaces this entry’s source with an HLS ladder.' });
+  const key = field({ label: 'Source file (private storage key)', name: 'sourceKey', value: suggested, hint: 'The original to transcode: a key under media/, or a video of an approved submission linked to this title (e.g. submissions/sub_…/file.mp4). The result replaces this entry’s source with an HLS ladder.' });
   const go = button('Queue transcoding', { variant: 'primary', icon: 'refresh' });
   const modal = openModal({ title: 'Transcode to HLS', content: h('div', { class: 'adm-modal-stack' }, key), actions: [button('Cancel', { variant: 'ghost', onClick: () => modal.close() }), go] });
   go.addEventListener('click', () => withBusy(go, async () => {
@@ -164,7 +164,7 @@ export async function openMediaEditor({ media = null, titleId, episodeId = null,
     name: 'source',
     value: m.source || '',
     required: true,
-    hint: 'A site path under media/ (e.g. media/originals/x/master.m3u8), a private storage:<key>, or an https URL on an origin listed in MEDIA_ORIGINS. Changing it clears the verification.',
+    hint: 'A site path under media/ (e.g. media/originals/x/master.m3u8), a private storage:media/… key (or a video of an approved submission linked to this title), or an https URL on an origin listed in MEDIA_ORIGINS. Changing it clears the verification.',
   });
   source.control.classList.add('adm-mono');
   const status = field({ label: 'Status', name: 'status', type: 'select', value: m.status, options: STATUSES, hint: 'Only ready media is playable and counts for publishing.' });

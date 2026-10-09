@@ -19,6 +19,7 @@ import { log } from '../lib/log.js';
 import { audit } from './audit.js';
 import { addEvent, EDITABLE_STATUSES, FILE_ROLES, syncUploadState } from './creators.js';
 import { classifyText, decodeUtf8, imageSize, probeFile, sniffType } from './media/probe.js';
+import { artworkVariants } from './media/artwork.js';
 import { ensureDirFor, removeKey, storagePath } from './storage.js';
 
 export const ARTWORK_ROLES = ['poster', 'backdrop', 'artwork'];
@@ -422,11 +423,14 @@ export class UploadService {
   async attachArtwork(ctx, row, path, type, probe, sha256) {
     const file = `${row.id}.${type.ext}`;
     const key = `public/art/${file}`;
-    await rename(path, ensureDirFor(key));
+    const full = ensureDirFor(key);
+    await rename(path, full);
     const url = `/media/art/${file}`;
+    // Smaller copies for responsive images (only when ffmpeg is configured).
+    const variants = await artworkVariants(this.config.media.ffmpegPath, full, row.id, { width: probe.width, ext: type.ext });
     this.db.run(
       `UPDATE uploads SET status = 'complete', storage_key = ?, result = ?, error = NULL, updated_at = ? WHERE id = ?`,
-      key, toJson({ url, width: probe.width, height: probe.height, sha256 }), now(), row.id,
+      key, toJson({ url, width: probe.width, height: probe.height, sha256, variants }), now(), row.id,
     );
     audit(this.db, ctx, 'media.artwork_uploaded', { targetType: 'upload', targetId: row.id, details: { url, role: row.file_role, filename: row.filename } });
   }

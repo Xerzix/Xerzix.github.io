@@ -20,7 +20,7 @@ import { allowedMediaOrigins, languageLabel, mediaRefProblem } from '../services
 import {
   adminTitle, applyVerification, createEpisode, createMedia, createSeason, createTitle, deleteEpisode, deleteMedia, deleteSeason, deleteTitle,
   episodeDto, episodeSchema, getMediaRow, getTaxonomy, listMedia, listTitles, mediaDto, mediaPatchSchema, mediaSchema, publishTitle,
-  seasonSchema, taxonomySchema, titlePatchSchema, titleSchema, unpublishTitle, updateEpisode, updateMedia, updateSeason, updateTitle,
+  seasonSchema, storageSourceProblem, taxonomySchema, titlePatchSchema, titleSchema, unpublishTitle, updateEpisode, updateMedia, updateSeason, updateTitle,
 } from '../services/admin/content.js';
 import { verifyMedia } from '../services/admin/media-verify.js';
 import {
@@ -233,8 +233,9 @@ export default function register(app, { db, services, config }) {
     const m = getMediaRow(db, ctx.params.id);
     const body = v.parse(transcodeSchema, await ctx.body());
     const sourceKey = body.sourceKey || (m.source.startsWith('storage:') && !m.source.endsWith('.m3u8') ? m.source.slice(8) : null);
-    if (!sourceKey) throw validation({ sourceKey: 'Give the private storage key of the source file to transcode (for example uploads/…).' });
-    const problem = mediaRefProblem(`storage:${sourceKey}`);
+    if (!sourceKey) throw validation({ sourceKey: 'Give the private storage key of the source file to transcode (under media/, or a video file of an approved submission linked to this title).' });
+    // The ladder becomes playable media of this title, so the same source rules apply.
+    const problem = mediaRefProblem(`storage:${sourceKey}`) || storageSourceProblem(db, sourceKey, m.title_id);
     if (problem) throw validation({ sourceKey: problem });
     if (!config.media.ffmpegPath) throw new HttpError(503, 'TRANSCODER_NOT_CONFIGURED', 'Transcoding needs ffmpeg on the server. Set FFMPEG_PATH (and FFPROBE_PATH) and restart.');
     const queue = await optionalModule('../services/media/queue.js');

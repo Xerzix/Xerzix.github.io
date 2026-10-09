@@ -16,6 +16,7 @@ const MIN_MEMBER_RATINGS = 3;
  *   activity:   { [titleId]: number }        (platform-wide plays, last 14 days; server only)
  *   community:  { [titleId]: { reviews, comments } }
  *   useHistory: boolean                      (privacy: personalise from history or not)
+ *   collections: [{ id, name, description? }] (editorial collections an admin defined; server only)
  *   now:        ms timestamp
  */
 export function composeHome(titles, s = {}) {
@@ -120,17 +121,23 @@ export function composeHome(titles, s = {}) {
     items: titles.filter((t) => (t.memberRating?.count || 0) >= MIN_MEMBER_RATINGS).sort((a, b) => b.memberRating.average - a.memberRating.average || b.memberRating.count - a.memberRating.count).slice(0, 20).map((t) => ({ title: t })),
   });
 
+  // Editorial collections defined in Admin → Settings: their name and description label the
+  // built-in tag rows below, and every other collection gets a row of the titles tagged with it.
+  const curated = new Map((Array.isArray(s.collections) ? s.collections : []).filter((c) => c && c.id && c.name).map((c) => [c.id, c]));
+  const label = (tag, title, subtitle) => (curated.has(tag) ? { title: curated.get(tag).name, subtitle: curated.get(tag).description || undefined } : { title, subtitle });
+
   // 9. Hidden Gems — editorially tagged, or well rated with little viewing.
   push({
     id: 'hidden-gems',
-    title: 'Hidden Gems',
+    ...label('hidden-gem', 'Hidden Gems'),
     items: titles.filter((t) => (t.tags || []).includes('hidden-gem') || ((t.memberRating?.average || 0) >= 4.3 && (t.memberRating?.count || 0) >= MIN_MEMBER_RATINGS && (activity[t.id] || 0) < 3)).map((t) => ({ title: t })),
   });
 
-  push({ id: 'originals', title: 'Lumina Originals', items: titles.filter((t) => (t.tags || []).includes('lumina-original')).sort((a, b) => a.editorialRank - b.editorialRank).map((t) => ({ title: t })) });
+  push({ id: 'originals', ...label('lumina-original', 'Lumina Originals'), items: titles.filter((t) => (t.tags || []).includes('lumina-original')).sort((a, b) => a.editorialRank - b.editorialRank).map((t) => ({ title: t })) });
+  for (const row of collectionRows(titles, [...curated.values()])) push(row);
 
   // 10–13. Editorial collections driven by catalog metadata.
-  push({ id: 'japanese', title: 'Japanese Cinema', href: '#/search?language=ja', items: titles.filter((t) => t.originalLanguage === 'ja' || (t.countries || []).includes('JP') || (t.tags || []).includes('japanese-cinema')).map((t) => ({ title: t })) });
+  push({ id: 'japanese', ...label('japanese-cinema', 'Japanese Cinema'), href: '#/search?language=ja', items: titles.filter((t) => t.originalLanguage === 'ja' || (t.countries || []).includes('JP') || (t.tags || []).includes('japanese-cinema')).map((t) => ({ title: t })) });
   push({ id: 'international', title: 'International Cinema', items: titles.filter((t) => (t.originalLanguage && t.originalLanguage !== 'en') || ((t.countries || []).length && !(t.countries || []).some((c) => ['US', 'GB'].includes(c)))).filter((t) => !(t.tags || []).includes('lumina-original')).map((t) => ({ title: t })) });
   push({ id: 'award-winning', title: 'Award-Winning Movies', items: titles.filter((t) => t.type === 'movie' && (t.awards || []).length).map((t) => ({ title: t })) });
   push({ id: 'documentaries', title: 'Popular Documentaries', href: '#/genres/Documentary', items: titles.filter((t) => (t.genres || []).includes('Documentary')).map((t) => ({ title: t })) });
@@ -154,4 +161,25 @@ export function composeHome(titles, s = {}) {
     featured: (featured.length ? featured : [...titles].sort((a, b) => a.editorialRank - b.editorialRank)).slice(0, 6),
     rows,
   };
+}
+
+/** Tags that already have a row of their own on the home page. */
+export const BUILT_IN_COLLECTION_TAGS = ['hidden-gem', 'lumina-original', 'japanese-cinema'];
+
+/**
+ * One row per admin-defined editorial collection with at least one visible title, in the
+ * admin's order: { id: 'collection-<id>', title, subtitle?, href, items }.
+ */
+export function collectionRows(titles, collections = [], { skip = BUILT_IN_COLLECTION_TAGS } = {}) {
+  const rows = [];
+  for (const c of collections) {
+    if (!c?.id || !c.name || skip.includes(c.id)) continue;
+    const items = titles
+      .filter((t) => (t.tags || []).includes(c.id))
+      .sort((a, b) => (a.editorialRank ?? 1000) - (b.editorialRank ?? 1000) || a.title.localeCompare(b.title))
+      .slice(0, 20)
+      .map((t) => ({ title: t }));
+    if (items.length) rows.push({ id: `collection-${c.id}`, title: c.name, subtitle: c.description || undefined, href: `#/search?tags=${encodeURIComponent(c.id)}`, items });
+  }
+  return rows;
 }

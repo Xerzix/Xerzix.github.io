@@ -7,6 +7,7 @@ import { session } from '../core/session.js';
 import { date, plural, relativeTime, titleFacts } from '../core/format.js';
 import { navigate } from '../core/router.js';
 import { titleCard } from '../ui/card.js';
+import { openReport } from '../ui/panels/reviews-panel.js';
 import { icon } from '../ui/icons.js';
 import {
   applyFieldErrors, button, confirmDialog, emptyState, errorState, field, formValues, linkButton, openModal, segmented, toast, toastError,
@@ -397,7 +398,12 @@ async function sharedView(ctx) {
     col.items.length
       ? h('ul', { class: 'lm-grid lm-coll__grid', role: 'list' }, ...col.items.map((i) => h('li', { class: 'lm-coll__item' }, titleCard(i.title), i.note ? h('p', { class: 'lm-coll__note' }, i.note) : null)))
       : emptyState({ title: 'Nothing to show here', message: 'This collection is empty, or its titles are outside this profile’s maturity setting.', actions: [linkButton('Browse Lumina', '#/', { variant: 'primary' })] }),
-    h('p', { class: 'lm-hint lm-coll__shared-note' }, 'Shared collections are read-only. Titles outside your profile’s maturity setting are not shown.'));
+    h('p', { class: 'lm-hint lm-coll__shared-note' }, 'Shared collections are read-only. Titles outside your profile’s maturity setting are not shown.'),
+    // Members can report a shared collection (by its share token: the page never sees its id).
+    session.isServer && session.isSignedIn
+      ? h('div', { class: 'lm-cluster lm-coll__report' },
+        button('Report this collection', { variant: 'ghost', size: 'sm', icon: 'flag', onClick: () => openReport('collection', ctx.params.token, `“${col.name}”`) }))
+      : null);
   return page;
 }
 

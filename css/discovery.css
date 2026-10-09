@@ -377,6 +377,21 @@
   outline: none;
 }
 
+/* Follow controls under the Creator spotlight row */
+.lm-discover__follow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lm-space-2) var(--lm-space-4);
+  max-width: var(--lm-maxw);
+  margin: var(--lm-space-3) auto 0;
+  padding-inline: var(--lm-gutter);
+}
+
+.lm-discover__follow p {
+  margin: 0;
+}
+
 /* ─── Title detail ─── */
 .lm-detail {
   position: relative;
@@ -1475,6 +1490,11 @@ a.lm-episode__link:focus-visible .lm-episode__play,
 .lm-coll__shared-note {
   margin-top: var(--lm-space-10);
   text-align: center;
+}
+
+.lm-coll__report {
+  justify-content: center;
+  margin-top: var(--lm-space-2);
 }
 
 /* Title picker dialog */

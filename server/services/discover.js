@@ -3,6 +3,7 @@
 // show are omitted rather than padded. Parental limits apply through catalog.published().
 import { similarTitles, tasteProfile, tasteScore } from '../../js/core/similarity.js';
 import { platformActivity } from './library.js';
+import { collectionRows } from '../../js/core/home-rows.js';
 
 const DAY = 86_400_000;
 const MAX_ITEMS = 20;
@@ -53,7 +54,7 @@ export class DiscoverService {
     return this.activityCache.value;
   }
 
-  /** Creator display names for titles published from creator submissions. */
+  /** Creators ({ id, name, followable }) of titles published from creator submissions, by title id. */
   creatorNames(ids) {
     const out = new Map();
     for (const id of ids) {
@@ -62,8 +63,11 @@ export class DiscoverService {
     }
     if (!out.size) return out;
     const accountIds = [...new Set(out.values())];
-    const names = new Map(this.db.all(`SELECT id, display_name FROM accounts WHERE id IN (${accountIds.map(() => '?').join(', ')})`, ...accountIds).map((a) => [a.id, a.display_name]));
-    for (const [titleId, accountId] of out) out.set(titleId, names.get(accountId) || null);
+    const accounts = new Map(this.db.all(`SELECT id, display_name, is_creator FROM accounts WHERE id IN (${accountIds.map(() => '?').join(', ')})`, ...accountIds).map((a) => [a.id, a]));
+    for (const [titleId, accountId] of out) {
+      const a = accounts.get(accountId);
+      out.set(titleId, { id: accountId, name: a?.display_name || null, followable: !!a?.is_creator });
+    }
     return out;
   }
 
@@ -128,6 +132,11 @@ export class DiscoverService {
       push({ id: night.id, title: night.title, description: night.description, items: titles.filter(night.match).sort(byRank).map((t) => ({ title: t })) });
     }
 
+    // Editorial collections an administrator curated (Admin → Settings), in their order.
+    for (const row of collectionRows(titles, this.catalog.editorialCollections(), { skip: [] })) {
+      push({ id: row.id, title: row.title, description: row.subtitle, href: row.href, items: row.items });
+    }
+
     // 4. Because you watched — anchored on the two most recent titles in history.
     for (const h of history.slice(0, 2)) {
       const anchor = byId.get(h.titleId);
@@ -150,14 +159,21 @@ export class DiscoverService {
 
     // 6. Creator spotlight — work published by independent creators on Lumina.
     const creators = this.creatorNames(titles.map((t) => t.id));
+    const spotlight = titles
+      .filter((t) => creators.has(t.id))
+      .sort((a, b) => (Date.parse(b.publishedAt || b.addedAt) || 0) - (Date.parse(a.publishedAt || a.addedAt) || 0));
+    // The creators named in the row, in row order, so members can follow them from Discover.
+    const named = new Map();
+    for (const t of spotlight.slice(0, MAX_ITEMS)) {
+      const c = creators.get(t.id);
+      if (c.followable && c.name && !named.has(c.id)) named.set(c.id, { id: c.id, name: c.name });
+    }
     push({
       id: 'creator-spotlight',
       title: 'Creator spotlight',
       description: 'Independent work submitted and published by creators on Lumina.',
-      items: titles
-        .filter((t) => creators.has(t.id))
-        .sort((a, b) => (Date.parse(b.publishedAt || b.addedAt) || 0) - (Date.parse(a.publishedAt || a.addedAt) || 0))
-        .map((t) => ({ title: t, reason: creators.get(t.id) ? `By ${creators.get(t.id)}` : undefined })),
+      items: spotlight.map((t) => ({ title: t, reason: creators.get(t.id).name ? `By ${creators.get(t.id).name}` : undefined })),
+      creators: [...named.values()],
     });
 
     return { sections };

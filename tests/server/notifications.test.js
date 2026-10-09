@@ -140,3 +140,54 @@ test('pagination returns stable pages of 20', async () => {
   assert.equal(ids.size, p1.body.items.length + p2.body.items.length, 'no duplicates across pages');
   assert.ok(p1.body.total >= 25);
 });
+
+test('a cursor page continues after the last item shown, even after marking items read', async () => {
+  const user = await t.userClient({});
+  // Announcements from other tests would interleave; this account has them switched off.
+  t.db.run('UPDATE accounts SET settings = ? WHERE id = ?', JSON.stringify({ notifications: { announcements: false } }), user.accountId);
+  const base = Date.now() - 3_600_000;
+  for (let i = 0; i < 27; i++) {
+    t.db.run(
+      `INSERT INTO notifications (id, account_id, type, title, body, data, created_at) VALUES (?, ?, 'account_security', ?, '', '{}', ?)`,
+      `ntf_cursor${String(i).padStart(2, '0')}`, user.accountId, `Notice ${i}`, new Date(base + i * 1000).toISOString(),
+    );
+  }
+  const first = await user.get('/api/notifications?unread=1');
+  assert.equal(first.body.items.length, 20);
+  assert.equal(first.body.remaining, 7);
+  // Reading five shown rows takes them out of the unread set; a page number would now skip rows.
+  for (const n of first.body.items.slice(0, 5)) assert.equal((await user.post(`/api/notifications/${n.id}/read`)).status, 200);
+  const last = first.body.items.at(-1);
+  const next = await user.get(`/api/notifications?unread=1&beforeAt=${encodeURIComponent(last.createdAt)}&beforeId=${last.id}`);
+  assert.deepEqual(next.body.items.map((n) => n.title), ['Notice 6', 'Notice 5', 'Notice 4', 'Notice 3', 'Notice 2', 'Notice 1', 'Notice 0']);
+  assert.equal(next.body.remaining, 0);
+});
+
+test('kids profiles see only their own notifications and cannot clear the grown-ups’ notices', async () => {
+  const kid = await t.userClient({ maxAge: 7, displayName: 'Kid' });
+  t.db.run('UPDATE accounts SET settings = ? WHERE id = ?', JSON.stringify({ notifications: { announcements: false } }), kid.accountId);
+  const adultProfile = `prf_adult${Math.random().toString(36).slice(2, 10)}`;
+  t.db.run('INSERT INTO profiles (id, account_id, name, avatar, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', adultProfile, kid.accountId, 'Parent', 'sakura', iso(), iso());
+  notify(t.db, { accountId: kid.accountId, profileId: adultProfile, type: 'genre_release', title: 'New in Drama: “Midnight Slaughter House”', link: '#/title/x', dedupeKey: 'k1' });
+  notify(t.db, { accountId: kid.accountId, type: 'account_security', title: 'Your password was changed', dedupeKey: 'k2' });
+  notify(t.db, { accountId: kid.accountId, profileId: kid.profileId, type: 'new_episode', title: 'New episode of “Garden Friends”', dedupeKey: 'k3' });
+  const adultRows = t.db.all('SELECT id FROM notifications WHERE account_id = ? AND (profile_id IS NULL OR profile_id = ?)', kid.accountId, adultProfile).map((r) => r.id);
+  assert.equal(adultRows.length, 2);
+
+  const list = await kid.get('/api/notifications');
+  assert.deepEqual(list.body.items.map((n) => n.title), ['New episode of “Garden Friends”']);
+  assert.equal(list.body.unread, 1);
+  assert.equal((await kid.get('/api/notifications/unread-count')).body.unread, 1);
+  for (const id of adultRows) {
+    assert.equal((await kid.post(`/api/notifications/${id}/read`)).status, 404);
+    assert.equal((await kid.del(`/api/notifications/${id}`)).status, 404);
+  }
+  await kid.post('/api/notifications/read-all');
+  const untouched = t.db.all(`SELECT read_at FROM notifications WHERE id IN (${adultRows.map(() => '?').join(', ')})`, ...adultRows);
+  assert.ok(untouched.every((r) => r.read_at === null), 'the grown-ups’ notices stay unread');
+
+  // The grown-up profile still manages the whole account's notices.
+  t.db.run('UPDATE sessions SET profile_id = ? WHERE account_id = ?', adultProfile, kid.accountId);
+  const grown = await kid.get('/api/notifications');
+  assert.equal(grown.body.items.length, 3);
+});

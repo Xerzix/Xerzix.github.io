@@ -19,7 +19,7 @@ export function hero(items, { autoRotate = true, previews = true } = {}) {
   let userPaused = false;
 
   const slides = items.map((t, i) => h('div', { class: ['lm-hero__slide', i === 0 && 'is-active'], 'aria-hidden': 'true' },
-    h('img', { src: t.backdrop || t.poster, alt: '', decoding: 'async', fetchpriority: i === 0 ? 'high' : 'low', loading: i === 0 ? 'eager' : 'lazy' })));
+    h('img', { src: t.backdrop || t.poster, srcset: (t.backdrop ? t.backdropSrcset : t.posterSrcset) || undefined, sizes: '100vw', alt: '', decoding: 'async', fetchpriority: i === 0 ? 'high' : 'low', loading: i === 0 ? 'eager' : 'lazy' })));
   const content = h('div', { class: 'lm-hero__content' });
   const dots = h('div', { class: 'lm-hero__dots', role: 'group', 'aria-label': 'Featured titles' });
   const pauseBtn = h('button', { class: 'lm-icon-btn', type: 'button' });

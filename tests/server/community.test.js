@@ -366,12 +366,20 @@ test('three distinct reports withdraw a shared collection’s link pending moder
   const { collection } = (await owner.post('/api/collections', { name: 'Offensive name', description: 'Abusive description' })).body;
   const shared = (await owner.patch(`/api/collections/${collection.id}`, { visibility: 'unlisted' })).body.collection;
   assert.equal((await t.client().get(`/api/shared/collections/${shared.shareToken}`)).status, 200);
+  // Viewers of the shared page only know its share token (the page never shows the id), so a
+  // report by token counts the same as one by id: the same reporter cannot count twice.
+  const first = await t.userClient();
+  assert.equal((await first.post('/api/reports', { targetType: 'collection', targetId: shared.shareToken, reason: 'harassment' })).status, 200);
+  assert.equal((await first.post('/api/reports', { targetType: 'collection', targetId: collection.id, reason: 'harassment' })).body.error.code, 'ALREADY_REPORTED');
+  assert.equal((await owner.post('/api/reports', { targetType: 'collection', targetId: shared.shareToken, reason: 'spam' })).body.error.code, 'OWN_CONTENT');
+  assert.equal((await first.post('/api/reports', { targetType: 'collection', targetId: 'not-a-share-token-at-all', reason: 'spam' })).status, 404);
   const results = [];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 2; i++) {
     const reporter = await t.userClient();
-    results.push((await reporter.post('/api/reports', { targetType: 'collection', targetId: collection.id, reason: 'harassment' })).body.autoHidden);
+    results.push((await reporter.post('/api/reports', { targetType: 'collection', targetId: i ? collection.id : shared.shareToken, reason: 'harassment' })).body.autoHidden);
   }
-  assert.deepEqual(results, [false, false, true]);
+  assert.deepEqual(results, [false, true]);
+  assert.equal(t.db.get(`SELECT COUNT(*) AS n FROM reports WHERE target_type = 'collection' AND target_id != ?`, collection.id).n, 0);
   const row = t.db.get('SELECT visibility, share_token FROM collections WHERE id = ?', collection.id);
   assert.deepEqual([row.visibility, row.share_token], ['private', null]);
   assert.equal((await t.client().get(`/api/shared/collections/${shared.shareToken}`)).status, 404);

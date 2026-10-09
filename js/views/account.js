@@ -1,7 +1,7 @@
 // Account (/account): details, password, signed-in devices, two-factor authentication, plan
 // and personal data. Exports `reauth()` / `withReauth()` — the "confirm it's you" prompt
 // used whenever the server answers REAUTH_REQUIRED (also used by the profile views).
-import { h, newUid, announce } from '../core/dom.js';
+import { h, newUid, announce, replace } from '../core/dom.js';
 import { api } from '../api/client.js';
 import { bus } from '../core/bus.js';
 import { session, refreshSession } from '../core/session.js';
@@ -159,7 +159,8 @@ export default async function render(ctx) {
   function drawOpen() {
     const account = session.account;
     const restricted = isRestrictedProfile(session.profile);
-    page.replaceChildren(
+    // replace() skips the null slot; the native replaceChildren would print "null".
+    replace(page,
       header(`Signed in as ${account.email}. Member since ${date(account.createdAt, { year: 'numeric', month: 'long' })}.`),
       restricted ? parentalBanner(ctx, drawLocked) : null,
       h('div', { class: 'lm-account__sections' },

@@ -218,7 +218,8 @@ export function mountShell(root) {
     h('span', { class: 'lm-spacer' }),
     elevationPill(),
     identity,
-    h('a', { class: 'lm-btn lm-btn--ghost lm-btn--sm adm-back-app', href: 'index.html' }, icon('arrowLeft'), h('span', null, 'Back to Lumina')));
+    // The text is hidden at phone width, so the link keeps its name in aria-label.
+    h('a', { class: 'lm-btn lm-btn--ghost lm-btn--sm adm-back-app', href: 'index.html', 'aria-label': 'Back to Lumina' }, icon('arrowLeft'), h('span', { 'aria-hidden': 'true' }, 'Back to Lumina')));
 
   root.replaceChildren(h('div', { class: 'adm-app' }, sidebar, scrim, h('div', { class: 'adm-col' }, topbar, main)));
 

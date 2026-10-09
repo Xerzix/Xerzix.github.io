@@ -14,7 +14,10 @@ const STATUS_TABS = [
   { id: 'all', label: 'All' },
 ];
 
+const isOpen = (app) => app.status === 'pending' || app.status === 'info_required';
+
 function openApplication(app, onDone) {
+  const decidable = isOpen(app);
   const decision = h('fieldset', { class: 'adm-radio-row' },
     h('legend', { class: 'lm-label' }, 'Decision'),
     ...[
@@ -39,8 +42,12 @@ function openApplication(app, onDone) {
       app.reviewerNote ? ['Previous note', app.reviewerNote] : null,
     ]),
     h('div', null, h('h3', { class: 'lm-label' }, 'About their work'), h('p', { class: 'adm-quote' }, app.bio)),
-    h('form', { class: 'lm-form', novalidate: true, onSubmit: (e) => { e.preventDefault(); submit.click(); } }, decision, note));
-  const d = drawer({ title: `Application · ${app.legalName}`, content, actions: [button('Close', { variant: 'ghost', onClick: () => d.close() }), submit] });
+    decidable
+      ? h('form', { class: 'lm-form', novalidate: true, onSubmit: (e) => { e.preventDefault(); submit.click(); } }, decision, note)
+      : h('p', { class: 'lm-hint' }, `This application was ${app.status === 'approved' ? 'approved' : 'rejected'}, and that decision is final. `,
+        app.status === 'approved' ? 'To remove creator access, ' : 'To grant creator access, ',
+        h('a', { class: 'lm-link', href: `#/users/${encodeURIComponent(app.accountId)}` }, 'edit the account in Users'), '.'));
+  const d = drawer({ title: `Application · ${app.legalName}`, content, actions: [button('Close', { variant: 'ghost', onClick: () => d.close() }), decidable ? submit : null].filter(Boolean) });
   submit.addEventListener('click', () => withBusy(submit, async () => {
     const value = decision.querySelector('input:checked').value;
     try {
@@ -77,7 +84,7 @@ export default async function render(ctx) {
           { key: 'country', label: 'Country', render: (a) => (a.country ? countryName(a.country.toUpperCase()) : null) },
           { key: 'createdAt', label: 'Applied', render: (a) => time(a.createdAt), className: 'adm-nowrap' },
           { key: 'status', label: 'Status', render: (a) => statusBadge(a.status) },
-          { key: 'review', label: 'Actions', render: (a) => button('Review', { variant: 'ghost', size: 'sm', onClick: () => openApplication(a, () => list.load()), attrs: { 'aria-label': `Review ${a.legalName}` } }) },
+          { key: 'review', label: 'Actions', render: (a) => button(isOpen(a) ? 'Review' : 'View', { variant: 'ghost', size: 'sm', onClick: () => openApplication(a, () => list.load()), attrs: { 'aria-label': `${isOpen(a) ? 'Review' : 'View'} ${a.legalName}` } }) },
         ],
         rows: data.items,
       })),

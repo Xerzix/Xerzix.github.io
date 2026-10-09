@@ -64,11 +64,11 @@ function taxonomyPanel(tax, onSaved) {
     type: 'textarea',
     rows: 6,
     value: tax.genres.join('\n'),
-    hint: 'One per line, in the order editors should see them. Suggested in the title editor; titles may still use other genres.',
+    hint: 'One per line. Members see genres in this order on the Genres page (genres not listed follow alphabetically), and editors get them as suggestions in the title editor.',
   });
   const collections = listEditor({
     legend: 'Editorial collections',
-    hint: 'Tags editors can apply to titles (e.g. lumina-original). The id is what titles store.',
+    hint: 'Each collection with at least one published title becomes a row on the home page and on Discover, in this order, with this name and description. Add a collection to a title by giving the title its id as a tag. The ids hidden-gem, lumina-original and japanese-cinema rename the home page’s built-in rows.',
     columns: [{ key: 'id', label: 'Id', placeholder: 'hidden-gem', mono: true, width: '28%' }, { key: 'name', label: 'Name', placeholder: 'Hidden gems' }, { key: 'description', label: 'Description' }],
     value: tax.collections,
     addLabel: 'Add collection',

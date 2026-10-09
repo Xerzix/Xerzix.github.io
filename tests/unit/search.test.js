@@ -78,3 +78,29 @@ test('query params round-trip', () => {
   // Hostile values are ignored
   assert.deepEqual(parseSearchParams({ language: '<script>', type: 'evil' }).filters, {});
 });
+
+test('country of origin and language are searchable by name, and country is a facet and filter', () => {
+  const world = buildIndex([
+    ...titles.filter((t) => t.id !== 'tears'),
+    { ...titles.find((t) => t.id === 'tears'), countries: ['NL'], originalLanguage: 'en', audioLanguages: ['en'] },
+  ]);
+  assert.deepEqual(ids(search(world, { q: 'Netherlands' })), ['tears']);
+  assert.deepEqual(ids(search(world, { q: 'films from the netherlands' }))[0], 'tears');
+  assert.deepEqual(ids(search(world, { q: 'NL' })), ['tears']);
+  assert.deepEqual(ids(search(world, { q: 'English' })).sort(), ['sintel', 'tears']);
+  assert.deepEqual(search(world, {}).facets.countries, [{ value: 'NL', count: 1 }]);
+  assert.deepEqual(ids(search(world, { filters: { country: 'NL' } })), ['tears']);
+  assert.equal(parseSearchParams({ country: 'NL' }).filters.country, 'NL');
+});
+
+test('typos in keywords and people are tolerated, with a spelling suggestion', () => {
+  const dragon = search(idx, { q: 'robtos' });
+  assert.deepEqual(ids(dragon), ['tears']);
+  assert.equal(dragon.didYouMean, 'robots');
+  assert.deepEqual(ids(search(idx, { q: 'relaxng' })), ['hanami']);
+  assert.deepEqual(ids(search(idx, { q: 'colin levi' })), ['sintel']);
+  // A typo'd title is suggested with its real spelling.
+  assert.equal(search(idx, { q: 'sintl' }).didYouMean, 'Sintel');
+  // Exact matches never carry a suggestion.
+  assert.equal(search(idx, { q: 'robots' }).didYouMean, null);
+});

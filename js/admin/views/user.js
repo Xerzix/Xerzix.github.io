@@ -43,12 +43,16 @@ export default async function render(ctx) {
       const body = {};
       if (!role.control.disabled && role.control.value !== a.role) body.role = role.control.value;
       if (!status.control.disabled) {
-        body.status = status.control.value;
-        if (body.status === 'suspended') {
-          body.suspendedReason = reason.control.value.trim() || null;
-          body.suspendedUntil = until.control.value ? new Date(until.control.value).toISOString() : null;
+        // Send status and suspension fields only when they change, so editing an unrelated
+        // field never re-submits (and re-validates) an existing suspension.
+        const next = status.control.value;
+        if (next !== a.status) body.status = next;
+        if (next === 'suspended') {
+          const nextReason = reason.control.value.trim() || null;
+          const nextUntil = until.control.value ? new Date(until.control.value).toISOString() : null;
+          if (body.status || nextReason !== (a.suspendedReason || null)) body.suspendedReason = nextReason;
+          if (body.status || until.control.value !== toLocalInput(a.suspendedUntil)) body.suspendedUntil = nextUntil;
         }
-        if (body.status === a.status && body.status === 'active') delete body.status;
       }
       if (staff.isAdmin) {
         if (Number(maxProfiles.control.value) !== a.maxProfiles) body.maxProfiles = Number(maxProfiles.control.value);
@@ -120,6 +124,7 @@ export default async function render(ctx) {
       back: { href: '#/users', label: 'All users' },
       actions: [statusBadge(a.role), statusBadge(a.status), a.isCreator ? badge('Creator', '4k') : null].filter(Boolean),
     },
+    a.suspensionEndedAt ? notice(`A timed suspension ended on ${new Date(a.suspensionEndedAt).toLocaleString()}. The account is active again.`, { type: 'info' }) : null,
     a.status === 'suspended' ? notice(`Suspended${a.suspendedUntil ? ` until ${new Date(a.suspendedUntil).toLocaleString()}` : ' until reinstated'}${a.suspendedReason ? ` — ${a.suspendedReason.replace(/[.!?]+$/, '')}` : ''}.`, { type: 'danger' }) : null,
     h('div', { class: 'adm-grid-2' },
       h('div', { class: 'lm-stack lm-stack--lg' },

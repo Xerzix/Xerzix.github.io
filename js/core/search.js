@@ -3,6 +3,7 @@
 // contains > all words > partial words) and extended with people, genres, keywords and
 // typo tolerance. Filters combine with AND; multiple values inside one filter combine with OR.
 import { editDistance, escapeRegExp, normalize, tokens, typoBudget } from './text.js';
+import { countryName, languageName } from './format.js';
 
 const DAY = 86_400_000;
 
@@ -17,11 +18,19 @@ export function indexTitle(t) {
     people: people.map((p) => ({ name: p, norm: normalize(p) })),
     genres: (t.genres || []).map(normalize),
     keywords: [...(t.keywords || []), ...(t.moods || []), ...(t.tags || [])].map(normalize),
+    keywordTokens: [...new Set([...(t.keywords || []), ...(t.moods || []), ...(t.tags || []), ...(t.genres || [])].flatMap(tokens))],
     synopsis: normalize(`${t.tagline || ''} ${t.synopsis || ''}`),
     countries: (t.countries || []).map(normalize),
     language: normalize(t.originalLanguage || ''),
+    // English display names, so "Netherlands", "Japan" or "English" find titles by origin.
+    countryNames: (t.countries || []).map((c) => normalize(countryName(c))).filter((n) => n && n.length > 2),
+    languageNames: [...new Set([t.originalLanguage, ...(t.audioLanguages || [])].filter(Boolean))]
+      .map((l) => normalize(languageName(l))).filter((n) => n && n.length > 2),
   };
 }
+
+/** Whether `name` (a normalized display name) is the query or appears in it as whole words. */
+const namesIn = (q, name) => name === q || new RegExp(`(?:^| )${escapeRegExp(name)}(?: |$)`).test(q);
 
 export function buildIndex(titles) {
   return titles.map(indexTitle);
@@ -62,6 +71,19 @@ function fuzzyTitleScore(doc, words) {
   return hits ? (hits / words.length) * 3500 : 0;
 }
 
+/** Whether `w` is within its typo budget of `tok` (or of the start of a longer `tok`). */
+function nearMiss(w, tok) {
+  const budget = typoBudget(w.length);
+  if (!budget) return false;
+  return editDistance(w, tok, budget) <= budget || (tok.length > w.length + 2 && editDistance(w, tok.slice(0, w.length), budget) <= budget);
+}
+
+function fuzzyKeywordScore(doc, words) {
+  // Misspelled keywords, moods and genres ("dragn", "cinematografy").
+  const hits = words.filter((w) => w.length > 3 && doc.keywordTokens.some((tok) => nearMiss(w, tok))).length;
+  return hits ? (hits / words.length) * 3000 : 0;
+}
+
 function scoreDoc(doc, q, words) {
   let { score, matched } = scoreTitle(doc, q, words);
   const reasons = [];
@@ -92,14 +114,16 @@ function scoreDoc(doc, q, words) {
     reasons.push('keyword');
     matched ||= 'keyword';
   }
-  if (doc.countries.some((c) => c === q) || doc.language === q) {
+  if (doc.countries.some((c) => c === q) || doc.language === q
+    || doc.countryNames.some((n) => namesIn(q, n)) || doc.languageNames.some((n) => namesIn(q, n))) {
     score = Math.max(score, 2500);
+    reasons.push('origin');
     matched ||= 'origin';
   }
 
   if (!score) {
-    const fz = fuzzyTitleScore(doc, words);
-    if (fz) {
+    const fz = Math.max(fuzzyTitleScore(doc, words), fuzzyKeywordScore(doc, words));
+    if (fz >= 1000) {
       score = fz;
       matched = 'fuzzy';
       reasons.push('typo');
@@ -173,6 +197,7 @@ function facetCounts(docs) {
     type: count(docs.map((d) => d.t.type)),
     genres: count(docs.flatMap((d) => d.t.genres || [])),
     languages: count(docs.map((d) => d.t.originalLanguage).filter(Boolean)),
+    countries: count(docs.flatMap((d) => d.t.countries || [])),
     subtitles: count(docs.flatMap((d) => d.t.subtitleLanguages || [])),
     decades: count(docs.map((d) => (d.t.year ? `${Math.floor(d.t.year / 10) * 10}s` : null)).filter(Boolean)),
     ageRatings: count(docs.map((d) => d.t.ageRating)),
@@ -201,6 +226,10 @@ export function search(index, params = {}) {
   scored.sort(sorter(sort));
 
   let didYouMean = null;
+  if (q && scored.length && scored.every((d) => d.matched === 'fuzzy')) {
+    // Every result is a typo match: say which spelling was used ("dragn" → "dragon").
+    didYouMean = correctQuery(index, words);
+  }
   if (q && !scored.length) {
     let best = null;
     for (const d of index) {
@@ -209,7 +238,7 @@ export function search(index, params = {}) {
         if (dist <= Math.max(2, Math.floor(q.length / 3)) && (!best || dist < best.dist)) best = { dist, text: cand === d.title ? d.t.title : d.people.find((p) => p.norm === cand)?.name };
       }
     }
-    didYouMean = best?.text || null;
+    didYouMean = best?.text || correctQuery(index, words);
   }
 
   const pageSize = Math.min(Math.max(Number(params.pageSize) || 24, 1), 100);
@@ -225,6 +254,46 @@ export function search(index, params = {}) {
     facets: facetCounts(scored),
     didYouMean,
   };
+}
+
+const vocabCache = new WeakMap();
+/** Every title, people, keyword, mood and genre word in the index, for spelling corrections. */
+function vocabulary(index) {
+  let vocab = vocabCache.get(index);
+  if (!vocab) {
+    vocab = new Set();
+    for (const d of index) {
+      for (const tok of [...d.titleTokens, ...d.keywordTokens, ...d.people.flatMap((p) => p.norm.split(' '))]) if (tok.length > 2) vocab.add(tok);
+    }
+    vocabCache.set(index, vocab);
+  }
+  return vocab;
+}
+
+/** The query with each unknown word replaced by its closest catalog word, or null if nothing changed. */
+function correctQuery(index, words) {
+  const vocab = vocabulary(index);
+  let changed = false;
+  const out = words.map((w) => {
+    if (vocab.has(w) || !typoBudget(w.length)) return w;
+    let best = null;
+    for (const tok of vocab) {
+      const dist = editDistance(w, tok, typoBudget(w.length));
+      if (dist <= typoBudget(w.length) && (!best || dist < best.dist || (dist === best.dist && tok < best.tok))) best = { dist, tok };
+    }
+    if (!best) return w;
+    changed = true;
+    return best.tok;
+  });
+  if (!changed) return null;
+  const fixed = out.join(' ');
+  // Show a whole title or name as it is written ("Sintel", not "sintel").
+  for (const d of index) {
+    if (d.title === fixed) return d.t.title;
+    const person = d.people.find((p) => p.norm === fixed);
+    if (person) return person.name;
+  }
+  return fixed;
 }
 
 /** Instant suggestions: titles, people and genres. */

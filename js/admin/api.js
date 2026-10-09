@@ -17,16 +17,54 @@ export function onTotpSetupRequired(fn) {
   totpHandler = fn;
 }
 
+/**
+ * After the re-auth dialog closes, focus would land on <body>: the control that started the
+ * action is still disabled by withBusy() when the dialog tries to return focus to it. Wait
+ * (briefly) for it to be enabled again and return focus there, unless focus moved elsewhere.
+ */
+// The last focused control: a busy button may already have lost focus (disabled elements
+// are blurred) by the time a request fails with REAUTH_REQUIRED.
+let lastFocused = null;
+if (typeof document !== 'undefined') document.addEventListener('focusin', (e) => { lastFocused = e.target; }, true);
+
+function restoreFocus(el) {
+  if (!(el instanceof HTMLElement) || el === document.body) return;
+  const until = Date.now() + 5000;
+  const step = () => {
+    if (!document.contains(el) || Date.now() > until) return;
+    const active = document.activeElement;
+    // Focus may still sit in the closing dialog; wait for it to land on <body>.
+    const inDialog = !!active?.closest?.('dialog');
+    if (active && active !== document.body && !inDialog) return; // focus moved on deliberately
+    if (!inDialog && !el.disabled) {
+      el.focus();
+      return;
+    }
+    setTimeout(step, 50);
+  };
+  step();
+}
+
 async function call(method, path, { body, query, signal } = {}, retried = false) {
   try {
     return await api.request(method, path, { body: method === 'GET' ? undefined : (body ?? {}), query, signal });
   } catch (err) {
     if (err instanceof ApiError && err.code === 'REAUTH_REQUIRED' && !retried && reauthHandler) {
+      const active = document.activeElement;
+      const opener = active && active !== document.body ? active : lastFocused;
       // Several requests can fail at once; share one prompt.
       pendingReauth ||= Promise.resolve(reauthHandler()).finally(() => {
         pendingReauth = null;
       });
-      if (await pendingReauth) return call(method, path, { body, query, signal }, true);
+      const confirmed = await pendingReauth;
+      if (confirmed) {
+        try {
+          return await call(method, path, { body, query, signal }, true);
+        } finally {
+          setTimeout(() => restoreFocus(opener), 0);
+        }
+      }
+      setTimeout(() => restoreFocus(opener), 0);
     }
     if (err instanceof ApiError && err.code === 'TOTP_SETUP_REQUIRED') totpHandler?.(err);
     throw err;

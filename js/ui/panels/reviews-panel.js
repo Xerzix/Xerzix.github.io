@@ -33,6 +33,54 @@ export const REPORT_REASONS = [
   { value: 'other', label: 'Something else', hint: 'Tell us more below.' },
 ];
 
+/**
+ * The report dialog for a review, reply or shared collection: a reason, optional details and
+ * an honest confirmation. Members only (the server refuses signed-out reports).
+ */
+export function openReport(targetType, targetId, what) {
+  const name = newUid('reason');
+  const detailsField = countedTextarea({ label: 'Anything else moderators should know? (optional)', name: 'details', max: 1000, rows: 3 });
+  const errorEl = h('p', { class: 'lm-error-text', role: 'alert', hidden: true });
+  const choices = h('fieldset', { class: 'lm-options' },
+    h('legend', { class: 'lm-label' }, 'Why are you reporting this?'),
+    ...REPORT_REASONS.map((r) => h('label', { class: 'lm-option' },
+      h('input', { type: 'radio', name, value: r.value }),
+      h('span', { class: 'lm-option__text' }, h('strong', null, r.label), h('span', null, r.hint)))));
+  let modal;
+  const send = button('Send report', { variant: 'primary', icon: 'flag' });
+  const cancel = button('Cancel', { variant: 'ghost', onClick: () => modal.close() });
+  send.addEventListener('click', () => {
+    const reason = choices.querySelector('input:checked')?.value;
+    if (!reason) {
+      errorEl.textContent = 'Choose a reason.';
+      errorEl.hidden = false;
+      choices.querySelector('input')?.focus();
+      return;
+    }
+    withBusy(send, async () => {
+      try {
+        await api.reviews.report({ targetType, targetId, reason, details: detailsField.control.value.trim() || undefined });
+        modal.close();
+        toast(`Thank you. A moderator will look at it; the ${targetType === 'collection' ? 'owner' : 'author'} is not told who reported it.`, { type: 'success', timeout: 6000 });
+      } catch (err) {
+        if (err.code === 'ALREADY_REPORTED') {
+          modal.close();
+          toast(err.message);
+        } else {
+          errorEl.textContent = err.message;
+          errorEl.hidden = false;
+        }
+      }
+    });
+  });
+  modal = openModal({
+    title: `Report ${what}`,
+    sheet: true,
+    content: h('div', { class: 'lm-stack' }, h('p', { class: 'lm-muted lm-small' }, 'Reports are private and reviewed by the Lumina moderation team.'), choices, detailsField, errorEl),
+    actions: [cancel, send],
+  });
+}
+
 const signInHref = (titleId) => `#/login?next=${encodeURIComponent(`/title/${titleId}`)}`;
 
 /** Textarea with a live "n / max" counter. Returns { wrap, control, counter }. */
@@ -529,50 +577,6 @@ export function reviewsPanel(title) {
   }
 
   // ── Report & block ──
-  function openReport(targetType, targetId, what) {
-    const name = newUid('reason');
-    const detailsField = countedTextarea({ label: 'Anything else moderators should know? (optional)', name: 'details', max: 1000, rows: 3 });
-    const errorEl = h('p', { class: 'lm-error-text', role: 'alert', hidden: true });
-    const choices = h('fieldset', { class: 'lm-options' },
-      h('legend', { class: 'lm-label' }, 'Why are you reporting this?'),
-      ...REPORT_REASONS.map((r) => h('label', { class: 'lm-option' },
-        h('input', { type: 'radio', name, value: r.value }),
-        h('span', { class: 'lm-option__text' }, h('strong', null, r.label), h('span', null, r.hint)))));
-    let modal;
-    const send = button('Send report', { variant: 'primary', icon: 'flag' });
-    const cancel = button('Cancel', { variant: 'ghost', onClick: () => modal.close() });
-    send.addEventListener('click', () => {
-      const reason = choices.querySelector('input:checked')?.value;
-      if (!reason) {
-        errorEl.textContent = 'Choose a reason.';
-        errorEl.hidden = false;
-        choices.querySelector('input')?.focus();
-        return;
-      }
-      withBusy(send, async () => {
-        try {
-          await api.reviews.report({ targetType, targetId, reason, details: detailsField.control.value.trim() || undefined });
-          modal.close();
-          toast('Thank you. A moderator will look at it; the author is not told who reported it.', { type: 'success', timeout: 6000 });
-        } catch (err) {
-          if (err.code === 'ALREADY_REPORTED') {
-            modal.close();
-            toast(err.message);
-          } else {
-            errorEl.textContent = err.message;
-            errorEl.hidden = false;
-          }
-        }
-      });
-    });
-    modal = openModal({
-      title: `Report ${what}`,
-      sheet: true,
-      content: h('div', { class: 'lm-stack' }, h('p', { class: 'lm-muted lm-small' }, 'Reports are private and reviewed by the Lumina moderation team.'), choices, detailsField, errorEl),
-      actions: [cancel, send],
-    });
-  }
-
   async function blockAuthor(review, article) {
     const ok = await confirmDialog({
       title: `Block ${review.author.name}?`,

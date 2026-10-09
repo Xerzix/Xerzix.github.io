@@ -4,7 +4,7 @@ import { h, announce, debounce, newUid } from '../core/dom.js';
 import { api } from '../api/client.js';
 import { session } from '../core/session.js';
 import { store } from '../core/storage.js';
-import { languageName, plural } from '../core/format.js';
+import { countryName, languageName, plural } from '../core/format.js';
 import { parseSearchParams, toSearchParams } from '../core/search.js';
 import { ratingLabel } from '../core/ratings.js';
 import { rememberSearch } from '../ui/header.js';
@@ -82,7 +82,7 @@ export default async function render(ctx) {
 
   const advancedCount = () => {
     const f = state.filters;
-    return (f.genres?.length || 0) + (f.ageRatings?.length || 0) + ['yearFrom', 'yearTo', 'runtimeMax', 'language', 'subtitles', 'resolution', 'minRating', 'recentDays'].filter((k) => f[k] !== undefined && f[k] !== null && f[k] !== '').length;
+    return (f.genres?.length || 0) + (f.ageRatings?.length || 0) + ['yearFrom', 'yearTo', 'runtimeMax', 'language', 'country', 'subtitles', 'resolution', 'minRating', 'recentDays'].filter((k) => f[k] !== undefined && f[k] !== null && f[k] !== '').length;
   };
   const hasCriteria = () => !!state.q.trim() || !!state.filters.type || advancedCount() > 0;
 
@@ -120,6 +120,9 @@ export default async function render(ctx) {
     const recent = h('input', { type: 'checkbox', checked: !!f.recentDays });
     recent.addEventListener('change', () => setFilter('recentDays', recent.checked ? 30 : undefined));
     const langs = facets.languages || [];
+    const countries = [...(facets.countries || [])];
+    if (f.country && !countries.some((c) => c.value === f.country)) countries.push({ value: f.country });
+    countries.sort((a, b) => countryName(a.value).localeCompare(countryName(b.value)));
     const subs = facets.subtitles || [];
     const ages = facets.ageRatings || [];
     panel.replaceChildren(
@@ -129,6 +132,7 @@ export default async function render(ctx) {
         selectField('Runtime', RUNTIMES, f.runtimeMax ? String(f.runtimeMax) : '', (v) => setFilter('runtimeMax', v ? Number(v) : undefined), { hint: 'For series, the typical episode length.' }),
         ages.length ? fieldset('Maturity rating', chipGroup({ label: 'Maturity ratings', multi: true, options: ages.map((a) => ({ value: a.value, label: a.value })), selected: f.ageRatings || [], onChange: (v) => setFilter('ageRatings', v) }), h('span', { class: 'lm-hint' }, 'Choose one or more ratings. Profile maturity limits always apply.')) : null,
         selectField('Original or audio language', [{ value: '', label: 'Any language' }, ...langs.map((l) => ({ value: l.value, label: languageName(l.value) }))], f.language, (v) => setFilter('language', v || undefined)),
+        selectField('Country of origin', [{ value: '', label: 'Any country' }, ...countries.map((c) => ({ value: c.value, label: countryName(c.value) }))], f.country || '', (v) => setFilter('country', v || undefined)),
         selectField('Subtitles', [{ value: '', label: subs.length ? 'Any' : 'No subtitled titles yet' }, ...subs.map((l) => ({ value: l.value, label: languageName(l.value) }))], f.subtitles, (v) => setFilter('subtitles', v || undefined), { disabled: !subs.length }),
         selectField('Resolution', RESOLUTIONS, f.resolution ?? '', (v) => setFilter('resolution', v ? Number(v) : undefined), { hint: 'Only verified stream resolutions count.' }),
         fieldset('Member rating', segmented({ label: 'Minimum member rating', value: f.minRating ? String(f.minRating) : '', options: RATINGS, onChange: (v) => setFilter('minRating', v ? Number(v) : undefined) })),
@@ -167,7 +171,7 @@ export default async function render(ctx) {
     if (f.resolution) chip(f.resolution >= 2160 ? '4K only' : 'HD and above', () => delete f.resolution);
     if (f.minRating) chip(`${f.minRating}+ stars`, () => delete f.minRating);
     if (f.recentDays) chip('Added recently', () => delete f.recentDays);
-    if (f.country) chip(`Country: ${f.country}`, () => delete f.country);
+    if (f.country) chip(`Country: ${countryName(f.country)}`, () => delete f.country);
     if (f.tags?.length) for (const tag of f.tags) chip(tag.replace(/-/g, ' '), () => { f.tags = f.tags.filter((x) => x !== tag); if (!f.tags.length) delete f.tags; });
     if (chips.length > 1) chips.push(h('button', { type: 'button', class: 'lm-srch__clear-all', onClick: clearAll }, 'Clear all'));
     chipsRow.replaceChildren(...chips);

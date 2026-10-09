@@ -228,7 +228,9 @@ test('verification reads a manifest from private storage and records real rendit
   assert.equal(failed.body.media.verified, false, 'nothing is marked verified that could not be read');
   assert.equal(failed.body.report.code, 'NOT_FOUND');
 
-  const transcode = await admin.post(`/api/admin/media/${mediaId}/transcode`, { sourceKey: 'uploads/source.mov' });
+  const refused = await admin.post(`/api/admin/media/${mediaId}/transcode`, { sourceKey: 'uploads/source.mov' });
+  assert.equal(refused.status, 422, 'upload staging files are not media sources');
+  const transcode = await admin.post(`/api/admin/media/${mediaId}/transcode`, { sourceKey: 'media/vf/source.mov' });
   assert.equal(transcode.status, 503);
   assert.equal(transcode.body.error.code, 'TRANSCODER_NOT_CONFIGURED');
 });
@@ -415,6 +417,13 @@ test('creator application approval grants creator access and notifies', async ()
   assert.equal(t.db.get('SELECT is_creator FROM accounts WHERE id = ?', applicant.accountId).is_creator, 1);
   assert.equal(notificationsFor(applicant.accountId, 'creator_application').length, 1);
   assert.equal(auditRows('creators.application_decision', id).length, 1);
+
+  // A decision is final: rejecting the approved application would leave creator access in place.
+  const again = await moderator.post(`/api/admin/creator-applications/${id}/decision`, { decision: 'reject', note: 'Changed our mind' });
+  assert.equal(again.status, 409);
+  assert.equal(again.body.error.code, 'INVALID_TRANSITION');
+  assert.equal(t.db.get('SELECT status FROM creator_applications WHERE id = ?', id).status, 'approved');
+  assert.equal(notificationsFor(applicant.accountId, 'creator_application').length, 1);
 });
 
 async function makeSubmission({ status = 'submitted', probe = {}, mime = 'video/mp4' } = {}) {
@@ -500,8 +509,19 @@ test('publishing a submission creates a draft title; publishing the title comple
   assert.equal(row.creator_account_id, creator.accountId);
   assert.equal(row.submission_id, id);
   const media = t.db.get('SELECT * FROM media WHERE title_id = ?', titleId);
-  assert.equal(media.source, `storage:${key}`);
+  // Served from its own media/ folder, never from the submission folder (which also holds the
+  // creator's documents): a viewer's directory-scoped signature must not open those.
+  assert.equal(media.source, `storage:media/${media.id}/source.mp4`);
   assert.equal(media.resolutions, '[1080]');
+  writeStorage(`submissions/${id}/sfl_doc-release-form.pdf`, '%PDF private');
+  const { signedUrl } = await import('../../server/services/storage.js');
+  const viewerUrl = signedUrl(media.source.slice(8));
+  const played = await fetch(t.base + viewerUrl);
+  assert.equal(played.status, 200);
+  assert.equal(await played.text(), 'FAKE-MP4-BYTES');
+  const sig = viewerUrl.slice(viewerUrl.indexOf('?'));
+  assert.equal((await fetch(`${t.base}/media/private/submissions/${id}/sfl_doc-release-form.pdf${sig}`)).status, 403);
+  assert.equal((await fetch(`${t.base}/media/private/${key}${sig}`)).status, 403);
   assert.equal((await admin.post(`/api/admin/submissions/${id}/publish`)).status, 409, 'only once');
 
   // Staff complete artwork and licence, then publish: the submission becomes "published".
@@ -523,6 +543,107 @@ test('non-playable uploads without a transcoder are flagged, not published', asy
   assert.equal(r.status, 200);
   assert.equal(r.body.media[0].status, 'failed');
   assert.ok(r.body.warnings.some((w) => /transcod/i.test(w)));
+});
+
+test('media storage sources: only media/ or an approved submission linked to the title', async () => {
+  const { id: subId, key } = await makeSubmission({ status: 'under_review' });
+  const docKey = `submissions/${subId}/sfl_doc-contract.pdf`;
+  writeStorage(docKey, '%PDF');
+  t.db.run(`INSERT INTO submission_files (id, submission_id, role, original_name, mime, size_bytes, probe, scan_status, storage_key, created_at)
+            VALUES (?, ?, 'document', 'contract.pdf', 'application/pdf', 4, '{}', 'not_configured', ?, ?)`, rid('sfl'), subId, docKey, ts());
+  const draft = await admin.post('/api/admin/titles', { type: 'movie', title: 'Storage Rules' });
+  const titleId = draft.body.title.id;
+  const attempt = (source, role = 'trailer') => moderator.post('/api/admin/media', { titleId, role, kind: 'progressive', source });
+
+  const unapproved = await attempt(`storage:${key}`);
+  assert.equal(unapproved.status, 422);
+  assert.match(unapproved.body.error.fields.source, /not been approved/);
+  assert.equal((await attempt('storage:uploads/upl_x.part')).status, 422);
+  assert.equal((await attempt('storage:public/art/x.png')).status, 422);
+
+  // Approved, but linked to another title (or not yet linked): still refused.
+  t.db.run(`UPDATE submissions SET status = 'approved' WHERE id = ?`, subId);
+  assert.match((await attempt(`storage:${key}`)).body.error.fields.source, /another title/);
+  t.db.run('UPDATE submissions SET title_id = ? WHERE id = ?', titleId, subId);
+  assert.equal((await attempt(`storage:${docKey}`)).status, 422, 'documents are never media');
+  assert.equal((await attempt(`storage:${key}`)).status, 200);
+  assert.equal((await attempt('storage:media/storage-rules/master.m3u8', 'main')).status, 200);
+  // Same rule on edits and on fallbacks.
+  const m = t.db.get(`SELECT id FROM media WHERE title_id = ? AND role = 'main'`, titleId);
+  t.db.run(`UPDATE submissions SET status = 'under_review' WHERE id = ?`, subId);
+  assert.equal((await moderator.patch(`/api/admin/media/${m.id}`, { source: `storage:${key}` })).status, 422);
+  assert.equal((await moderator.patch(`/api/admin/media/${m.id}`, { fallbacks: [{ src: `storage:${docKey}`, type: 'video/mp4' }] })).status, 422);
+});
+
+test('destructive edits cannot leave a published title with nothing playable', async () => {
+  const s = await admin.post('/api/admin/titles', {
+    type: 'series', title: 'Single Episode Show', synopsis: 'One episode.', poster: 'assets/art/x.svg',
+    license: { name: 'Licensed', attribution: 'Studio' },
+  });
+  const id = s.body.title.id;
+  const ep = await admin.post(`/api/admin/titles/${id}/episodes`, { seasonNumber: 1, number: 1, name: 'Only' });
+  const media = await admin.post('/api/admin/media', { titleId: id, episodeId: ep.body.episode.id, kind: 'hls', source: 'storage:media/one/master.m3u8' });
+  assert.equal((await admin.post(`/api/admin/titles/${id}/publish`)).status, 200);
+  const season = t.db.get('SELECT id FROM seasons WHERE title_id = ?', id);
+
+  for (const r of [
+    await admin.del(`/api/admin/seasons/${season.id}`),
+    await admin.del(`/api/admin/episodes/${ep.body.episode.id}`),
+    await admin.del(`/api/admin/media/${media.body.media.id}`),
+    await admin.patch(`/api/admin/media/${media.body.media.id}`, { status: 'failed' }),
+  ]) {
+    assert.equal(r.status, 409);
+    assert.equal(r.body.error.code, 'TITLE_WOULD_BE_UNPLAYABLE');
+  }
+  assert.equal(t.db.get('SELECT COUNT(*) AS n FROM episodes WHERE title_id = ?', id).n, 1, 'rolled back');
+  assert.equal(t.db.get('SELECT status FROM media WHERE id = ?', media.body.media.id).status, 'ready');
+
+  // Unpublished, the same deletion is fine.
+  await admin.post(`/api/admin/titles/${id}/unpublish`);
+  assert.equal((await admin.del(`/api/admin/seasons/${season.id}`)).status, 200);
+});
+
+test('title ids never collide with dashboard routes; artwork must be loadable under the CSP', async () => {
+  const named = await admin.post('/api/admin/titles', { type: 'movie', title: 'New' });
+  assert.equal(named.status, 200);
+  assert.notEqual(named.body.title.id, 'new');
+  const explicit = await admin.post('/api/admin/titles', { type: 'movie', title: 'Another', id: 'new' });
+  assert.equal(explicit.status, 422);
+  assert.ok(explicit.body.error.fields.id);
+
+  const id = named.body.title.id;
+  for (const poster of ['http://example.com/p.jpg', 'https://image.tmdb.org/t/p/w780/abc.jpg', 'ftp://example.com/p.jpg']) {
+    const r = await admin.patch(`/api/admin/titles/${id}`, { poster });
+    assert.equal(r.status, 422, poster);
+    assert.ok(r.body.error.fields.poster, poster);
+  }
+  assert.equal((await admin.patch(`/api/admin/titles/${id}`, { poster: 'https://test-streams.mux.dev/poster.jpg', backdrop: 'media/art/upl_abc.webp' })).status, 200);
+});
+
+test('a lapsed timed suspension reads as active and does not block unrelated edits', async () => {
+  const member = await t.userClient({});
+  t.db.run(`UPDATE accounts SET status = 'suspended', suspended_reason = 'Spam', suspended_until = ? WHERE id = ?`, new Date(Date.now() - 86_400_000).toISOString(), member.accountId);
+  const detail = await admin.get(`/api/admin/users/${member.accountId}`);
+  assert.equal(detail.body.account.status, 'active');
+  assert.ok(detail.body.account.suspensionEndedAt);
+  const suspended = await admin.get('/api/admin/users?status=suspended&pageSize=100');
+  assert.ok(!suspended.body.items.some((u) => u.id === member.accountId));
+  const r = await admin.patch(`/api/admin/users/${member.accountId}`, { maxProfiles: 3 });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const row = t.db.get('SELECT status, max_profiles, suspended_until FROM accounts WHERE id = ?', member.accountId);
+  assert.deepEqual({ ...row }, { status: 'active', max_profiles: 3, suspended_until: null });
+});
+
+test('server logs never show mail bodies, tokens or secrets to staff', async () => {
+  const { log } = await import('../../server/lib/log.js');
+  log.info('mail (log transport)', { to: 'au***@example.test', subject: 'Reset your Lumina password', text: 'Open http://localhost/#/reset?token=SECRETTOKEN123 to continue' });
+  log.warn('callback failed', { url: 'https://example.test/cb?sig=SIGVALUE99&x=1' });
+  const found = await admin.get('/api/admin/logs?level=debug&q=SECRETTOKEN123');
+  assert.equal(found.body.items.length, 0, 'a search cannot probe a redacted value');
+  const mail = (await admin.get('/api/admin/logs?level=debug&q=Reset%20your')).body.items[0];
+  assert.equal(mail.text, '[redacted]');
+  const cb = (await admin.get('/api/admin/logs?level=debug&q=callback')).body.items[0];
+  assert.equal(cb.url, 'https://example.test/cb?sig=[redacted]&x=1');
 });
 
 // ───────────────────────────── Platform ─────────────────────────────

@@ -17,10 +17,12 @@ const SLUG = /^[a-z0-9][a-z0-9-]{1,79}$/;
 // ───────────────────────────── Schemas ─────────────────────────────
 
 const textList = (maxItems, maxLen = 60) => v.array(v.string().max(maxLen)).max(maxItems).unique();
-const imageRef = () => v.string().max(1000).check(isImageRef, 'Use a site path such as assets/art/poster.svg or an http(s) URL.').nullable();
+const imageRef = () => v.string().max(1000).check(isImageRef, 'Use a site path such as assets/art/poster.svg, or an https URL on an origin listed in MEDIA_ORIGINS (browsers block images from anywhere else).').nullable();
+// Ids that are also dashboard route words (#/content/new opens the create form).
+const RESERVED_TITLE_IDS = new Set(['new']);
 
 export const titleSchema = v.object({
-  id: v.string().pattern(SLUG, 'Use 2–80 lowercase letters, numbers and hyphens.').optional(),
+  id: v.string().pattern(SLUG, 'Use 2–80 lowercase letters, numbers and hyphens.').check((s) => !RESERVED_TITLE_IDS.has(s), 'This id is reserved. Choose another.').optional(),
   type: v.enum(['movie', 'series']),
   title: v.string().min(1).max(200),
   originalTitle: v.string().max(200).nullable().optional(),
@@ -332,7 +334,7 @@ function assertCreator(db, accountId) {
 
 export function createTitle(db, input) {
   assertCreator(db, input.creatorAccountId);
-  const exists = (id) => !!db.get('SELECT 1 FROM titles WHERE id = ?', id);
+  const exists = (id) => RESERVED_TITLE_IDS.has(id) || !!db.get('SELECT 1 FROM titles WHERE id = ?', id);
   let id = input.id;
   if (id) {
     if (exists(id)) throw validation({ id: 'Another title already uses this id.' });
@@ -403,6 +405,26 @@ export function publishTitle(db, ctx, id) {
     const submission = published.submission_id ? markSubmissionPublished(db, ctx, published) : null;
     const notified = notifyRelease(db, published);
     return { notified, submission };
+  });
+}
+
+/**
+ * Runs a destructive change inside a transaction and rolls it back when it would leave a
+ * PUBLISHED title with nothing playable (the publish checklist only runs at publish time).
+ */
+function keepPlayable(db, titleId, change) {
+  return db.tx(() => {
+    const result = change();
+    const row = db.get('SELECT * FROM titles WHERE id = ?', titleId);
+    if (row?.status === 'published' && publishMissing(db, row).some((m) => m.field === 'media')) {
+      throw conflict(
+        row.type === 'movie'
+          ? 'This is the only ready main video of a published film. Unpublish the title first, or add another ready main video.'
+          : 'This would leave a published series without any episode that has ready media. Unpublish the title first, or add ready media to another episode.',
+        'TITLE_WOULD_BE_UNPLAYABLE',
+      );
+    }
+    return result;
   });
 }
 
@@ -564,7 +586,7 @@ export function deleteSeason(db, id) {
   const s = db.get('SELECT * FROM seasons WHERE id = ?', id);
   if (!s) throw notFound('That season does not exist.');
   const episodes = db.get('SELECT COUNT(*) AS n FROM episodes WHERE title_id = ? AND season_number = ?', s.title_id, s.number).n;
-  db.tx(() => {
+  keepPlayable(db, s.title_id, () => {
     db.run('DELETE FROM episodes WHERE title_id = ? AND season_number = ?', s.title_id, s.number);
     db.run('DELETE FROM seasons WHERE id = ?', id);
     touchTitle(db, s.title_id);
@@ -620,7 +642,7 @@ export function updateEpisode(db, id, patch) {
 export function deleteEpisode(db, id) {
   const e = db.get('SELECT * FROM episodes WHERE id = ?', id);
   if (!e) throw notFound('That episode does not exist.');
-  db.tx(() => {
+  keepPlayable(db, e.title_id, () => {
     db.run('DELETE FROM episodes WHERE id = ?', id);
     touchTitle(db, e.title_id);
   });
@@ -682,12 +704,39 @@ export function getMediaRow(db, id) {
   return m;
 }
 
+const PLAYABLE_SUBMISSION_ROLES = ['feature', 'episode', 'trailer', 'subtitle'];
+
+/**
+ * Which private storage keys may back a media row. Signed playback URLs make a media file
+ * reachable by every viewer, so only:
+ *   - media/… (transcoder output and files copied there when a submission is published), or
+ *   - a video/subtitle file of a creator submission that an admin APPROVED (or published) and
+ *     that is linked to this very title.
+ * Upload staging files, documents and files of submissions still under review never qualify.
+ */
+export function storageSourceProblem(db, key, titleId) {
+  if (key.startsWith('media/')) return null;
+  const m = /^submissions\/([^/]+)\//.exec(key);
+  if (m) {
+    const file = db.get(
+      `SELECT f.role, s.status, s.title_id FROM submission_files f JOIN submissions s ON s.id = f.submission_id
+        WHERE f.storage_key = ? AND f.submission_id = ?`, key, m[1],
+    );
+    if (!file) return 'That submission file does not exist.';
+    if (!PLAYABLE_SUBMISSION_ROLES.includes(file.role)) return 'Only video and subtitle files of a submission can be used as media.';
+    if (!['approved', 'published'].includes(file.status)) return 'That submission has not been approved, so its files cannot be published.';
+    if (!titleId || file.title_id !== titleId) return 'That submission file belongs to another title. Use “Create draft title” on the submission instead.';
+    return null;
+  }
+  return 'Only storage keys under media/ (or files of an approved submission linked to this title) can be used as media.';
+}
+
 /** Validates locations inside a media body; throws 422 with per-field messages. */
-function checkMediaRefs(input) {
+function checkMediaRefs(db, input) {
   const errors = {};
   const check = (value, key) => {
     if (value === undefined || value === null) return;
-    const problem = mediaRefProblem(value);
+    const problem = mediaRefProblem(value) || (value.startsWith('storage:') ? storageSourceProblem(db, value.slice(8), input.titleId) : null);
     if (problem) errors[key] = problem;
   };
   check(input.source, 'source');
@@ -722,7 +771,7 @@ function checkPlacement(db, { titleId, episodeId, role }, exceptId = null) {
 }
 
 export function createMedia(db, input) {
-  checkMediaRefs(input);
+  checkMediaRefs(db, input);
   checkPlacement(db, { titleId: input.titleId, episodeId: input.episodeId || null, role: input.role });
   const id = newId('med');
   const ts = now();
@@ -752,7 +801,7 @@ export function updateMedia(db, id, patch) {
     creditsStart: patch.creditsStart !== undefined ? patch.creditsStart : m.credits_start,
     durationS: patch.durationS !== undefined ? patch.durationS : m.duration_s,
   };
-  checkMediaRefs({ ...patch, ...merged });
+  checkMediaRefs(db, { ...patch, ...merged });
   if (patch.episodeId !== undefined || patch.role !== undefined) checkPlacement(db, merged, id);
   const cols = {};
   const scalar = { role: 'role', label: 'label', kind: 'kind', source: 'source', hdr: 'hdr', durationS: 'duration_s', introStart: 'intro_start', introEnd: 'intro_end', creditsStart: 'credits_start', status: 'status' };
@@ -767,7 +816,8 @@ export function updateMedia(db, id, patch) {
   if (!Object.keys(cols).length) return { row: m, notified: 0, relocated: false };
   cols.updated_at = now();
   const keys = Object.keys(cols);
-  db.run(`UPDATE media SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, ...keys.map((k) => cols[k]), id);
+  // A status, role or placement change can take the last ready video away from a published title.
+  keepPlayable(db, m.title_id, () => db.run(`UPDATE media SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`, ...keys.map((k) => cols[k]), id));
   const row = getMediaRow(db, id);
   const becameReady = row.status === 'ready' && (m.status !== 'ready' || m.episode_id !== row.episode_id || m.role !== row.role);
   const notified = becameReady ? notifyNewEpisode(db, row) : 0;
@@ -777,8 +827,10 @@ export function updateMedia(db, id, patch) {
 
 export function deleteMedia(db, id) {
   const m = getMediaRow(db, id);
-  db.run('DELETE FROM media WHERE id = ?', id);
-  touchTitle(db, m.title_id);
+  keepPlayable(db, m.title_id, () => {
+    db.run('DELETE FROM media WHERE id = ?', id);
+    touchTitle(db, m.title_id);
+  });
   return m;
 }
 

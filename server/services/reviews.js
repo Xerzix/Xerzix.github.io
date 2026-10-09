@@ -413,7 +413,13 @@ export class ReviewService {
       const c = this.db.get('SELECT id, account_id, status, review_id FROM review_comments WHERE id = ?', id);
       if (c && (c.status === 'visible' || c.account_id === ctx.account.id)) return c;
     } else if (type === 'collection') {
-      const c = this.db.get(`SELECT c.id, c.name, p.account_id, c.visibility FROM collections c JOIN profiles p ON p.id = c.profile_id WHERE c.id = ?`, id);
+      // A shared collection's viewers only know its share token (the shared view never shows
+      // the id), so either identifies it; the report is always filed under the collection id.
+      const c = this.db.get(
+        `SELECT c.id, c.name, p.account_id, c.visibility FROM collections c JOIN profiles p ON p.id = c.profile_id
+          WHERE c.id = ? OR (c.share_token = ? AND c.visibility = 'unlisted')`,
+        id, id,
+      );
       if (c && (c.visibility === 'unlisted' || c.account_id === ctx.account.id)) return c;
     }
     return null;
@@ -427,7 +433,7 @@ export class ReviewService {
     try {
       this.db.run(
         `INSERT INTO reports (id, target_type, target_id, reporter_account_id, reason, details, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'open', ?)`,
-        newId('rpt'), targetType, targetId, ctx.account.id, reason, details ?? null, ts,
+        newId('rpt'), targetType, target.id, ctx.account.id, reason, details ?? null, ts,
       );
     } catch (err) {
       if (isUniqueViolation(err)) throw conflict('You have already reported this. Our moderators will take a look.', 'ALREADY_REPORTED');
@@ -435,7 +441,7 @@ export class ReviewService {
     }
     const open = this.db.get(
       `SELECT COUNT(DISTINCT reporter_account_id) AS n FROM reports WHERE target_type = ? AND target_id = ? AND status = 'open' AND reporter_account_id IS NOT NULL`,
-      targetType, targetId,
+      targetType, target.id,
     ).n;
     const autoHidden = open >= AUTO_HIDE_REPORTS ? this.autoHide(ctx, targetType, target, open) : false;
     return { ok: true, autoHidden };

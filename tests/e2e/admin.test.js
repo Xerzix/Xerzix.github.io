@@ -132,6 +132,26 @@ function solidPng(width, height, [r, g, b]) {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', pixels), chunk('IEND', Buffer.alloc(0))]);
 }
 
+test('a save that needs a fresh password confirmation retries and returns focus to the control that started it', async () => {
+  const admin = await app.userClient({ role: 'admin', elevated: true, displayName: 'Rae Reauth', password: 'lantern garden path' });
+  const page = await openAdmin(admin, '#/announcements');
+  await page.waitForSelector('input[name="title"]');
+  app.db.run('UPDATE sessions SET elevated_until = ? WHERE account_id = ?', new Date(Date.now() - 1000).toISOString(), admin.accountId);
+  await page.fill('input[name="title"]', 'Planned maintenance (focus check)');
+  await page.fill('textarea[name="body"]', 'Sunday night.');
+  await page.locator('button:has-text("Publish announcement")').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('dialog[open] input[name="password"]');
+  await page.fill('dialog[open] input[name="password"]', 'lantern garden path');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => document.activeElement?.textContent?.includes('Publish announcement'), null, { timeout: 5000 });
+  assert.equal(app.db.get(`SELECT COUNT(*) AS n FROM announcements WHERE title = 'Planned maintenance (focus check)'`).n, 1, 'the change was retried once');
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+  // Announcements reach every member; keep later notification tests independent of this one.
+  app.db.run(`DELETE FROM announcements WHERE title = 'Planned maintenance (focus check)'`);
+});
+
 test('the title editor uploads poster artwork through the uploads API and saves its path', async () => {
   const admin = await app.userClient({ role: 'admin', elevated: true, email: 'art.e2e@example.com', displayName: 'Ayu Artwork' });
   const created = await admin.post('/api/admin/titles', { type: 'movie', title: 'Lantern Study' });

@@ -74,7 +74,10 @@ test('write a review with a spoiler flag, mark another helpful and report one', 
 
   // Helpful on Ren's review: pressed state and the server's count.
   const helpful = reviewCard(page, 'Ren').locator('.lm-review__helpful');
+  // The button updates optimistically, so wait for the server to answer before reading the database.
+  const voted = page.waitForResponse((r) => /\/api\/reviews\/[^/]+\/helpful$/.test(r.url()) && r.request().method() === 'PUT');
   await helpful.click();
+  assert.equal((await voted).status(), 200);
   await page.waitForFunction(() => [...document.querySelectorAll('#reviews .lm-review__helpful')].some((b) => b.getAttribute('aria-pressed') === 'true' && /Helpful · 1/.test(b.textContent)));
   assert.equal(app.db.get('SELECT COUNT(*) AS n FROM review_votes WHERE account_id = ?', aiko.accountId).n, 1);
 
@@ -220,6 +223,160 @@ test('creator: apply, then a submission with a resumable upload and rights, sent
   assert.ok(await page.locator('.lm-timeline__item', { hasText: 'Submitted for review.' }).count());
 
   assert.deepEqual(page.errors.filter((e) => !/NETWORK|Failed to fetch/i.test(e)), []);
+  await page.context().close();
+});
+
+test('creator: a title awaiting publication links to its submission; a response waits for running uploads, each listed once', async () => {
+  const hoshi = await app.userClient({ displayName: 'Studio Hoshi', isCreator: true });
+  const { submission } = (await hoshi.post('/api/creators/submissions', { projectTitle: 'Night Garden', contentType: 'short' })).body;
+  // An editor turned the submission into a draft title, then asked for a new master.
+  const ts = new Date().toISOString();
+  const draftId = `night-garden-${Date.now()}`;
+  app.db.run(`INSERT INTO titles (id, type, title, status, added_at, updated_at, creator_account_id) VALUES (?, 'movie', 'Night Garden', 'draft', ?, ?, ?)`, draftId, ts, ts, hoshi.accountId);
+  app.db.run(`UPDATE submissions SET title_id = ?, status = 'info_required', status_reason = 'Please upload a new master.' WHERE id = ?`, draftId, submission.id);
+  // An upload started on another device (not remembered in this browser).
+  const other = (await hoshi.post('/api/uploads', { filename: 'from-laptop.mp4', size: 9_000_000, purpose: 'submission', submissionId: submission.id, role: 'trailer' })).body;
+  assert.ok(other.id);
+
+  const page = await newPage(browser, { base: app.base, cookies: [sessionCookie(hoshi)] });
+  await page.goto(`${app.base}/#/creators/dashboard`);
+  const tile = page.locator('.lm-studio-title', { hasText: 'Night Garden' });
+  await tile.waitFor();
+  // A draft title has no page members (or its creator) can open yet: it links to the submission.
+  assert.equal(await tile.locator('a.lm-studio-title__name').getAttribute('href'), `#/creators/submissions/${submission.id}`);
+  assert.match(await tile.textContent(), /Awaiting publication/);
+  await tile.locator('a.lm-studio-title__name').click();
+  await page.locator('.lm-submission__request').waitFor();
+
+  // Start a new master upload and hold its first part on the network.
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  let first = true;
+  await page.route(/\/api\/uploads\/upl_[0-9a-z]+$/, async (route) => {
+    if (route.request().method() === 'PATCH' && first) {
+      first = false;
+      await held;
+    }
+    return route.continue();
+  });
+  await page.goto(`${app.base}/#/creators/submissions/${submission.id}?step=files`);
+  await page.waitForSelector('.lm-uploader');
+  const file = join(tmp, 'night-garden-master.mp4');
+  writeFileSync(file, smallMp4(150_000));
+  await page.setInputFiles('.lm-uploader input[type="file"]', file);
+  await page.waitForFunction(() => (JSON.parse(localStorage.getItem('lumina.uploads.resume') || '[]')).length === 1);
+  // The upload running here is listed by the uploader only; "Unfinished uploads" shows the other one.
+  const unfinished = () => page.$$eval('.lm-submission__block', (blocks) => blocks.filter((b) => /Unfinished uploads/.test(b.textContent)).flatMap((b) => [...b.querySelectorAll('.lm-file__name')].map((e) => e.textContent)));
+  await page.waitForFunction(() => [...document.querySelectorAll('.lm-file__name')].some((e) => e.textContent === 'from-laptop.mp4'));
+  assert.deepEqual(await unfinished(), ['from-laptop.mp4']);
+
+  // Responding now would lock the files, so the form waits.
+  const banner = page.locator('.lm-submission__request');
+  await banner.locator('textarea').fill('A new master is on its way.');
+  await banner.getByRole('button', { name: 'Send response' }).click();
+  await banner.locator('[role="alert"]', { hasText: 'upload is still running' }).waitFor();
+  assert.equal(app.db.get('SELECT status FROM submissions WHERE id = ?', submission.id).status, 'info_required');
+
+  release();
+  await page.waitForSelector('.lm-upload[data-state="done"]', { timeout: 30_000 });
+  await page.locator('.lm-file-list .lm-file__name', { hasText: 'night-garden-master.mp4' }).waitFor();
+  // The upload from the other device is still open: the server refuses too, and says so.
+  await banner.locator('textarea').fill('A new master is attached.');
+  await banner.getByRole('button', { name: 'Send response' }).click();
+  await banner.locator('[role="alert"]', { hasText: 'before you send your response' }).waitFor();
+  assert.equal(app.db.get('SELECT status FROM submissions WHERE id = ?', submission.id).status, 'info_required');
+
+  // Discard it, then the response goes through.
+  await page.locator('.lm-submission__block', { hasText: 'Unfinished uploads' }).getByRole('button', { name: 'Discard' }).click();
+  await page.waitForFunction(() => ![...document.querySelectorAll('.lm-file__name')].some((e) => e.textContent === 'from-laptop.mp4'));
+  await banner.locator('textarea').fill('A new master is attached.');
+  await banner.getByRole('button', { name: 'Send response' }).click();
+  await page.waitForFunction((id) => document.querySelector('.lm-submission__head .lm-status')?.dataset.status === 'submitted', submission.id);
+  assert.equal(app.db.get('SELECT status FROM submissions WHERE id = ?', submission.id).status, 'submitted');
+  assert.equal(app.db.get(`SELECT COUNT(*) AS n FROM submission_files WHERE submission_id = ? AND original_name = 'night-garden-master.mp4'`, submission.id).n, 1);
+
+  assert.deepEqual(page.errors, []);
+  await page.context().close();
+});
+
+test('keyboard: Report and Block dialogs hand focus back; validation errors are announced; a shared collection can be reported', async () => {
+  const title = 'sintel';
+  const hana = await app.userClient({ displayName: 'Hana' });
+  const kenji = await app.userClient({ displayName: 'Kenji' });
+  const viewer = await app.userClient({ displayName: 'Sora' });
+  assert.equal((await hana.post(`/api/titles/${title}/reviews`, { rating: 4, body: 'The dragon’s flight over the snowfield is breathtaking.' })).status, 200);
+  assert.equal((await kenji.post(`/api/titles/${title}/reviews`, { rating: 3, body: 'Short and sad; the last scene stays with you for days.' })).status, 200);
+
+  const page = await newPage(browser, { base: app.base, cookies: [sessionCookie(viewer)] });
+  await page.goto(`${app.base}/#/title/${title}`);
+  await page.waitForSelector('#reviews .lm-review__menu-btn');
+  const focused = () => page.evaluate(() => {
+    const a = document.activeElement;
+    return { tag: a?.tagName, label: a?.getAttribute('aria-label') || a?.textContent?.trim().slice(0, 60) || '' };
+  });
+  const trigger = reviewCard(page, 'Hana').locator('.lm-review__menu-btn');
+
+  // Report dialog opened from the menu and closed with Escape: focus is back on the menu button.
+  await trigger.focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await page.locator('dialog.lm-modal[open]').waitFor();
+  await page.keyboard.press('Escape');
+  await page.locator('dialog.lm-modal[open]').waitFor({ state: 'detached' }).catch(() => {});
+  await page.waitForFunction(() => document.activeElement?.classList.contains('lm-review__menu-btn'));
+  assert.deepEqual(await focused(), { tag: 'BUTTON', label: 'More actions for Hana’s review' });
+
+  // Block confirmation, cancelled: the same.
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await page.locator('dialog[open]').getByRole('button', { name: 'Cancel' }).waitFor();
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.activeElement?.classList.contains('lm-review__menu-btn'));
+  assert.equal((await focused()).label, 'More actions for Hana’s review');
+
+  // Block confirmed: Hana's review leaves the list and focus continues in the list, not at the top of the page.
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await page.locator('dialog[open]').getByRole('button', { name: 'Block' }).click();
+  await reviewCard(page, 'Hana').waitFor({ state: 'detached' });
+  await page.waitForFunction(() => document.activeElement && document.activeElement !== document.body && document.activeElement.closest('#reviews'));
+
+  // Posting without a rating: the error is an alert tied to the star group.
+  const form = page.locator('#reviews form.lm-reviews__form');
+  await form.getByRole('button', { name: 'Post review' }).click();
+  const ratingError = await page.evaluate(() => {
+    const stars = document.querySelector('#reviews .lm-reviews__form .lm-star-input');
+    const err = document.getElementById(stars?.getAttribute('aria-describedby') || '');
+    return { text: err?.textContent, role: err?.getAttribute('role'), hidden: err?.hidden };
+  });
+  assert.deepEqual(ratingError, { text: 'Choose a rating from 1 to 5 stars.', role: 'alert', hidden: false });
+
+  // An empty reply: the textarea is invalid and described by the message, which is an alert.
+  await reviewCard(page, 'Kenji').locator('button[aria-controls^="thread"]').click();
+  await page.locator('#reviews .lm-reply-form').waitFor();
+  await page.locator('#reviews .lm-reply-form button[type=submit]').click();
+  const replyError = await page.evaluate(() => {
+    const ta = document.querySelector('#reviews .lm-reply-form textarea');
+    const err = (ta.getAttribute('aria-describedby') || '').split(' ').map((id) => document.getElementById(id)).find((e) => e?.classList.contains('lm-error-text'));
+    return { invalid: ta.getAttribute('aria-invalid'), text: err?.textContent, role: err?.getAttribute('role') };
+  });
+  assert.deepEqual(replyError, { invalid: 'true', text: 'Write a reply first.', role: 'alert' });
+
+  // A shared collection can be reported from its page (by share token: the page never sees its id).
+  const { collection } = (await kenji.post('/api/collections', { name: 'Kenji’s picks', description: '' })).body;
+  const shared = (await kenji.patch(`/api/collections/${collection.id}`, { visibility: 'unlisted' })).body.collection;
+  await page.goto(`${app.base}/#/shared/${shared.shareToken}`);
+  await page.getByRole('button', { name: 'Report this collection' }).click();
+  const dialog = page.locator('dialog.lm-modal[open]');
+  await dialog.locator('input[type="radio"][value="spam"]').check();
+  await dialog.getByRole('button', { name: 'Send report' }).click();
+  await page.waitForSelector('#lm-toasts .lm-toast--success');
+  const report = app.db.get(`SELECT target_type, target_id, reason FROM reports WHERE reporter_account_id = ? AND target_type = 'collection'`, viewer.accountId);
+  assert.deepEqual({ ...report }, { target_type: 'collection', target_id: collection.id, reason: 'spam' });
+
+  assert.deepEqual(page.errors, []);
   await page.context().close();
 });
 

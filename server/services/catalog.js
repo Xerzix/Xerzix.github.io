@@ -8,6 +8,7 @@ import { similarTitles } from '../../js/core/similarity.js';
 import { allowedFor } from '../../js/core/ratings.js';
 import { signedUrl } from './storage.js';
 import { canPlay } from './entitlements.js';
+import { artSrcset, artUploadId } from './media/artwork.js';
 
 const RATINGS_TTL_MS = 30_000;
 
@@ -103,7 +104,20 @@ export class CatalogService {
       if (!epByTitle.has(e.title_id)) epByTitle.set(e.title_id, []);
       epByTitle.get(e.title_id).push(e);
     }
-    return rows.map((r) => this.summaryFromRow(r, mediaByTitle.get(r.id) || [], epByTitle.get(r.id) || [], ratings.get(r.id) || null));
+    // Responsive sizes of uploaded artwork (srcset), when resized copies were made.
+    const artIds = [...new Set(rows.flatMap((r) => [artUploadId(r.poster), artUploadId(r.backdrop)]).filter(Boolean))];
+    const art = new Map(artIds.length
+      ? this.db.all(`SELECT id, result FROM uploads WHERE id IN (${placeholders(artIds.length)}) AND status = 'complete'`, ...artIds).map((u) => [u.id, parseJson(u.result, null)])
+      : []);
+    const srcset = (url) => (artUploadId(url) ? artSrcset(url, art.get(artUploadId(url))) : null);
+    return rows.map((r) => {
+      const s = this.summaryFromRow(r, mediaByTitle.get(r.id) || [], epByTitle.get(r.id) || [], ratings.get(r.id) || null);
+      const posterSrcset = srcset(r.poster);
+      const backdropSrcset = srcset(r.backdrop);
+      if (posterSrcset) s.posterSrcset = posterSrcset;
+      if (backdropSrcset) s.backdropSrcset = backdropSrcset;
+      return s;
+    });
   }
 
   summaryFromRow(r, media, episodes, rating) {
@@ -166,8 +180,16 @@ export class CatalogService {
     const rows = this.db.all(`SELECT * FROM titles WHERE status = 'published' ORDER BY editorial_rank, title`);
     const summaries = this.buildSummaries(rows);
     const byId = new Map(summaries.map((s) => [s.id, s]));
-    this.cache = { summaries, byId, index: buildIndex(summaries), rowsById: new Map(rows.map((r) => [r.id, r])) };
+    // The admin-curated genre order and editorial collections (Admin → Settings), if saved.
+    const taxonomy = parseJson(this.db.get(`SELECT value FROM platform_settings WHERE key = 'taxonomy'`)?.value, null);
+    this.cache = { summaries, byId, index: buildIndex(summaries), rowsById: new Map(rows.map((r) => [r.id, r])), taxonomy };
     return this.cache;
+  }
+
+  /** Admin-defined editorial collections ([{ id, name, description? }]), in the admin's order. */
+  editorialCollections() {
+    const list = this.load().taxonomy?.collections;
+    return Array.isArray(list) ? list : [];
   }
 
   /** Published summaries visible to the profile (parental controls applied). */
@@ -198,7 +220,10 @@ export class CatalogService {
   genres(profile) {
     const counts = new Map();
     for (const t of this.published(profile)) for (const g of t.genres) counts.set(g, (counts.get(g) || 0) + 1);
-    return [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name));
+    // Genres follow the order an administrator saved in the taxonomy; the rest are alphabetical.
+    const order = new Map((this.load().taxonomy?.genres || []).map((g, i) => [String(g).toLowerCase(), i]));
+    const rank = (name) => order.get(name.toLowerCase()) ?? Infinity;
+    return [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name));
   }
 
   /** Full detail for a published title, or 404. `allowUnpublished` is for staff/owners. */
@@ -218,14 +243,16 @@ export class CatalogService {
     const episodes = this.db.all('SELECT * FROM episodes WHERE title_id = ? ORDER BY season_number, number', id);
     const epMedia = new Set(this.db.all(`SELECT episode_id FROM media WHERE title_id = ? AND role = 'main' AND status = 'ready' AND episode_id IS NOT NULL`, id).map((m) => m.episode_id));
     const trailer = this.db.get(`SELECT id FROM media WHERE title_id = ? AND role = 'trailer' AND status = 'ready' LIMIT 1`, id);
-    const creator = row.creator_account_id ? this.db.get('SELECT display_name FROM accounts WHERE id = ?', row.creator_account_id) : null;
+    const creator = row.creator_account_id ? this.db.get('SELECT id, display_name, is_creator FROM accounts WHERE id = ?', row.creator_account_id) : null;
     const seasonNumbers = [...new Set([...seasons.map((s) => s.number), ...episodes.map((e) => e.season_number)])].sort((a, b) => a - b);
     return {
       ...summary,
       credits: { directors: credits.directors || [], cast: credits.cast || [], crew: credits.crew || [] },
       license: parseJson(row.license, {}),
       trailerMediaId: trailer?.id || null,
-      creator: creator ? { name: creator.display_name } : null,
+      // `id` is what members follow (PUT /api/follows/creator/:id); only set while the account
+      // still holds creator access, since the follow route accepts creators only.
+      creator: creator ? { id: creator.is_creator ? creator.id : null, name: creator.display_name } : null,
       seasons: row.type === 'series'
         ? seasonNumbers.map((n) => {
           const s = seasons.find((x) => x.number === n) || {};

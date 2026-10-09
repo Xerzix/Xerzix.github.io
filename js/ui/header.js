@@ -23,11 +23,14 @@ const NAV = [
   { href: '#/velvia', key: 'nav.velvia', label: 'Velvia Suggestions', match: (p) => p.startsWith('/velvia'), priority: 1, icon: 'sparkle', velvia: true },
 ];
 
+// The Browse menu shows at every width. Entries that mirror a bar link carry that link's
+// priority and only appear once the bar hides it (css/app.css), so Discover and Creators
+// are always one click away without duplicating what is already in the bar.
 const MORE = [
   { href: '#/discover', key: 'nav.discover', label: 'Discover', icon: 'compass' },
-  { href: '#/genres', key: 'nav.genres', label: 'Genres', icon: 'grid' },
-  { href: '#/new', key: 'nav.new', label: 'New Releases', icon: 'calendar' },
-  { href: '#/trending', key: 'nav.trending', label: 'Trending', icon: 'flame' },
+  { href: '#/genres', key: 'nav.genres', label: 'Genres', icon: 'grid', priority: 2 },
+  { href: '#/new', key: 'nav.new', label: 'New Releases', icon: 'calendar', priority: 2 },
+  { href: '#/trending', key: 'nav.trending', label: 'Trending', icon: 'flame', priority: 3 },
   { href: '#/creators', key: 'nav.creators', label: 'Creators', icon: 'clapper' },
 ];
 
@@ -42,7 +45,7 @@ export function mountHeader(root) {
   const navLinks = NAV.map((n) => h('li', { 'data-priority': String(n.priority) },
     h('a', { class: ['lm-nav__link', n.velvia && 'lm-nav__link--velvia'], href: n.href, 'data-nav': n.href }, n.velvia ? icon('sparkle') : null, t(n.key, n.label))));
   const moreBtn = h('button', { class: 'lm-nav__link', type: 'button' }, t('nav.browse', 'Browse'), icon('chevronDown'));
-  const moreMenu = h('div', { class: 'lm-menu', role: 'menu', style: { left: '0', right: 'auto', top: 'calc(100% + 10px)' } }, ...MORE.map((m) => menuItem(t(m.key, m.label), { icon: m.icon, href: m.href })));
+  const moreMenu = h('div', { class: 'lm-menu', role: 'menu', style: { left: '0', right: 'auto', top: 'calc(100% + 10px)' } }, ...MORE.map((m) => menuItem(t(m.key, m.label), { icon: m.icon, href: m.href, attrs: m.priority ? { 'data-more-priority': String(m.priority) } : {} })));
   const more = h('li', { class: 'lm-nav__more lm-popover-anchor' }, moreBtn, moreMenu);
   bindMenu(moreBtn, moreMenu);
   const nav = h('nav', { class: 'lm-nav', 'aria-label': 'Primary' }, h('ul', { role: 'list' }, ...navLinks, more));
@@ -312,7 +315,10 @@ function notificationsBell() {
 // ── Profile menu ────────────────────────────────────────
 function profileMenu() {
   if (session.isServer && !session.account) {
-    return h('a', { class: 'lm-btn lm-btn--primary lm-btn--sm', href: '#/login' }, h('span', null, t('nav.signin', 'Sign in')));
+    // Appearance, motion and accessibility settings work without an account.
+    return h('div', { class: 'lm-header__guest' },
+      h('a', { class: 'lm-icon-btn', href: '#/settings', 'aria-label': t('nav.settings', 'Settings'), title: t('nav.settings', 'Settings') }, icon('settings')),
+      h('a', { class: 'lm-btn lm-btn--primary lm-btn--sm', href: '#/login' }, h('span', null, t('nav.signin', 'Sign in'))));
   }
   const p = session.profile;
   const btn = h('button', { class: 'lm-profile-btn', type: 'button', 'aria-label': `Profile menu${p ? ` for ${p.name}` : ''}` }, avatar(p?.avatar || 'sakura'), icon('chevronDown'));

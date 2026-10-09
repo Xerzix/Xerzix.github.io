@@ -18,7 +18,7 @@ export default function register(app, { db, services, config }) {
     const titles = catalog.published(ctx.profile);
     const signals = ctx.profile ? library.homeSignals(ctx.profile) : {};
     const { activity: act, community } = activity();
-    const home = composeHome(titles, { ...signals, activity: act, community });
+    const home = composeHome(titles, { ...signals, activity: act, community, collections: catalog.editorialCollections() });
     return { featured: home.featured, rows: home.rows };
   });
 

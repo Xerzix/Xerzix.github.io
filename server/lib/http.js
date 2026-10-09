@@ -76,9 +76,22 @@ export class Context {
     this.req = req;
     this.res = res;
     this.app = app;
-    const url = new URL(req.url, 'http://localhost');
     this.method = req.method;
-    this.path = decodeURIComponent(url.pathname);
+    // The request target is attacker-controlled: a path like "//" makes new URL() throw and
+    // "%E0%A4%A" makes decodeURIComponent() throw. Never let either escape the constructor
+    // (it runs outside the handler's try/catch, so a throw would crash the process); flag the
+    // request as malformed instead and the handler answers 400.
+    this.malformed = false;
+    let url;
+    try {
+      url = new URL(req.url, 'http://localhost');
+      this.path = decodeURIComponent(url.pathname);
+      if (this.path.includes('\0')) throw new Error('NUL in path');
+    } catch {
+      this.malformed = true;
+      url = new URL('http://localhost/');
+      this.path = '/';
+    }
     this.searchParams = url.searchParams;
     this.query = Object.fromEntries(url.searchParams);
     this.params = {};
@@ -226,9 +239,19 @@ export class App {
 
   handler() {
     return async (req, res) => {
-      const ctx = new Context(req, res, this);
+      let ctx;
+      try {
+        ctx = new Context(req, res, this);
+      } catch (err) {
+        // Last-resort guard: a request must never be able to take the process down.
+        log.error('request context failed', { err });
+        if (!res.headersSent) res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end('Bad request');
+        return;
+      }
       const started = process.hrtime.bigint();
       try {
+        if (ctx.malformed) throw badRequest('The request path is not valid.');
         for (const fn of this.before) {
           await fn(ctx);
           if (ctx.sent) return;

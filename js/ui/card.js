@@ -88,8 +88,12 @@ bus.on('library:changed', () => {
   }
 });
 
-function artImage(src, alt = '') {
-  const img = h('img', { src, alt, loading: 'lazy', decoding: 'async', 'data-loading': '' });
+// Card art is at most ~212px (poster) or ~360px (landscape) wide (css/tokens.css), and grid
+// cards stretch a little; uploaded artwork offers smaller copies through srcset.
+const CARD_SIZES = { poster: '(max-width: 640px) 34vw, 260px', landscape: '(max-width: 640px) 80vw, 420px' };
+
+function artImage(src, alt = '', srcset = null, sizes = undefined) {
+  const img = h('img', { src, alt, srcset: srcset || undefined, sizes: srcset ? sizes : undefined, loading: 'lazy', decoding: 'async', 'data-loading': '' });
   loadImage(img).then(() => img.removeAttribute('data-loading'));
   return img;
 }
@@ -113,7 +117,9 @@ export function titleCard(t, o = {}) {
   const progress = o.progress ?? (library.progressFor(t.id)?.durationS ? library.progressFor(t.id).positionS / library.progressFor(t.id).durationS : null);
 
   const art = h('div', { class: 'lm-card__art' },
-    artImage(landscape ? (o.episode?.still || t.backdrop || t.poster) : (t.poster || t.backdrop)),
+    landscape
+      ? artImage(o.episode?.still || t.backdrop || t.poster, '', o.episode?.still ? null : t.backdrop ? t.backdropSrcset : t.posterSrcset, CARD_SIZES.landscape)
+      : artImage(t.poster || t.backdrop, '', t.poster ? t.posterSrcset : t.backdropSrcset, CARD_SIZES.poster),
     h('div', { class: 'lm-card__badges' }, qualityBadge(t)),
     landscape ? h('div', { class: 'lm-card__play-hint', 'aria-hidden': 'true' }, h('span', null, icon('play'))) : null,
     progress && progress > 0.01 && progress < 0.99 ? h('div', { class: 'lm-card__progress' }, h('div', { class: 'lm-progress', role: 'progressbar', 'aria-label': 'Watched', 'aria-valuenow': String(Math.round(progress * 100)), 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('span', { style: { width: `${Math.round(progress * 100)}%` } }))) : null);

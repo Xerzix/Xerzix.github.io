@@ -19,6 +19,7 @@
     "media:sample": "node scripts/make-sample-media.mjs",
     "art:build": "node scripts/make-artwork.mjs",
     "vendor:sync": "node scripts/vendor-sync.mjs",
+    "perf:baseline": "node --disable-warning=ExperimentalWarning scripts/perf-baseline.mjs",
     "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"tests/unit/**/*.test.js\" \"tests/server/**/*.test.js\"",
     "test:e2e": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"tests/e2e/**/*.test.js\""
   },

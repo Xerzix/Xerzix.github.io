@@ -1647,9 +1647,17 @@ a.adm-stat:hover {
     display: none;
   }
 
+  /* Touch targets stay at least 40px when the labels collapse. */
   .adm-back-app {
-    width: 34px;
+    width: 40px;
+    min-height: 40px;
     padding: 0;
+  }
+
+  .adm-elev {
+    height: auto;
+    min-height: 40px;
+    min-width: 40px;
   }
 
   .adm-main {

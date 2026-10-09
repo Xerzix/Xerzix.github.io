@@ -5,6 +5,7 @@ import { session } from '../core/session.js';
 import { carousel } from '../ui/carousel.js';
 import { emptyState, linkButton } from '../ui/components.js';
 import { icon } from '../ui/icons.js';
+import { creatorFollowButton, followedIds } from '../ui/follow-button.js';
 
 export default async function render(ctx) {
   ctx.setTitle('Discover');
@@ -34,6 +35,17 @@ export default async function render(ctx) {
 
   // Quick jumps to each section (buttons, so the hash route is never disturbed).
   const rows = usable.map((s) => carousel({ id: s.id, title: s.title, subtitle: s.description || s.subtitle, href: s.href, items: s.items }));
+  // Creator spotlight: follow the creators named in the row to hear about their next release.
+  const spotlight = usable.findIndex((s) => s.id === 'creator-spotlight' && s.creators?.length);
+  if (spotlight >= 0) {
+    const followed = await followedIds('creator');
+    const buttons = usable[spotlight].creators.map((c) => creatorFollowButton(c, followed)).filter(Boolean);
+    if (buttons.length) {
+      rows[spotlight].append(h('div', { class: 'lm-discover__follow' },
+        h('p', { class: 'lm-small lm-muted' }, 'Follow a creator to be notified when Lumina publishes their next release.'),
+        h('div', { class: 'lm-cluster' }, ...buttons)));
+    }
+  }
   if (usable.length > 3) {
     head.after(h('nav', { class: 'lm-chip-scroll lm-discover__jump', 'aria-label': 'Jump to a section' },
       ...usable.map((s, i) => h('button', {

@@ -6,11 +6,14 @@
 //   approved → published           (only by publishing the draft title made from it)
 // Every change writes a submission_event and notifies the creator. Nothing is published
 // automatically: publishing a submission creates a DRAFT title that staff complete.
+import { copyFileSync, linkSync, rmSync } from 'node:fs';
+import { extname } from 'node:path';
 import { now, parseJson, toJson } from '../../db/index.js';
 import { conflict, notFound, validation } from '../../lib/errors.js';
 import { newId } from '../../lib/crypto.js';
 import { v } from '../../lib/validate.js';
 import { notify } from '../notifications.js';
+import { ensureDirFor, storagePath } from '../storage.js';
 import { likeTerm, paging, slugify, uniqueId } from './common.js';
 import { isBrowserPlayableMp4, summarizeProbe } from './media-verify.js';
 
@@ -71,6 +74,12 @@ export function listApplications(db, query) {
 export function decideApplication(db, ctx, id, { decision, note }) {
   const app = db.get('SELECT * FROM creator_applications WHERE id = ?', id);
   if (!app) throw notFound('That application does not exist.');
+  // A decision is final: re-deciding would leave the account and the application disagreeing
+  // (rejecting an approved application would not remove creator access). Creator access is
+  // changed on the account itself (Users), and a new application is a new decision.
+  if (!['pending', 'info_required'].includes(app.status)) {
+    throw conflict(`This application was already ${app.status}. Change creator access from the account in Users instead.`, 'INVALID_TRANSITION', { status: app.status });
+  }
   if ((decision === 'reject' || decision === 'info_required') && !note) {
     throw validation({ note: decision === 'reject' ? 'Tell the applicant why (they will see this note).' : 'Say what information you need (the applicant will see this note).' });
   }
@@ -335,76 +344,97 @@ export async function publishSubmission(db, ctx, id, { enqueue = null } = {}) {
   const created = [];
   const jobs = [];
 
-  db.tx(() => {
-    db.run(
-      `INSERT INTO titles (id, type, title, synopsis, year, runtime_min, age_rating, rating_source, min_age, genres, tags, countries, original_language,
-                           credits, license, status, creator_account_id, submission_id, added_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'NR', 'advisory', 18, ?, ?, ?, ?, ?, '{}', 'draft', ?, ?, ?, ?)`,
-      titleId, type, s.project_title, s.description || '', s.release_year ?? null, s.runtime_min ?? null, toJson(genres), toJson(tags),
-      toJson(s.country ? [String(s.country).toUpperCase().slice(0, 2)] : []), s.language || null,
-      toJson({ directors: [], cast: [], crew: [] }), s.account_id, id, ts, ts,
-    );
-    let episodeNo = 0;
-    for (const f of videoFiles) {
-      let episodeId = null;
-      const role = f.role === 'trailer' ? 'trailer' : 'main';
-      if (type === 'series' && f.role !== 'trailer') {
-        episodeNo++;
-        if (episodeNo === 1) db.run('INSERT INTO seasons (id, title_id, number) VALUES (?, ?, 1)', `${titleId}-s1`, titleId);
-        episodeId = `${titleId}-s1e${episodeNo}`;
-        db.run(
-          `INSERT INTO episodes (id, title_id, season_number, number, name, synopsis, runtime_min) VALUES (?, ?, 1, ?, ?, '', ?)`,
-          episodeId, titleId, episodeNo, f.label || `Episode ${episodeNo}`, null,
-        );
-      } else if (type === 'movie' && role === 'main' && created.some((c) => c.role === 'main')) {
-        warnings.push(`${f.original_name}: a film has one main video; this extra feature file was not attached.`);
-        continue;
-      }
-      const mediaId = newId('med');
-      const probe = parseJson(f.probe, {});
-      const summary = summarizeProbe(probe);
-      let kind;
-      let source;
-      let status;
-      let note;
-      let resolutions = [];
-      let verifiedAt = null;
-      if (enqueue) {
-        kind = 'hls';
-        source = `storage:media/${mediaId}/master.m3u8`;
-        status = 'processing';
-        note = 'Queued for transcoding to an HLS ladder.';
-        jobs.push({ mediaId, sourceKey: f.storage_key });
-      } else if (isBrowserPlayableMp4(probe, f.mime)) {
-        kind = 'progressive';
-        source = `storage:${f.storage_key}`;
-        status = 'ready';
-        note = 'Browser-playable MP4 (H.264/AAC) served as a single progressive file. Transcoding is not configured.';
-        if (summary?.height) {
-          resolutions = [summary.height];
-          verifiedAt = ts; // measured by the upload probe
-        }
-      } else {
-        kind = 'progressive';
-        source = `storage:${f.storage_key}`;
-        status = 'failed';
-        note = 'Not browser-playable (needs H.264/AAC MP4) and transcoding is not configured. Configure FFMPEG_PATH and transcode it.';
-        warnings.push(`${f.original_name}: ${note}`);
-      }
-      db.run(
-        `INSERT INTO media (id, title_id, episode_id, role, label, kind, source, resolutions, video_codecs, duration_s, status, verified_at, verify_report, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        mediaId, titleId, episodeId, role, f.label || f.original_name, kind, source, toJson(resolutions),
-        toJson(summary?.videoCodec && status === 'ready' ? [summary.videoCodec === 'h264' ? 'H.264' : summary.videoCodec] : []),
-        summary?.durationS ?? null, status, verifiedAt,
-        toJson(verifiedAt ? { ok: true, checkedAt: ts, kind: 'progressive', note: 'From the upload probe.', probes: [summary] } : { note }), ts, ts,
-      );
-      created.push({ id: mediaId, role, kind, status, episodeId, file: f.original_name, note });
+  // Viewers' signed playback URLs grant a whole directory, so a published file is served from
+  // its own media/<mediaId>/ folder (a hard link, or a copy across file systems) — never from
+  // the submission folder that also holds the creator's rights documents.
+  const copies = [];
+  const servedCopy = (f, mediaId) => {
+    const key = `media/${mediaId}/source${extname(f.storage_key).toLowerCase().replace(/[^a-z0-9.]/g, '') || '.mp4'}`;
+    const target = ensureDirFor(key);
+    copies.push(`media/${mediaId}`);
+    try {
+      linkSync(storagePath(f.storage_key), target);
+    } catch {
+      copyFileSync(storagePath(f.storage_key), target);
     }
-    if (!videoFiles.length) warnings.push('This submission has no video files; add media to the title before publishing.');
-    db.run('UPDATE submissions SET title_id = ?, updated_at = ? WHERE id = ?', titleId, ts, id);
-    addEvent(db, { submissionId: id, actorId: ctx.account.id, kind: 'comment', message: `Draft title “${titleId}” created for publication. ${warnings.join(' ')}`.trim(), visible: false });
-  });
+    return key;
+  };
+
+  try {
+    db.tx(() => {
+      db.run(
+        `INSERT INTO titles (id, type, title, synopsis, year, runtime_min, age_rating, rating_source, min_age, genres, tags, countries, original_language,
+                             credits, license, status, creator_account_id, submission_id, added_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'NR', 'advisory', 18, ?, ?, ?, ?, ?, '{}', 'draft', ?, ?, ?, ?)`,
+        titleId, type, s.project_title, s.description || '', s.release_year ?? null, s.runtime_min ?? null, toJson(genres), toJson(tags),
+        toJson(s.country ? [String(s.country).toUpperCase().slice(0, 2)] : []), s.language || null,
+        toJson({ directors: [], cast: [], crew: [] }), s.account_id, id, ts, ts,
+      );
+      let episodeNo = 0;
+      for (const f of videoFiles) {
+        let episodeId = null;
+        const role = f.role === 'trailer' ? 'trailer' : 'main';
+        if (type === 'series' && f.role !== 'trailer') {
+          episodeNo++;
+          if (episodeNo === 1) db.run('INSERT INTO seasons (id, title_id, number) VALUES (?, ?, 1)', `${titleId}-s1`, titleId);
+          episodeId = `${titleId}-s1e${episodeNo}`;
+          db.run(
+            `INSERT INTO episodes (id, title_id, season_number, number, name, synopsis, runtime_min) VALUES (?, ?, 1, ?, ?, '', ?)`,
+            episodeId, titleId, episodeNo, f.label || `Episode ${episodeNo}`, null,
+          );
+        } else if (type === 'movie' && role === 'main' && created.some((c) => c.role === 'main')) {
+          warnings.push(`${f.original_name}: a film has one main video; this extra feature file was not attached.`);
+          continue;
+        }
+        const mediaId = newId('med');
+        const probe = parseJson(f.probe, {});
+        const summary = summarizeProbe(probe);
+        let kind;
+        let source;
+        let status;
+        let note;
+        let resolutions = [];
+        let verifiedAt = null;
+        if (enqueue) {
+          kind = 'hls';
+          source = `storage:media/${mediaId}/master.m3u8`;
+          status = 'processing';
+          note = 'Queued for transcoding to an HLS ladder.';
+          jobs.push({ mediaId, sourceKey: f.storage_key });
+        } else if (isBrowserPlayableMp4(probe, f.mime)) {
+          kind = 'progressive';
+          source = `storage:${servedCopy(f, mediaId)}`;
+          status = 'ready';
+          note = 'Browser-playable MP4 (H.264/AAC) served as a single progressive file. Transcoding is not configured.';
+          if (summary?.height) {
+            resolutions = [summary.height];
+            verifiedAt = ts; // measured by the upload probe
+          }
+        } else {
+          kind = 'progressive';
+          source = `storage:${servedCopy(f, mediaId)}`;
+          status = 'failed';
+          note = 'Not browser-playable (needs H.264/AAC MP4) and transcoding is not configured. Configure FFMPEG_PATH and transcode it.';
+          warnings.push(`${f.original_name}: ${note}`);
+        }
+        db.run(
+          `INSERT INTO media (id, title_id, episode_id, role, label, kind, source, resolutions, video_codecs, duration_s, status, verified_at, verify_report, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          mediaId, titleId, episodeId, role, f.label || f.original_name, kind, source, toJson(resolutions),
+          toJson(summary?.videoCodec && status === 'ready' ? [summary.videoCodec === 'h264' ? 'H.264' : summary.videoCodec] : []),
+          summary?.durationS ?? null, status, verifiedAt,
+          toJson(verifiedAt ? { ok: true, checkedAt: ts, kind: 'progressive', note: 'From the upload probe.', probes: [summary] } : { note }), ts, ts,
+        );
+        created.push({ id: mediaId, role, kind, status, episodeId, file: f.original_name, note });
+      }
+      if (!videoFiles.length) warnings.push('This submission has no video files; add media to the title before publishing.');
+      db.run('UPDATE submissions SET title_id = ?, updated_at = ? WHERE id = ?', titleId, ts, id);
+      addEvent(db, { submissionId: id, actorId: ctx.account.id, kind: 'comment', message: `Draft title “${titleId}” created for publication. ${warnings.join(' ')}`.trim(), visible: false });
+    });
+  } catch (err) {
+    for (const dir of copies) rmSync(storagePath(dir), { recursive: true, force: true });
+    throw err;
+  }
 
   for (const job of jobs) {
     try {

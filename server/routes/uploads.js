@@ -18,7 +18,8 @@ const createUpload = v.object({
   role: v.enum([...new Set([...FILE_ROLES, ...ARTWORK_ROLES])]),
 });
 
-const ART_FILE = /^upl_[0-9a-z]{20}\.(png|jpg|webp)$/;
+// Originals, plus the resized copies made by services/media/artwork.js (…-w360.jpg).
+const ART_FILE = /^upl_[0-9a-z]{20}(?:-w(?:360|720|1280))?\.(png|jpg|webp)$/;
 
 /** Runs the staff guard chain (moderator/admin + recent re-authentication) inline. */
 function assertStaff(ctx) {
