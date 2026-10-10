@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Golden Pavilion">
+  <defs>
+    <radialGradient id="bg" cx="0.5" cy="0.35" r="0.85">
+      <stop offset="0" stop-color="#2a1c10"/>
+      <stop offset="0.55" stop-color="#110c08"/>
+      <stop offset="1" stop-color="#080808"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f1d79c"/>
+      <stop offset="0.5" stop-color="#c6a46a"/>
+      <stop offset="1" stop-color="#8a6a36"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" fill="url(#bg)"/>
+  <circle cx="128" cy="96" r="80" fill="#c6a46a" opacity="0.08"/>
+  <g fill="url(#gold)">
+    <!-- finial (phoenix) -->
+    <path d="M128 36c4 6 8 8 12 8-4 4-8 4-10 2v10h-4V46c-2 2-6 2-10-2 4 0 8-2 12-8z"/>
+    <!-- top roof -->
+    <path d="M96 76c12-6 22-12 32-20 10 8 20 14 32 20l-6 6c-10-4-18-8-26-12-8 4-16 8-26 12z"/>
+    <rect x="106" y="80" width="44" height="22"/>
+    <!-- middle roof -->
+    <path d="M78 110c18-4 34-10 50-16 16 6 32 12 50 16l-6 7c-16-2-30-6-44-10-14 4-28 8-44 10z"/>
+    <rect x="94" y="116" width="68" height="26"/>
+    <!-- lower roof -->
+    <path d="M64 148c22-4 44-8 64-12 20 4 42 8 64 12l-6 7c-20-2-40-4-58-8-18 4-38 6-58 8z"/>
+    <rect x="80" y="154" width="96" height="30"/>
+  </g>
+  <g fill="#080808" opacity="0.55">
+    <rect x="114" y="86" width="6" height="12"/><rect x="125" y="86" width="6" height="12"/><rect x="136" y="86" width="6" height="12"/>
+    <rect x="102" y="122" width="8" height="16"/><rect x="118" y="122" width="8" height="16"/><rect x="134" y="122" width="8" height="16"/><rect x="150" y="122" width="6" height="16"/>
+    <rect x="90" y="160" width="10" height="20"/><rect x="108" y="160" width="10" height="20"/><rect x="138" y="160" width="10" height="20"/><rect x="156" y="160" width="10" height="20"/>
+  </g>
+  <rect x="124" y="160" width="8" height="24" fill="#b52b49"/>
+  <!-- reflection -->
+  <g fill="url(#gold)" opacity="0.28" transform="translate(0 372) scale(1 -1)">
+    <rect x="80" y="154" width="96" height="30"/>
+    <path d="M64 148c22-4 44-8 64-12 20 4 42 8 64 12l-6 7c-20-2-40-4-58-8-18 4-38 6-58 8z"/>
+  </g>
+  <g stroke="#c6a46a" stroke-width="2" stroke-linecap="round" opacity="0.45">
+    <path d="M52 196h40M112 200h56M180 194h28M70 214h30M140 218h50M96 232h36"/>
+  </g>
+  <rect x="8" y="8" width="240" height="240" rx="30" fill="none" stroke="#c6a46a" stroke-opacity="0.45" stroke-width="2"/>
+</svg>

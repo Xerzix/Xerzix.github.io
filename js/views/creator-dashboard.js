@@ -1,5 +1,6 @@
 // Creator dashboard (/creators/dashboard): submissions with their status, a form to start a
 // new one, and published titles with honest statistics.
+import { artImg } from '../ui/artwork.js';
 import { h } from '../core/dom.js';
 import { api } from '../api/client.js';
 import { date, plural, relativeTime } from '../core/format.js';
@@ -83,7 +84,7 @@ function titleTile(t) {
   // Only a published title has a page members (and you) can open; before that, the title
   // links to the submission it came from.
   const href = live ? `#/title/${encodeURIComponent(t.id)}` : t.submissionId ? `#/creators/submissions/${encodeURIComponent(t.submissionId)}` : null;
-  const art = t.poster ? h('img', { src: t.poster, alt: '', loading: 'lazy' }) : h('span', { class: 'lm-studio-title__placeholder' }, icon('film'));
+  const art = artImg({ src: t.poster, title: t.title, kind: 'poster' });
   const statusText = live
     ? `Published ${t.publishedAt ? date(t.publishedAt) : ''}`
     : t.status === 'draft' ? 'Awaiting publication — not visible to members yet' : 'Not published — not visible to members';

@@ -3,6 +3,7 @@
 //   ?title=<id>  asks about a specific title (context), e.g. from a title page
 // The conversation belongs to the active profile and is kept in sessionStorage so follow-ups
 // continue across navigation; the last 12 turns are sent with each question.
+import { artImg } from '../ui/artwork.js';
 import { h, newUid, announce, prefersReducedMotion } from '../core/dom.js';
 import { api, ServerRequiredError } from '../api/client.js';
 import { session } from '../core/session.js';
@@ -150,7 +151,7 @@ export default async function render(ctx) {
     const tint = t.palette?.[0];
     return h('li', { class: 'lm-vrec', style: tint ? { '--vrec-tint': tint } : undefined },
       h('a', { class: 'lm-vrec__poster', href, tabindex: '-1', 'aria-hidden': 'true' },
-        t.poster ? h('img', { src: t.poster, alt: '', loading: 'lazy', decoding: 'async' }) : icon('film')),
+        artImg({ src: t.poster, srcset: t.posterSrcset, sizes: '120px', title: t.title, kind: 'poster' })),
       h('div', { class: 'lm-vrec__body' },
         h('div', { class: 'lm-vrec__top' },
           h('h3', { class: 'lm-vrec__title' }, h('a', { href }, t.title)),

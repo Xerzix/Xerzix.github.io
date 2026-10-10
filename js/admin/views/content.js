@@ -2,7 +2,7 @@
 // create a title by hand or from TMDB metadata.
 import { h } from '../../core/dom.js';
 import { icon } from '../../ui/icons.js';
-import { button } from '../../ui/components.js';
+import { button, toast, toastError, withBusy } from '../../ui/components.js';
 import { adminApi } from '../api.js';
 import { openTmdbImport } from '../tmdb-import.js';
 import { badge, dataTable, filterBar, listController, page, pager, panel, queryState, statusBadge, time } from '../ui.js';
@@ -10,6 +10,22 @@ import { badge, dataTable, filterBar, listController, page, pager, panel, queryS
 export function posterThumb(src, alt = '') {
   if (!src) return h('span', { class: 'adm-thumb adm-thumb--empty', 'aria-hidden': 'true' }, icon('film'));
   return h('img', { class: 'adm-thumb', src, alt, loading: 'lazy', width: 34, height: 50 });
+}
+
+/** Matches every title (except locked Lumina key art) to TMDB and stores its real artwork. */
+function syncAllButton(reload) {
+  const btn = button('Sync artwork', { variant: 'ghost', icon: 'refresh' });
+  btn.addEventListener('click', () => withBusy(btn, async () => {
+    try {
+      const { summary: s } = await adminApi.artwork.syncAll();
+      const parts = [`${s.matched} matched`, s.notFound && `${s.notFound} without an exact TMDB match`, s.noArtwork && `${s.noArtwork} without TMDB artwork`, s.skipped && `${s.skipped} Lumina key art kept`, s.errors && `${s.errors} failed`].filter(Boolean);
+      toast(`Artwork sync: ${parts.join(', ')}.`, { type: s.errors ? 'warn' : 'success', timeout: 8000 });
+      reload();
+    } catch (err) {
+      toastError(err);
+    }
+  }));
+  return btn;
 }
 
 export default async function render(ctx) {
@@ -69,6 +85,7 @@ export default async function render(ctx) {
     title: 'Content',
     subtitle: 'Every film and series, including drafts. Publishing checks that a title has a synopsis, poster, licence and ready media.',
     actions: [
+      syncAllButton(() => list.load()),
       button('Import from TMDB', { variant: 'ghost', icon: 'download', onClick: () => openTmdbImport(ctx) }),
       h('a', { class: 'lm-btn lm-btn--primary', href: '#/content/new' }, icon('plus'), h('span', null, 'New title')),
     ],

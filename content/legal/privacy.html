@@ -7,7 +7,7 @@
 <h2 id="summary">1. Summary</h2>
 <ul>
   <li>We collect what is needed to run your account and profiles, remember what you watch, show community features and keep the service secure.</li>
-  <li>We do not sell personal data. Lumina has no advertising, no analytics service and no tracking pixels, and it sets a single cookie that is needed to keep you signed in.</li>
+  <li>We do not sell personal data. Lumina has no advertising, no analytics service and no tracking pixels, and it sets only two cookies: one that keeps you signed in, and one that lets “Who’s watching?” list the identities used on your browser.</li>
   <li>Fonts, icons and the video player library are served from this site. Your browser contacts other hosts only when you play one of the openly licensed films that are streamed from third-party hosts (see <a href="#third-parties">section 6</a>).</li>
   <li>You can download your data and delete your account yourself in Account settings.</li>
   <li>In Preview mode (static hosting) there are no accounts: everything you save stays in your browser on that device.</li>
@@ -109,7 +109,8 @@
 <h2 id="security">9. Security</h2>
 <ul>
   <li>Passwords and profile PINs are stored only as salted scrypt hashes; two-factor secrets are encrypted at rest.</li>
-  <li>The session cookie is HttpOnly and SameSite, is marked Secure when the service runs over HTTPS, and only a hash of its token is stored.</li>
+  <li>The session and device cookies are HttpOnly and SameSite, are marked Secure when the service runs over HTTPS, and only hashes of their tokens are stored.</li>
+  <li>If the operator enables artwork from The Movie Database (TMDB), the Lumina server fetches posters from TMDB and serves them from its own address; your browser does not contact TMDB and no personal data is sent to it. (On static Preview hosting, posters load directly from TMDB’s image servers, which then see your IP address.)</li>
   <li>Requests that change data are protected against cross-site request forgery; sign-in, reporting and similar actions are rate limited.</li>
   <li>Uploaded files are stored outside the public web folder, checked by their content (not just their name) and served to staff only through short-lived signed links.</li>
   <li>Staff tools require a recent password confirmation (and two-factor authentication when the operator requires it), and every privileged action is recorded.</li>

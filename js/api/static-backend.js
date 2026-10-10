@@ -121,6 +121,8 @@ export async function createStaticBackend() {
     },
     auth: { register: notInPreview('Creating an account'), login: notInPreview('Signing in'), logout: async () => null, forgot: notInPreview('Password recovery'), reset: notInPreview('Password recovery'), elevate: notInPreview('Account security') },
     account: new Proxy({}, { get: (_, k) => notInPreview('Account management') }),
+    // Separate accounts need the Lumina server: Preview lists none and explains why.
+    identities: { list: async () => ({ max: 5, identities: [], freeSlots: 5, preview: true }), switch: notInPreview('Switching accounts'), remove: notInPreview('Switching accounts') },
     profiles: {
       list: async () => ({ profiles: [profile()], max: 1 }),
       create: notInPreview('Additional profiles'),

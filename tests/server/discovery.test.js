@@ -372,7 +372,8 @@ test('uploaded artwork with resized copies is offered as a srcset', async () => 
     const d = (await t.client().get('/api/titles/hanami')).body;
     assert.equal(d.poster, url);
     assert.equal(d.posterSrcset, `/media/art/${id}-w360.jpg 360w, /media/art/${id}-w720.jpg 720w, ${url} 1500w`);
-    assert.equal(d.backdropSrcset, undefined, 'seed SVG artwork has no srcset');
+    // The backdrop is still the Lumina key art made from the film, with its own sizes.
+    assert.equal(d.backdropSrcset, 'assets/art/originals/hanami-backdrop-960.jpg 960w, assets/art/originals/hanami-backdrop-1920.jpg 1920w');
   } finally {
     t.db.run('UPDATE titles SET poster = ? WHERE id = ?', prev, 'hanami');
     t.db.run('DELETE FROM uploads WHERE id = ?', id);

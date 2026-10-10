@@ -10,6 +10,7 @@ import { ratingLabel } from '../core/ratings.js';
 import { carousel } from '../ui/carousel.js';
 import { listButton, playHref, titleMeta } from '../ui/card.js';
 import { icon } from '../ui/icons.js';
+import { artImg } from '../ui/artwork.js';
 import { button, emptyState, errorState, linkButton, sectionHead, toast, toastError } from '../ui/components.js';
 import { navigate } from '../core/router.js';
 import { reviewsPanel } from '../ui/panels/reviews-panel.js';
@@ -20,7 +21,6 @@ import { creatorFollowButton, followedIds } from '../ui/follow-button.js';
 const enc = encodeURIComponent;
 const epLabel = (e) => `S${e.seasonNumber}:E${e.number}`;
 /** Artwork that fails to load is removed so the tinted placeholder shows instead of a broken icon. */
-const hideBroken = (e) => e.currentTarget.remove();
 
 /** Mounts a panel owned by another area; a failure never breaks the title page. */
 function mountPanel(fn) {
@@ -120,10 +120,12 @@ function heroSection(t, parts) {
   const tint = t.palette?.[0];
   return h('section', { class: 'lm-detail__hero', style: tint ? { '--detail-tint': tint } : undefined },
     h('div', { class: 'lm-detail__backdrop', 'aria-hidden': 'true' },
-      t.backdrop || t.poster ? h('img', { src: t.backdrop || t.poster, srcset: (t.backdrop ? t.backdropSrcset : t.posterSrcset) || undefined, sizes: '100vw', alt: '', decoding: 'async', fetchpriority: 'high', onError: hideBroken }) : null),
+      t.backdrop ? artImg({ src: t.backdrop, srcset: t.backdropSrcset, sizes: '100vw', kind: 'backdrop', title: '', loading: 'eager', fetchpriority: 'high' }) : null),
     h('div', { class: 'lm-detail__shade', 'aria-hidden': 'true' }),
     h('div', { class: 'lm-container lm-detail__hero-inner' },
-      h('div', { class: 'lm-detail__poster' }, t.poster ? h('img', { src: t.poster, srcset: t.posterSrcset || undefined, sizes: t.posterSrcset ? '(max-width: 640px) 40vw, 300px' : undefined, alt: `${t.title} poster`, decoding: 'async' }) : h('span', { 'aria-hidden': 'true' }, t.title.slice(0, 1))),
+      h('div', { class: 'lm-detail__poster' },
+        artImg({ src: t.poster, srcset: t.posterSrcset, sizes: '(max-width: 640px) 40vw, 300px', alt: `${t.title} poster`, title: t.title, kind: 'poster', loading: 'eager' }),
+        t.artworkCredit ? h('a', { class: 'lm-detail__artcredit', href: t.artworkCredit.url, target: '_blank', rel: 'noopener noreferrer' }, `Artwork: ${t.artworkCredit.provider}`) : null),
       h('div', { class: 'lm-detail__intro' },
         h('p', { class: 'lm-eyebrow lm-detail__eyebrow' }, eyebrow),
         h('h1', { class: 'lm-detail__title' }, t.title),
@@ -157,7 +159,7 @@ function episodesSection(t, state) {
       const name = `${e.number}. ${e.name}`;
       const status = p?.completed ? 'Watched' : ratio > 0.01 ? timeLeft(p.positionS, p.durationS) || `${clock(p.positionS)} watched` : '';
       const art = h('div', { class: 'lm-episode__still' },
-        e.still || t.backdrop ? h('img', { src: e.still || t.backdrop, alt: '', loading: 'lazy', decoding: 'async', onError: hideBroken }) : null,
+        artImg({ src: e.still || t.backdrop, srcset: e.still ? null : t.backdropSrcset, sizes: '(max-width: 640px) 40vw, 240px', title: t.title, kind: e.still ? 'still' : 'backdrop' }),
         e.hasMedia !== false ? h('span', { class: 'lm-episode__play', 'aria-hidden': 'true' }, icon('play')) : null,
         ratio > 0.01 ? h('div', { class: 'lm-episode__progress' }, h('div', { class: 'lm-progress', role: 'progressbar', 'aria-label': `${e.name} watched`, 'aria-valuenow': String(Math.round(ratio * 100)), 'aria-valuemin': '0', 'aria-valuemax': '100' }, h('span', { style: { width: `${Math.round(ratio * 100)}%` } }))) : null);
       const text = h('div', { class: 'lm-episode__text' },
@@ -337,7 +339,9 @@ export default async function render(ctx) {
     const plan = state.plan;
     const play = t.playable
       ? linkButton(plan.label, plan.href, { variant: 'primary', size: 'lg', icon: 'play', attrs: { 'aria-label': `${plan.label}: ${t.title}${plan.episode ? `, episode “${plan.episode.name}”` : ''}` } })
-      : button('Not yet available', { variant: 'primary', size: 'lg', icon: 'clock', disabled: true });
+      : t.availability === 'catalog'
+        ? h('p', { class: 'lm-detail__notice', role: 'note' }, icon('info'), h('span', null, 'Listed for reference. Lumina does not have this title available to stream.'))
+        : button('Not yet available', { variant: 'primary', size: 'lg', icon: 'clock', disabled: true });
     primary.replaceChildren(...[
       play,
       t.trailerMediaId ? linkButton('Trailer', `#/watch/${enc(t.id)}?trailer=1`, { variant: 'glass', size: 'lg', icon: 'film' }) : null,

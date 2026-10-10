@@ -91,6 +91,11 @@ export const adminApi = {
     unpublish: (id) => post(`/api/admin/titles/${enc(id)}/unpublish`),
     createSeason: (id, d) => post(`/api/admin/titles/${enc(id)}/seasons`, d),
     createEpisode: (id, d) => post(`/api/admin/titles/${enc(id)}/episodes`, d),
+    syncArtwork: (id, d = {}) => post(`/api/admin/titles/${enc(id)}/artwork`, d),
+  },
+  artwork: {
+    status: (opts) => get('/api/admin/artwork', undefined, opts),
+    syncAll: (d = {}) => post('/api/admin/artwork/sync', d),
   },
   seasons: {
     update: (id, d) => patch(`/api/admin/seasons/${enc(id)}`, d),

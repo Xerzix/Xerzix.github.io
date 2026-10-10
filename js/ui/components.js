@@ -134,6 +134,11 @@ export function bindMenu(trigger, menu, { onOpen } = {}) {
     if (!menu.contains(e.target) && !trigger.contains(e.target)) close();
   };
   trigger.addEventListener('click', () => (menu.hidden ? open() : close()));
+  // Choosing an item (or any navigation) closes the menu.
+  menu.addEventListener('click', (e) => {
+    if (e.target.closest('a[href], [role="menuitem"]')) close();
+  });
+  window.addEventListener('hashchange', () => close());
   trigger.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();

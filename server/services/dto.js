@@ -6,6 +6,8 @@ export function accountDto(a) {
   if (!a) return null;
   return {
     id: a.id,
+    username: a.username || null,
+    avatar: a.avatar || null,
     email: a.email,
     displayName: a.display_name,
     role: a.role,

@@ -17,10 +17,16 @@ import { icon, logoMark } from '../ui/icons.js';
 import { avatar } from '../ui/avatars.js';
 import { MEDIA_LANGUAGES, maturityLabel } from './profiles.js';
 import { grownUpReason, withReauth } from './account.js';
+import { refreshSession } from '../core/session.js';
+import { reload } from '../core/router.js';
+import { date } from '../core/format.js';
+import { addIdentityDialog, identityAvatarPicker, openAccountSwitcher, signOutIdentity, switchToIdentity } from '../ui/identity.js';
+import { applyFieldErrors, field, formValues, openModal } from '../ui/components.js';
 
 const VERSION = '2.0.0';
 
 const SECTIONS = [
+  { id: 'account', label: 'Account & profiles', icon: 'user', intro: 'Who is signed in, the identities on this device, and switching between them.', render: accountSection },
   { id: 'appearance', label: 'Appearance', icon: 'palette', intro: 'Colours, garden environment, motion and layout. Changes preview instantly and are kept when you save.', render: appearanceSection },
   { id: 'playback', label: 'Playback', icon: 'play', intro: 'How titles start, continue and remember where you stopped.', render: playbackSection },
   { id: 'language', label: 'Language & subtitles', icon: 'subtitles', intro: 'Interface language, preferred audio and how subtitles look.', render: languageSection },
@@ -783,6 +789,104 @@ function parentalSection() {
   ];
 }
 
+// ── Account & profiles ────────────────────────────────────
+// Identities are separate accounts (own username and password). Switching always creates a new
+// authenticated session on the server; nothing here only relabels the interface.
+async function accountSection() {
+  if (!session.isServer) {
+    return [group('Separate accounts need the Lumina server', 'This copy of Lumina is running in Preview mode on static hosting: there are no accounts, and your list, progress and appearance stay in this browser.',
+      h('div', { class: 'lm-cluster' }, linkButton('Who’s watching?', '#/whos-watching', { variant: 'primary', icon: 'users' })))];
+  }
+  if (!session.account) {
+    return [group('Not signed in', 'Choose an identity on “Who’s watching?”, or add one by creating an account or signing in.',
+      h('div', { class: 'lm-cluster' }, linkButton('Who’s watching?', '#/whos-watching', { variant: 'primary', icon: 'users' })))];
+  }
+  const a = session.account;
+  let roster = { identities: [], max: 5, freeSlots: 5 };
+  try {
+    roster = await api.identities.list();
+  } catch {
+    /* the roster is informational here */
+  }
+  const taken = new Set(roster.identities.filter((x) => x.id !== a.id).map((x) => x.avatar));
+
+  const editProfile = () => {
+    const status = h('p', { class: 'lm-form-error', role: 'alert' });
+    const save = button('Save', { variant: 'primary', type: 'submit' });
+    const form = h('form', { class: 'lm-stack', novalidate: true },
+      field({ label: 'Username', name: 'username', value: a.username || '', autocomplete: 'username', maxlength: 24, hint: '3–24 letters, numbers, dots, hyphens or underscores. Must be unique.' }),
+      field({ label: 'Display name', name: 'displayName', value: a.displayName || '', maxlength: 40 }),
+      status, h('div', { class: 'lm-form-actions' }, save));
+    const modal = openModal({ title: 'Edit profile', content: form });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const v = formValues(form);
+      withBusy(save, async () => {
+        try {
+          await api.account.update({ username: v.username.trim(), displayName: v.displayName.trim() || undefined });
+          modal.close();
+          await refreshSession();
+          toast('Profile updated.', { type: 'success' });
+          reload();
+        } catch (err) {
+          applyFieldErrors(form, err);
+          status.textContent = err.message;
+        }
+      });
+    });
+  };
+
+  const changeAvatar = () => {
+    const status = h('p', { class: 'lm-form-error', role: 'alert' });
+    const save = button('Use this picture', { variant: 'primary', type: 'submit' });
+    const form = h('form', { class: 'lm-stack', novalidate: true }, identityAvatarPicker({ value: a.avatar, taken }), status, h('div', { class: 'lm-form-actions' }, save));
+    const modal = openModal({ title: 'Change picture', content: form });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      withBusy(save, async () => {
+        try {
+          await api.account.update({ avatar: formValues(form).avatar });
+          modal.close();
+          await refreshSession();
+          toast('Picture updated.', { type: 'success' });
+          reload();
+        } catch (err) {
+          status.textContent = err.fields?.avatar || err.message;
+        }
+      });
+    });
+  };
+
+  const roleLabel = a.role === 'admin' ? 'Administrator' : a.role === 'moderator' ? 'Moderator' : null;
+  return [
+    group('Signed in as', null,
+      h('div', { class: 'lm-acctid' },
+        avatar(a.avatar || 'crimson-sakura'),
+        h('div', { class: 'lm-acctid__text', style: { flex: '1 1 220px' } },
+          h('span', { class: 'lm-acctid__name' }, a.displayName || a.username),
+          h('span', { class: 'lm-muted' }, `@${a.username}`),
+          h('span', { class: 'lm-muted lm-small' }, [a.email, `Member since ${date(a.createdAt)}`, roleLabel].filter(Boolean).join(' · ')))),
+      h('div', { class: 'lm-cluster', style: { marginTop: 'var(--lm-space-4)' } },
+        button('Switch account', { variant: 'primary', icon: 'users', onClick: () => openAccountSwitcher() }),
+        button('Edit profile', { variant: 'glass', icon: 'edit', onClick: editProfile }),
+        button('Change picture', { variant: 'glass', icon: 'palette', onClick: changeAvatar }),
+        button('Sign out', { variant: 'ghost', icon: 'logout', onClick: () => signOutIdentity() }))),
+    group('Identities on this device', `“Who’s watching?” shows up to ${roster.max}. Each is a separate account with its own username, password, list, history, ratings, language, theme and Velvia preferences.`,
+      h('ul', { class: 'lm-acctid__roster', role: 'list' }, ...roster.identities.map((it) => h('li', { class: it.active ? 'is-active' : undefined },
+        avatar(it.avatar),
+        h('span', null, h('strong', null, it.displayName || it.username), h('small', null, `@${it.username} · ${it.active ? 'signed in' : it.remembered ? 'ready' : 'password required'}`)),
+        it.active ? null : button('', { variant: 'ghost', size: 'sm', icon: 'arrowRight', ariaLabel: `Switch to ${it.username}`, onClick: () => switchToIdentity(it) })))),
+      h('div', { class: 'lm-cluster', style: { marginTop: 'var(--lm-space-4)' } },
+        linkButton('Manage accounts', '#/whos-watching?manage=1', { variant: 'glass', icon: 'users' }),
+        roster.freeSlots > 0
+          ? button('Add an identity', { variant: 'ghost', icon: 'plus', onClick: () => addIdentityDialog({ taken: new Set(roster.identities.map((x) => x.avatar)) }) })
+          : h('p', { class: 'lm-hint' }, 'All five slots are in use. Remove an identity from this device to add another; its account is kept.'))),
+    group('This account', null,
+      settingRow('Security and data', 'Password, two-factor authentication, signed-in devices, data export and account deletion.', linkButton('Open', '#/account', { variant: 'glass', size: 'sm' })),
+      settingRow('Profiles in this account', `Profiles share this account’s sign-in — for example a kids profile you manage. ${session.profileCount || 1} of ${session.limits?.maxProfiles || 5}.`, linkButton('Manage', '#/profiles/manage', { variant: 'glass', size: 'sm' }))),
+  ];
+}
+
 // ── Privacy & data ────────────────────────────────────────
 function privacySection(sctx) {
   const parts = [];
@@ -924,6 +1028,7 @@ function aboutSection() {
         h('li', null, h('a', { href: '#/legal/cookies' }, 'Cookie Policy')),
         h('li', null, h('a', { href: '#/legal/accessibility' }, 'Accessibility statement')),
         h('li', null, h('a', { href: '#/legal/contact' }, 'Contact & support'))),
-      h('p', { class: 'lm-muted lm-small', style: { marginTop: 'var(--lm-space-4)' } }, 'Open films courtesy of the Blender Foundation under Creative Commons licences — each title lists its attribution.')),
+      h('p', { class: 'lm-muted lm-small', style: { marginTop: 'var(--lm-space-4)' } }, 'Open films courtesy of the Blender Foundation under Creative Commons licences — each title lists its attribution.'),
+      h('p', { class: 'lm-muted lm-small' }, 'Artwork marked “TMDB” on a title page is provided by The Movie Database. This product uses the TMDB API but is not endorsed or certified by TMDB. Lumina Originals’ key art comes from the films themselves.')),
   ];
 }

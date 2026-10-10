@@ -6,6 +6,7 @@ import { refreshLibrary, session, setProfile } from '../core/session.js';
 import { date, plural, relativeTime } from '../core/format.js';
 import { icon } from '../ui/icons.js';
 import { button, confirmDialog, emptyState, errorState, linkButton, loading, settingRow, toast, toastError, toggleSwitch } from '../ui/components.js';
+import { artImg } from '../ui/artwork.js';
 
 const enc = encodeURIComponent;
 
@@ -81,7 +82,7 @@ function genreBars(topGenres) {
 function titleRow(t, sub) {
   return h('li', { class: 'lm-stats__title' },
     h('a', { class: 'lm-stats__thumb', href: `#/title/${enc(t.id)}`, tabindex: '-1', 'aria-hidden': 'true', style: t.palette?.[0] ? { '--card-tint': t.palette[0] } : undefined },
-      t.poster ? h('img', { src: t.poster, alt: '', loading: 'lazy', onError: (e) => e.currentTarget.remove() }) : null),
+      artImg({ src: t.poster, srcset: t.posterSrcset, sizes: '80px', title: '', kind: 'poster' })),
     h('span', { class: 'lm-stats__title-text' }, h('a', { href: `#/title/${enc(t.id)}` }, t.title), h('span', null, sub)));
 }
 

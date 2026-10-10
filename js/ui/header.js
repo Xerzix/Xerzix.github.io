@@ -166,7 +166,9 @@ function searchBox() {
   function option(label, sub, { thumb, iconName, onChoose, onRemove }) {
     const id = newUid('opt');
     const el = h('div', { class: 'lm-suggestion', role: 'option', id, 'aria-selected': 'false' },
-      thumb ? h('img', { class: 'lm-suggestion__thumb', src: thumb, alt: '' }) : h('span', { class: 'lm-suggestion__icon' }, icon(iconName || 'search')),
+      thumb
+        ? h('img', { class: 'lm-suggestion__thumb', src: thumb, alt: '', onError: (e) => e.currentTarget.replaceWith(h('span', { class: 'lm-suggestion__icon' }, icon('film'))) })
+        : h('span', { class: 'lm-suggestion__icon' }, icon(iconName || 'search')),
       h('span', { class: 'lm-suggestion__text' }, h('strong', null, label), sub ? h('span', null, sub) : null),
       onRemove ? h('button', { class: 'lm-suggestion__remove', type: 'button', 'aria-label': `Remove “${label}” from recent searches`, tabindex: '-1', onClick: (e) => { e.stopPropagation(); onRemove(); } }, icon('close')) : null);
     el.addEventListener('mousedown', (e) => e.preventDefault());
@@ -312,27 +314,41 @@ function notificationsBell() {
   return wrap;
 }
 
-// ── Profile menu ────────────────────────────────────────
+// ── Account menu ─────────────────────────────────────────
+// The avatar opens the current identity's menu: who is signed in, Switch Account (a new
+// authenticated session for another identity), Account & Profiles, Settings, My List,
+// Viewing History and Sign Out.
 function profileMenu() {
   if (session.isServer && !session.account) {
     // Appearance, motion and accessibility settings work without an account.
     return h('div', { class: 'lm-header__guest' },
       h('a', { class: 'lm-icon-btn', href: '#/settings', 'aria-label': t('nav.settings', 'Settings'), title: t('nav.settings', 'Settings') }, icon('settings')),
-      h('a', { class: 'lm-btn lm-btn--primary lm-btn--sm', href: '#/login' }, h('span', null, t('nav.signin', 'Sign in'))));
+      h('a', { class: 'lm-btn lm-btn--primary lm-btn--sm', href: '#/whos-watching' }, h('span', null, t('nav.signin', 'Sign in'))));
   }
+  const a = session.account;
   const p = session.profile;
-  const btn = h('button', { class: 'lm-profile-btn', type: 'button', 'aria-label': `Profile menu${p ? ` for ${p.name}` : ''}` }, avatar(p?.avatar || 'sakura'), icon('chevronDown'));
-  const items = [];
-  if (p) items.push(h('div', { class: 'lm-menu__label' }, p.name));
+  const pic = a?.avatar || p?.avatar || 'crimson-sakura';
+  const name = a ? a.displayName || a.username : p?.name || 'Guest';
+  const btn = h('button', { class: 'lm-profile-btn', type: 'button', 'aria-label': `Account menu${a ? ` for ${name}, @${a.username}` : ''}` }, avatar(pic), icon('chevronDown'));
+  const items = [
+    h('div', { class: 'lm-menu__who' }, avatar(pic, { size: 44 }),
+      h('div', null, h('strong', null, name), a ? h('span', null, `@${a.username}`) : h('span', null, session.isServer ? '' : 'Preview — on this device'))),
+    h('div', { class: 'lm-menu__sep' }),
+  ];
   if (session.isServer) {
-    items.push(
-      menuItem(t('nav.profiles', 'Switch profile'), { icon: 'users', href: '#/profiles' }),
-      menuItem(t('nav.manageProfiles', 'Manage profiles'), { icon: 'edit', href: '#/profiles/manage' }),
-      menuItem(t('nav.account', 'Account'), { icon: 'user', href: '#/account' }),
-    );
+    items.push(menuItem(t('nav.switchAccount', 'Switch account'), { icon: 'users', onClick: async () => (await import('./identity.js')).openAccountSwitcher() }));
+  } else {
+    items.push(menuItem('Who’s watching?', { icon: 'users', href: '#/whos-watching' }));
   }
   items.push(
+    menuItem(t('nav.accountProfiles', 'Account & profiles'), { icon: 'user', href: '#/settings/account' }),
     menuItem(t('nav.settings', 'Settings'), { icon: 'settings', href: '#/settings' }),
+    menuItem(t('nav.myList', 'My List'), { icon: 'list', href: '#/my-list' }),
+    menuItem(t('nav.history', 'Viewing history'), { icon: 'history', href: '#/my-list/history' }),
+  );
+  if (session.isServer && (session.profileCount || 0) > 1) items.push(menuItem(t('nav.profiles', 'Switch profile in this account'), { icon: 'user', href: '#/profiles' }));
+  items.push(
+    h('div', { class: 'lm-menu__sep' }),
     menuItem(t('nav.stats', 'Viewing statistics'), { icon: 'chart', href: '#/stats' }),
     menuItem(t('nav.creators', 'Creators'), { icon: 'clapper', href: '#/creators' }),
   );
@@ -343,10 +359,7 @@ function profileMenu() {
       icon: 'logout',
       onClick: async () => {
         try {
-          await api.auth.logout();
-          const { refreshSession } = await import('../core/session.js');
-          await refreshSession();
-          navigate('/');
+          (await import('./identity.js')).signOutIdentity();
         } catch (err) {
           toastError(err);
         }
@@ -355,7 +368,7 @@ function profileMenu() {
   } else {
     items.push(h('div', { class: 'lm-menu__sep' }), h('p', { class: 'lm-menu__item lm-xsmall' }, 'Preview mode — your list stays on this device.'));
   }
-  const menu = h('div', { class: 'lm-menu', role: 'menu' }, ...items);
+  const menu = h('div', { class: 'lm-menu lm-menu--account', role: 'menu' }, ...items);
   bindMenu(btn, menu);
   return h('div', { class: 'lm-popover-anchor' }, btn, menu);
 }

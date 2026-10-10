@@ -60,6 +60,20 @@ function intersectSorted(lists) {
   return [...acc].sort((a, b) => b - a);
 }
 
+/** Attribution for synced artwork (TMDB asks for credit wherever its data is shown). */
+export function artworkCredit(row) {
+  const a = parseJson(row.artwork, {});
+  if (a.source !== 'tmdb' || !row.tmdb_id) return null;
+  return { provider: 'TMDB', url: `https://www.themoviedb.org/${row.tmdb_type === 'tv' ? 'tv' : 'movie'}/${row.tmdb_id}` };
+}
+
+/** "url 360w, url 720w" from an artwork size list, when it describes the current image. */
+export function setSrcset(set, current) {
+  if (!Array.isArray(set) || set.length < 2 || !current) return null;
+  if (!set.some((x) => x.url === current)) return null;
+  return set.filter((x) => x && typeof x.url === 'string' && x.w > 0).map((x) => `${x.url} ${x.w}w`).join(', ');
+}
+
 export class CatalogService {
   constructor(db) {
     this.db = db;
@@ -112,8 +126,10 @@ export class CatalogService {
     const srcset = (url) => (artUploadId(url) ? artSrcset(url, art.get(artUploadId(url))) : null);
     return rows.map((r) => {
       const s = this.summaryFromRow(r, mediaByTitle.get(r.id) || [], epByTitle.get(r.id) || [], ratings.get(r.id) || null);
-      const posterSrcset = srcset(r.poster);
-      const backdropSrcset = srcset(r.backdrop);
+      // Synced (TMDB) and Lumina key art list their sizes in titles.artwork; uploads in uploads.result.
+      const artwork = parseJson(r.artwork, {});
+      const posterSrcset = setSrcset(artwork.posterSet, r.poster) || srcset(r.poster);
+      const backdropSrcset = setSrcset(artwork.backdropSet, r.backdrop) || srcset(r.backdrop);
       if (posterSrcset) s.posterSrcset = posterSrcset;
       if (backdropSrcset) s.backdropSrcset = backdropSrcset;
       return s;
@@ -164,7 +180,11 @@ export class CatalogService {
       audioFormats,
       seasonCount: r.type === 'series' ? seasons.size : null,
       episodeCount: r.type === 'series' ? episodes.length : null,
-      playable: main.length > 0,
+      // Metadata and artwork never imply streaming rights: only 'stream' titles with ready
+      // main media can be played; 'catalog' titles are browse-only.
+      availability: r.availability === 'catalog' ? 'catalog' : 'stream',
+      playable: r.availability !== 'catalog' && main.length > 0,
+      artworkSource: parseJson(r.artwork, {}).source || (r.poster ? 'manual' : null),
       hasTrailer: !!trailer,
       memberRating: rating,
       featured: !!r.featured,
@@ -249,6 +269,7 @@ export class CatalogService {
       ...summary,
       credits: { directors: credits.directors || [], cast: credits.cast || [], crew: credits.crew || [] },
       license: parseJson(row.license, {}),
+      artworkCredit: artworkCredit(row),
       trailerMediaId: trailer?.id || null,
       // `id` is what members follow (PUT /api/follows/creator/:id); only set while the account
       // still holds creator access, since the follow route accepts creators only.
@@ -271,6 +292,9 @@ export class CatalogService {
   /** Everything the player needs, with entitlement and parental checks applied. */
   playback(titleId, episodeId, { profile = null, account = null, role = 'main', progress = null } = {}) {
     const detail = this.detail(titleId, { profile });
+    if (detail.availability === 'catalog' && role !== 'trailer') {
+      throw new HttpError(404, 'NOT_STREAMING', 'Lumina lists this title for reference only. It is not available to stream here.');
+    }
     const ent = canPlay({ account, title: detail });
     if (!ent.allowed) throw new HttpError(402, ent.reason, ent.message);
 

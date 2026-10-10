@@ -22,6 +22,7 @@ import { SubtitleManager } from './subtitles.js';
 import { Telemetry, ProgressSaver } from './telemetry.js';
 import { PlayerMenu, SeekBar, iconButton, playerDialog, playerIcon } from './ui.js';
 import * as H from './helpers.js';
+import { artImg } from '../ui/artwork.js';
 
 const HIDE_AFTER_MS = 3000;
 const SAVE_EVERY_MS = 10_000;
@@ -738,7 +739,7 @@ export class LuminaPlayer {
     const count = h('span', { class: 'lm-player__next-count' });
     const guestNote = this.party && !this.canDrive();
     const card = h('div', { class: 'lm-player__next', role: 'region', 'aria-label': 'Next episode' },
-      ep.still ? h('img', { class: 'lm-player__next-still', src: ep.still, alt: '' }) : null,
+      artImg({ src: ep.still, className: 'lm-player__next-still', title: ep.name, kind: 'still' }),
       h('div', { class: 'lm-player__next-body' },
         h('span', { class: 'lm-eyebrow' }, 'Next episode'),
         h('strong', null, H.episodeLabel(ep)),
@@ -845,7 +846,7 @@ export class LuminaPlayer {
         h('h3', { class: 'lm-player__recs-title' }, 'More like this'),
         h('ul', { class: 'lm-player__recs-list', role: 'list' }, ...items.slice(0, 6).map((s) => h('li', null,
           h('a', { class: 'lm-player__rec', href: `#/title/${encodeURIComponent(s.id)}` },
-            h('span', { class: 'lm-player__rec-art' }, s.backdrop || s.poster ? h('img', { src: s.backdrop || s.poster, alt: '', loading: 'lazy' }) : null),
+            h('span', { class: 'lm-player__rec-art' }, artImg({ src: s.backdrop, srcset: s.backdropSrcset, sizes: '280px', title: s.title, kind: 'backdrop' })),
             h('span', { class: 'lm-player__rec-title' }, s.title),
             h('span', { class: 'lm-player__rec-meta' }, [s.year, s.type === 'series' ? 'Series' : 'Film'].filter(Boolean).join(' · ')))))));
     } catch {
@@ -1518,7 +1519,7 @@ export class LuminaPlayer {
             this.o.onEpisodeRequest?.(ep, { reason: 'drawer' });
           },
         },
-        h('span', { class: 'lm-player__ep-art' }, ep.still ? h('img', { src: ep.still, alt: '', loading: 'lazy' }) : null, pct ? h('span', { class: 'lm-player__ep-progress', style: { width: `${pct}%` } }) : null),
+        h('span', { class: 'lm-player__ep-art' }, artImg({ src: ep.still, title: ep.name, kind: 'still' }), pct ? h('span', { class: 'lm-player__ep-progress', style: { width: `${pct}%` } }) : null),
         h('span', { class: 'lm-player__ep-text' },
           h('span', { class: 'lm-player__ep-num' }, `Episode ${ep.number}${ep.runtimeMin ? ` · ${ep.runtimeMin}m` : ''}`),
           h('span', { class: 'lm-player__ep-name' }, ep.name),
@@ -1821,7 +1822,7 @@ export class LuminaPlayer {
     if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
     const pb = this.playback;
     const t = pb.title || {};
-    const art = t.backdrop || t.poster;
+    const art = t.poster || t.backdrop;
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: pb.episode ? pb.episode.name : t.title,

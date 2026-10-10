@@ -115,7 +115,14 @@ export const config = {
     timeoutMs: int(env.VELVIA_TIMEOUT_MS, 20000),
   },
 
-  tmdb: { token: env.TMDB_API_TOKEN || '' },
+  // TMDB metadata and artwork. Either a v4 read access token (preferred) or a v3 API key.
+  // The bases are overridable for tests and self-hosted mirrors.
+  tmdb: {
+    token: env.TMDB_API_TOKEN || '',
+    apiKey: env.TMDB_API_KEY || '',
+    apiBase: (env.TMDB_API_BASE || 'https://api.themoviedb.org/3').replace(/\/$/, ''),
+    imageBase: (env.TMDB_IMAGE_BASE || 'https://image.tmdb.org/t/p').replace(/\/$/, ''),
+  },
 
   monetization: { mode: env.MONETIZATION_MODE || 'free' },
 

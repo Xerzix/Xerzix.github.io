@@ -53,6 +53,32 @@ function artPreview(control, { width, height, label }) {
   return fig;
 }
 
+const SYNC_MESSAGES = {
+  matched: (r) => `Artwork synced from TMDB (“${r.matchedTitle}”${r.matchedYear ? `, ${r.matchedYear}` : ''}).`,
+  not_found: (r) => r.message,
+  no_artwork: (r) => r.message,
+  mismatch: (r) => r.message,
+  skipped: (r) => r.message,
+};
+
+/** Fetches the title's real poster/backdrop (and episode stills) from TMDB. */
+function syncArtworkButton(t) {
+  const status = h('p', { class: 'lm-hint', role: 'status' }, t.artworkSource === 'tmdb' ? 'Artwork currently comes from TMDB.' : t.artworkSource === 'lumina' ? 'Lumina key art (locked against sync).' : '');
+  const btn = button('Sync artwork from TMDB', { variant: 'ghost', icon: 'refresh' });
+  btn.addEventListener('click', () => withBusy(btn, async () => {
+    try {
+      const r = await adminApi.titles.syncArtwork(t.id, t.artworkSource === 'lumina' ? {} : { force: true });
+      status.textContent = (SYNC_MESSAGES[r.status] || ((x) => x.message || x.status))(r);
+      toast(status.textContent, { type: r.status === 'matched' ? 'success' : 'info' });
+      if (r.status === 'matched') setTimeout(() => location.reload(), 900);
+    } catch (err) {
+      status.textContent = err.message;
+      toastError(err);
+    }
+  }));
+  return h('div', { class: 'lm-cluster' }, btn, status);
+}
+
 /** Builds the details form. Returns { el, body(), markClean(), dirty }. */
 function detailsForm(t, { isNew, taxonomy, imported }) {
   const f = {};
@@ -90,7 +116,14 @@ function detailsForm(t, { isNew, taxonomy, imported }) {
   const cast = listEditor({ legend: 'Cast', columns: [{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role / character' }], value: credits.cast || [], addLabel: 'Add cast member', max: 150 });
   const crew = listEditor({ legend: 'Crew', columns: [{ key: 'name', label: 'Name' }, { key: 'job', label: 'Job', placeholder: 'Writer' }], value: credits.crew || [], addLabel: 'Add crew member', max: 150 });
 
-  f.poster = field({ label: 'Poster', name: 'poster', value: t.poster || '', placeholder: 'assets/art/title-poster.svg', hint: 'Required to publish. 2:3 artwork you are licensed to use.' });
+  f.availability = field({
+    label: 'Availability', name: 'availability', type: 'select', value: t.availability || 'stream',
+    options: [{ value: 'stream', label: 'Streaming — needs licensed, ready media' }, { value: 'catalog', label: 'Catalog only — metadata and artwork, never playable' }],
+    hint: 'A poster does not grant streaming rights. Catalog-only titles show “Not available to stream” instead of Play.',
+  });
+  f.tmdbId = field({ label: 'TMDB id', name: 'tmdbId', type: 'number', value: t.tmdbId ?? '', min: 1, hint: 'Optional. Pins the TMDB entry used for artwork; leave empty to match by title and year.' });
+  f.tmdbType = field({ label: 'TMDB type', name: 'tmdbType', type: 'select', value: t.tmdbType || (t.type === 'series' ? 'tv' : 'movie'), options: [{ value: 'movie', label: 'Movie' }, { value: 'tv', label: 'TV series' }] });
+  f.poster = field({ label: 'Poster', name: 'poster', value: t.poster || '', placeholder: 'assets/art/title-poster.jpg', hint: 'Required to publish. 2:3 artwork you are licensed to use, or sync it from TMDB.' });
   f.backdrop = field({ label: 'Backdrop', name: 'backdrop', value: t.backdrop || '', placeholder: 'assets/art/title-backdrop.svg', hint: '16:9 artwork.' });
   const palette = listEditor({ legend: 'Palette', hint: 'Up to 8 colours used for ambient lighting around the player.', columns: [{ key: 'color', label: 'Colour', type: 'color' }], value: (t.palette || []).map((color) => ({ color })), addLabel: 'Add colour', max: 8 });
 
@@ -107,8 +140,7 @@ function detailsForm(t, { isNew, taxonomy, imported }) {
   const tmdbNotice = imported ? notice(h('div', { class: 'lm-stack lm-stack--sm' },
     h('span', null, 'Pre-filled from ', h('a', { class: 'lm-link', href: imported.source.url, target: '_blank', rel: 'noopener noreferrer' }, 'TMDB'), '. Review every field before saving. TMDB provides metadata only; it does not license the film for streaming. ',
       imported.ratingSource === 'official' ? `The ${imported.ageRating} rating is TMDB’s US certification.` : 'No US certification was found, so the rating is “NR” — assign an advisory rating.'),
-    imported.artwork?.poster || imported.artwork?.backdrop ? h('span', null, 'TMDB artwork is subject to TMDB’s own terms and to the rights of its creators — prefer artwork you are licensed to use. Images from image.tmdb.org also only display if that origin is in MEDIA_ORIGINS. ',
-      imported.artwork.poster ? button('Use TMDB poster URL anyway', { variant: 'ghost', size: 'sm', onClick: () => { f.poster.control.value = imported.artwork.poster; f.poster.control.dispatchEvent(new Event('change')); markDirty(); } }) : null) : null),
+    imported.artwork?.poster || imported.artwork?.backdrop ? h('span', null, 'Save the title, then use “Sync artwork from TMDB” in the Artwork section: Lumina matches the entry, stores the poster and backdrop references and serves the images from its own cache, with TMDB credited on the title page.') : null),
   { type: 'warn', title: 'Imported from TMDB' }) : null;
 
   const summary = errorSummary();
@@ -126,8 +158,11 @@ function detailsForm(t, { isNew, taxonomy, imported }) {
       h('div', { class: 'adm-fields' }, f.moods, f.keywords, f.countries),
       f.awards)),
     panel({ title: 'Credits' }, h('div', { class: 'adm-form' }, f.directors, cast, crew)),
-    panel({ title: 'Artwork', description: 'Upload PNG, JPEG or WebP artwork you are licensed to use, or enter a site path (assets/…) or https URL. External images load only from origins allowed by the Content-Security-Policy (MEDIA_ORIGINS).' },
+    panel({ title: 'Availability', description: 'Metadata and streaming are separate: only titles with licensed, ready media can be played.' },
+      h('div', { class: 'adm-fields' }, f.availability, f.tmdbId, f.tmdbType)),
+    panel({ title: 'Artwork', description: 'Sync the real poster and backdrop from TMDB, upload PNG, JPEG or WebP artwork you are licensed to use, or enter a site path (assets/…). Without artwork, Lumina shows its branded fallback.' },
       h('div', { class: 'adm-form' },
+        isNew ? null : syncArtworkButton(t),
         h('div', { class: 'adm-fields' },
           h('div', { class: 'lm-stack lm-stack--sm' }, f.poster, artworkUpload({ role: 'poster', label: 'Poster', control: f.poster.control })),
           h('div', { class: 'lm-stack lm-stack--sm' }, f.backdrop, artworkUpload({ role: 'backdrop', label: 'Backdrop', control: f.backdrop.control }))),
@@ -174,6 +209,9 @@ function detailsForm(t, { isNew, taxonomy, imported }) {
       license: Object.fromEntries(Object.entries({ name: val(f.licenseName), url: val(f.licenseUrl), attribution: val(f.licenseAttribution), source: val(f.licenseSource) }).filter(([, v]) => v)),
       featured: featured.querySelector('input').checked,
       creatorAccountId: val(f.creatorAccountId) || null,
+      availability: f.availability.control.value,
+      tmdbId: numOrNull(f.tmdbId),
+      tmdbType: f.tmdbType.control.value,
     };
     if (f.editorialRank.control.value !== '') out.editorialRank = Number(f.editorialRank.control.value);
     if (isNew) {
@@ -201,6 +239,7 @@ function importedToTitle(m) {
     type: m.type, title: m.title, originalTitle: m.originalTitle, tagline: m.tagline, synopsis: m.synopsis, year: m.year, releaseDate: m.releaseDate,
     runtimeMin: m.runtimeMin, ageRating: m.ageRating, ratingSource: m.ratingSource, genres: m.genres, keywords: m.keywords, countries: m.countries,
     originalLanguage: m.originalLanguage, credits: m.credits, license: {}, palette: [], tags: [], moods: [], awards: [],
+    tmdbId: m.source?.id ?? null, tmdbType: m.type === 'series' ? 'tv' : 'movie',
   };
 }
 

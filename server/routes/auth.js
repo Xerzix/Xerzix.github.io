@@ -14,22 +14,29 @@ import { sendMail } from '../services/mailer.js';
 import { notify } from '../services/notifications.js';
 import { cleanName, isRestricted, PARENTAL_UNLOCK_MINUTES } from '../services/profiles.js';
 import { assertPasswordPolicy, passwordProblem, PASSWORD_MAX } from '../services/passwords.js';
+import { AVATAR_IDS, IdentityService, usernameProblem, usernameTaken } from '../services/identities.js';
 
 const MIN = 60_000;
 
 const registerSchema = v.object({
+  username: v.string().max(40),
   email: v.string().email(),
   password: v.string().raw().max(PASSWORD_MAX),
-  displayName: v.string().min(1).max(40),
+  displayName: v.string().max(40).optional(),
+  avatar: v.enum(AVATAR_IDS).optional(),
   acceptTerms: v.boolean(),
+  remember: v.boolean().optional(),
 });
+// `identifier` is a username or an email address; `email` is accepted for older clients.
 const loginSchema = v.object({
-  email: v.string().max(254),
+  identifier: v.string().max(254).optional(),
+  email: v.string().max(254).optional(),
   password: v.string().raw().max(1024),
   totp: v.string().max(16).optional(),
+  remember: v.boolean().optional(),
 });
 
-const INVALID_CREDENTIALS = 'That email and password combination is not correct.';
+const INVALID_CREDENTIALS = 'That username (or email) and password combination is not correct.';
 const invalidCredentials = () => new HttpError(401, 'INVALID_CREDENTIALS', INVALID_CREDENTIALS);
 const emailTaken = () => conflict('An account with that email already exists. Sign in instead, or reset your password.', 'EMAIL_TAKEN', {
   fields: { email: 'An account with that email already exists.' },
@@ -48,6 +55,7 @@ function adoptSession(ctx, db, account, sessionId, profileId) {
 
 export default function register(app, { db, services, config }) {
   const accounts = (services.accounts ??= new AccountService(db));
+  const identities = (services.identities ??= new IdentityService(db));
   // The admin "New registrations open" switch (it can only narrow ALLOW_REGISTRATION).
   declareSettingConsumer('registrationOpen');
 
@@ -69,10 +77,17 @@ export default function register(app, { db, services, config }) {
       const problem = passwordProblem(raw.password, { email });
       if (problem) errors.password = problem;
     }
-    if (!errors.displayName && body.displayName !== undefined) {
+    const username = typeof raw.username === 'string' ? raw.username.trim() : '';
+    if (!errors.username) {
+      const problem = usernameProblem(username);
+      if (problem) errors.username = problem;
+    }
+    if (!errors.displayName && body.displayName !== undefined && body.displayName !== '') {
       body.displayName = cleanName(body.displayName);
       if (!body.displayName) errors.displayName = 'Use at least one visible character.';
     }
+    // Each identity on this device keeps its own picture.
+    if (!errors.avatar && body.avatar && identities.avatarsInUse(ctx).has(body.avatar)) errors.avatar = 'Another identity on this device already uses this picture.';
     // Consent must be an explicit JSON `true`, not a value that merely coerces to one.
     if (raw.acceptTerms !== true) errors.acceptTerms = 'Please accept the Terms of Service and Privacy Policy to continue.';
     if (Object.keys(errors).length) throw validation(errors);
@@ -81,18 +96,24 @@ export default function register(app, { db, services, config }) {
     // exists. We accept that for a usable sign-up form (the alternative is an email
     // confirmation round-trip for every registration) and contain it with the 5/hour/IP
     // rate limit above. Sign-in and password recovery never reveal account existence.
+    // A sixth identity cannot be created on a device that already shows five.
+    identities.assertRoom(ctx);
+    if (accounts.byUsername(username)) throw usernameTaken();
     if (accounts.byEmail(email)) throw emailTaken();
     const passwordHash = await hashPassword(body.password);
     let created;
     try {
-      created = accounts.create({ email, passwordHash, displayName: body.displayName });
+      created = accounts.create({ email, passwordHash, username, displayName: body.displayName || username, avatar: body.avatar || identities.defaultAvatar(ctx) });
     } catch (err) {
+      // The database enforces both, even for two sign-ups racing each other.
       if (/UNIQUE constraint failed: accounts\.email/.test(err.message)) throw emailTaken();
+      if (/UNIQUE constraint failed: accounts\.username/.test(err.message)) throw usernameTaken();
       throw err;
     }
     if (ctx.session) db.run('DELETE FROM sessions WHERE id = ?', ctx.session.id);
     const sessionId = createSession(db, ctx, created.account.id, { profileId: created.profile.id });
     adoptSession(ctx, db, created.account, sessionId, created.profile.id);
+    identities.add(ctx, created.account.id, { remember: !!body.remember });
     audit(db, ctx, 'account.register', { targetType: 'account', targetId: created.account.id });
     return sessionPayload(db, ctx);
   });
@@ -100,10 +121,12 @@ export default function register(app, { db, services, config }) {
   // ── Sign in ──
   app.post('/api/auth/login', rateLimit('login', { max: 10, windowMs: 15 * MIN }), async (ctx) => {
     const body = v.parse(loginSchema, await ctx.body());
-    const email = normalizeEmail(body.email);
-    rateLimit('login-email', { max: 10, windowMs: 15 * MIN, by: () => email })(ctx);
+    const identifier = String(body.identifier ?? body.email ?? '').trim();
+    if (!identifier) throw validation({ identifier: 'Enter your username or email address.' });
+    const key = identifier.includes('@') ? normalizeEmail(identifier) : identifier.toLowerCase();
+    rateLimit('login-email', { max: 10, windowMs: 15 * MIN, by: () => key })(ctx);
 
-    const account = accounts.byEmail(email);
+    const account = accounts.byIdentifier(identifier);
     if (!account) {
       // Same work and the same answer as a wrong password: no account enumeration.
       await burnPasswordCheck(body.password);
@@ -153,18 +176,23 @@ export default function register(app, { db, services, config }) {
       }
     }
 
+    // Only five identities fit on "Who's watching?" for this device.
+    identities.assertRoom(ctx, account.id);
     accounts.recordSuccessfulLogin(account.id);
     // Never reuse a pre-existing session (fixation); drop whatever this browser had.
     if (ctx.session) db.run('DELETE FROM sessions WHERE id = ?', ctx.session.id);
     const profileId = accounts.autoProfile(account.id);
     const sessionId = createSession(db, ctx, account.id, { profileId });
     adoptSession(ctx, db, accounts.byId(account.id), sessionId, profileId);
+    identities.add(ctx, account.id, { remember: !!body.remember });
     log.info('sign-in', { account: account.id });
     return sessionPayload(db, ctx);
   });
 
   // ── Sign out ──
   app.post('/api/auth/logout', requireAuth, (ctx) => {
+    // The identity stays on "Who's watching?" but needs its password next time.
+    identities.forget(ctx, ctx.account.id);
     destroySession(db, ctx);
   });
 

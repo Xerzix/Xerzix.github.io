@@ -1,4 +1,5 @@
-// "Who's watching?" (/profiles) and profile management (/profiles/manage).
+// Profiles inside the signed-in account: choose one (/profiles) or manage them (/profiles/manage).
+// (The opening "Who's watching?" screen lists separate accounts: see views/identities.js.)
 // Up to five profiles share one account: each has its own list, history, recommendations,
 // maturity rating, optional PIN and preferences. They are not separate subscriptions and
 // do not add simultaneous streams.
@@ -171,10 +172,10 @@ export default async function render(ctx) {
   let next = safeNext(ctx.query.get('next'));
   if (next.startsWith('/profiles')) next = '/';
   const nextQ = next !== '/' ? `?next=${encodeURIComponent(next)}` : '';
-  ctx.setTitle(manage ? 'Manage profiles' : 'Who’s watching?');
+  ctx.setTitle(manage ? 'Manage profiles' : 'Choose a profile');
 
   const root = h('div', { class: 'lm-profiles' });
-  const heading = h('h1', null, manage ? 'Manage profiles' : 'Who’s watching?');
+  const heading = h('h1', null, manage ? 'Manage profiles' : 'Choose a profile');
   let data;
   try {
     data = await api.profiles.list();

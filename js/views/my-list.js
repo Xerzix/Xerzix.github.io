@@ -1,5 +1,6 @@
 // Your library: My List (reorderable), Continue Watching, History and Collections.
 // Works on the server (per profile) and in Preview mode (stored on this device).
+import { artImg } from '../ui/artwork.js';
 import { h, announce, newUid } from '../core/dom.js';
 import { api } from '../api/client.js';
 import { bus } from '../core/bus.js';
@@ -271,7 +272,7 @@ async function historyTab(rerender) {
     const watched = item.seconds > 0 ? `${runtime(item.seconds / 60)} watched` : 'Marked as watched';
     const li = h('li', { class: 'lm-hist__row' },
       h('a', { class: 'lm-hist__thumb', href: `#/title/${enc(t.id)}`, tabindex: '-1', 'aria-hidden': 'true', style: t.palette?.[0] ? { '--card-tint': t.palette[0] } : undefined },
-        t.poster ? h('img', { src: t.poster, alt: '', loading: 'lazy', onError: (e) => e.currentTarget.remove() }) : null),
+        artImg({ src: t.poster, srcset: t.posterSrcset, sizes: '80px', title: '', kind: 'poster' })),
       h('div', { class: 'lm-hist__text' },
         h('a', { class: 'lm-hist__title', href: `#/title/${enc(t.id)}` }, t.title),
         ep ? h('span', { class: 'lm-hist__ep' }, ep) : null,
@@ -395,7 +396,7 @@ function collectionTile(c) {
   const tint = previews.find((p) => p.palette?.length)?.palette?.[0];
   return h('li', null, h('a', { class: 'lm-coll-tile', href: `#/collections/${enc(c.id)}`, style: tint ? { '--tile-tint': tint } : undefined },
     h('div', { class: 'lm-coll-tile__art', 'data-count': String(previews.length), 'aria-hidden': 'true' },
-      ...previews.map((p) => (p.poster ? h('img', { src: p.poster, alt: '', loading: 'lazy', onError: (e) => e.currentTarget.remove() }) : h('span'))),
+      ...previews.map((p) => artImg({ src: p.poster, srcset: p.posterSrcset, sizes: '120px', title: '', kind: 'poster' })),
       previews.length ? null : icon('layers', { size: 32 })),
     h('div', { class: 'lm-coll-tile__text' },
       h('span', { class: 'lm-coll-tile__name' }, c.name),

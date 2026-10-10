@@ -877,6 +877,7 @@
   font-weight: var(--lm-weight-semibold);
 }
 
+.lm-avatar--art img,
 .lm-avatar svg {
   width: 100%;
   height: 100%;
@@ -1204,4 +1205,150 @@
   font-family: var(--lm-font-mono);
   font-size: var(--lm-fs-sm);
   color: var(--lm-gold);
+}
+
+/* ─── Artwork fallback (js/ui/artwork.js) ───
+   Shown only when a title has no real artwork or its image cannot load: the Lumina mark and the
+   title's name on midnight and velvet. It is deliberately not a fake poster. */
+.lm-artfb {
+  position: relative;
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45em;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 2 / 3;
+  padding: 12%;
+  overflow: hidden;
+  text-align: center;
+  color: var(--lm-text);
+  background:
+    radial-gradient(120% 70% at 50% 112%, color-mix(in srgb, var(--lm-accent) 48%, transparent), transparent 62%),
+    radial-gradient(80% 45% at 50% -8%, color-mix(in srgb, var(--lm-gold) 12%, transparent), transparent 70%),
+    linear-gradient(165deg, #161214 0%, #0b0a0b 58%, #080808 100%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lm-gold) 16%, transparent);
+}
+
+.lm-artfb[data-kind='backdrop'],
+.lm-artfb[data-kind='still'] {
+  aspect-ratio: 16 / 9;
+  padding: 6% 10%;
+}
+
+.lm-artfb__petals {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.55;
+  background:
+    radial-gradient(ellipse 3px 2px at 16% 20%, rgb(232 160 182 / 0.55), transparent 70%),
+    radial-gradient(ellipse 2px 3px at 82% 14%, rgb(232 160 182 / 0.45), transparent 70%),
+    radial-gradient(ellipse 3px 2px at 70% 78%, rgb(232 160 182 / 0.35), transparent 70%),
+    radial-gradient(ellipse 2px 2px at 26% 68%, rgb(232 160 182 / 0.4), transparent 70%),
+    radial-gradient(ellipse 2px 3px at 52% 34%, rgb(198 164 106 / 0.35), transparent 70%);
+}
+
+.lm-artfb__mark {
+  position: relative;
+  width: clamp(16px, 20cqi, 64px);
+  height: auto;
+  color: var(--lm-gold);
+  opacity: 0.88;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--lm-accent) 60%, transparent));
+}
+
+.lm-artfb__title {
+  position: relative;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 100%;
+  font-family: var(--lm-font-display);
+  font-weight: var(--lm-weight-semibold);
+  font-size: clamp(11px, 10.5cqi, 34px);
+  line-height: 1.08;
+  letter-spacing: 0.03em;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.lm-artfb[data-kind='backdrop'] .lm-artfb__title,
+.lm-artfb[data-kind='still'] .lm-artfb__title {
+  font-size: clamp(11px, 5.6cqi, 44px);
+}
+
+.lm-artfb__note {
+  position: relative;
+  font-size: clamp(7px, 4cqi, 11px);
+  font-weight: var(--lm-weight-semibold);
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--lm-gold);
+  opacity: 0.7;
+}
+
+/* Containers that lay their artwork out absolutely take the fallback the same way. */
+:is(.lm-card__art, .lm-hero__slide, .lm-detail__backdrop, .lm-episode__still, .lm-player__rec-art, .lm-player__ep-art, .lm-party-gate__bg) > .lm-artfb {
+  position: absolute;
+  inset: 0;
+  aspect-ratio: auto;
+}
+
+/* A wide fallback behind hero text stays quiet so the copy above it reads clearly. */
+:is(.lm-hero__slide, .lm-detail__backdrop, .lm-party-gate__bg) > .lm-artfb .lm-artfb__mark {
+  opacity: 0.35;
+  width: clamp(40px, 9cqi, 120px);
+  transform: translateX(18cqi);
+}
+
+:is(.lm-hero__slide, .lm-detail__backdrop, .lm-party-gate__bg) > .lm-artfb .lm-artfb__note {
+  display: none;
+}
+
+.lm-quickview__art {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--lm-radius-md);
+}
+
+.lm-quickview__art > img,
+.lm-quickview__art > .lm-artfb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  aspect-ratio: auto;
+}
+
+.lm-detail__artcredit {
+  display: block;
+  margin-top: var(--lm-space-2);
+  font-size: var(--lm-fs-xs);
+  color: var(--lm-text-2);
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.lm-detail__notice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lm-space-2);
+  padding: 0.7em 1.1em;
+  border-radius: var(--lm-radius-pill, 999px);
+  background: color-mix(in srgb, var(--lm-surface, #141414) 80%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lm-gold) 30%, transparent);
+  color: var(--lm-text);
+  font-size: var(--lm-fs-sm);
+}
+
+.lm-hero__notice {
+  align-self: center;
+  padding: 0.65em 1em;
 }

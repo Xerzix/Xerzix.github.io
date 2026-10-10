@@ -2,7 +2,7 @@
   "name": "lumina",
   "version": "2.0.0",
   "private": true,
-  "description": "Lumina — a premium streaming platform with a Japanese garden identity and the Velvia Suggestions assistant.",
+  "description": "Lumina \u2014 a premium streaming platform with a Japanese garden identity and the Velvia Suggestions assistant.",
   "type": "module",
   "engines": {
     "node": ">=22.13.0"
@@ -15,6 +15,8 @@
     "db:seed": "node --disable-warning=ExperimentalWarning server/db/cli.js seed",
     "admin:create": "node --disable-warning=ExperimentalWarning server/db/cli.js create-admin",
     "catalog:export": "node --disable-warning=ExperimentalWarning server/db/cli.js export-catalog",
+    "artwork:sync": "node --disable-warning=ExperimentalWarning server/db/cli.js artwork-sync",
+    "art:key-art": "node scripts/make-key-art.mjs",
     "media:verify": "node scripts/verify-media.mjs",
     "media:sample": "node scripts/make-sample-media.mjs",
     "art:build": "node scripts/make-artwork.mjs",

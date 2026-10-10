@@ -65,11 +65,13 @@ export async function startTestServer({ seed = true } = {}) {
   }
 
   /** Registers an account through the API and returns its signed-in client. */
-  async function signUp(email = `user${Math.random().toString(36).slice(2, 8)}@example.com`, password = 'correct horse battery', displayName = 'Tester') {
+  async function signUp(email = `user${Math.random().toString(36).slice(2, 8)}@example.com`, password = 'correct horse battery', displayName = 'Tester', username = null) {
     const c = client();
-    const res = await c.post('/api/auth/register', { email, password, displayName, acceptTerms: true });
+    username ||= `${email.split('@')[0].replace(/[^a-z0-9]/gi, '').slice(0, 16)}${Math.random().toString(36).slice(2, 6)}`.toLowerCase();
+    const res = await c.post('/api/auth/register', { username, email, password, displayName, acceptTerms: true });
     if (res.status >= 300) throw new Error(`register failed: ${res.status} ${JSON.stringify(res.body)}`);
     c.email = email;
+    c.username = username;
     c.password = password;
     return c;
   }
@@ -89,14 +91,15 @@ export async function startTestServer({ seed = true } = {}) {
    *   const admin = await t.userClient({ role: 'admin', elevated: true });
    *   const creator = await t.userClient({ isCreator: true });
    */
-  async function userClient({ email, role = 'member', isCreator = false, elevated = false, profile = true, maxAge = null, displayName = 'Test User', password = 'correct horse battery' } = {}) {
+  async function userClient({ email, username, role = 'member', isCreator = false, elevated = false, profile = true, maxAge = null, displayName = 'Test User', password = 'correct horse battery' } = {}) {
     const { hashPassword, newId, randomToken, sha256 } = await import('../../server/lib/crypto.js');
     const now = new Date().toISOString();
     const accountId = newId('acc');
     email ||= `${accountId}@example.com`;
+    username ||= `u${accountId.replace(/[^a-z0-9]/gi, '').slice(-12).toLowerCase()}`;
     db.run(
-      `INSERT INTO accounts (id, email, display_name, password_hash, role, is_creator, created_at, updated_at, terms_accepted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      accountId, email, displayName, await hashPassword(password), role, isCreator ? 1 : 0, now, now, now,
+      `INSERT INTO accounts (id, username, email, display_name, password_hash, role, is_creator, avatar, created_at, updated_at, terms_accepted_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'crimson-sakura', ?, ?, ?)`,
+      accountId, username, email, displayName, await hashPassword(password), role, isCreator ? 1 : 0, now, now, now,
     );
     let profileId = null;
     if (profile) {
@@ -112,7 +115,7 @@ export async function startTestServer({ seed = true } = {}) {
     );
     const c = client();
     c.jar.set('lumina_sid', token);
-    Object.assign(c, { accountId, profileId, email, password });
+    Object.assign(c, { accountId, profileId, email, username, password });
     return c;
   }
 

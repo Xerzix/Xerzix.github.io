@@ -31,6 +31,7 @@ const newEmail = () => `garden${++seq}.${Date.now().toString(36)}@example.com`;
 async function registerThroughUi(page, email, displayName = 'Aiko') {
   await page.goto(`${app.base}/#/register`);
   await page.waitForSelector('.lm-auth__panel form');
+  await page.fill('input[name=username]', `u${email.split('@')[0].replace(/[^a-z0-9]/gi, '').slice(-14)}`.toLowerCase());
   await page.fill('input[name=displayName]', displayName);
   await page.fill('input[name=email]', email);
   await page.fill('input[name=password]', PW);
@@ -69,7 +70,7 @@ test('sign-up leads to the profile picker; five profiles fill the account and th
 
   await page.goto(`${app.base}/#/profiles`);
   await page.waitForSelector('.lm-profile-tile');
-  assert.equal(await page.textContent('h1'), 'Who’s watching?');
+  assert.equal(await page.textContent('h1'), 'Choose a profile');
   assert.deepEqual(await tileNames(page), ['Aiko']);
   assert.match(await page.textContent('.lm-profile-tile--add'), /1 of 5/);
 
@@ -257,7 +258,7 @@ test('an appearance preset persists across reloads and, for a profile, on the se
   await fresh.goto(`${app.base}/#/login`);
   await fresh.waitForSelector('.lm-auth__panel form');
   assert.equal(await fresh.evaluate(() => document.documentElement.style.getPropertyValue('--lm-bg')), '#080808');
-  await fresh.fill('input[name=email]', email);
+  await fresh.fill('input[name=identifier]', email);
   await fresh.fill('input[name=password]', PW);
   await fresh.click('.lm-auth__panel button[type=submit]');
   await fresh.waitForFunction(() => location.hash === '#/');

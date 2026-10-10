@@ -1,4 +1,5 @@
-// Built-in profile pictures: small illustrated tiles drawn from the garden motifs.
+// Built-in pictures. The first five are the Lumina identity pictures shown on "Who's watching?"
+// (original artwork in assets/avatars/); the rest are small tiles drawn from the garden motifs.
 import { h } from '../core/dom.js';
 
 const MOTIFS = {
@@ -17,6 +18,11 @@ const MOTIFS = {
 };
 
 export const AVATARS = [
+  { id: 'crimson-sakura', name: 'Crimson Sakura', image: 'assets/avatars/crimson-sakura.svg', identity: true },
+  { id: 'moonlit-ronin', name: 'Moonlit Ronin', image: 'assets/avatars/moonlit-ronin.svg', identity: true },
+  { id: 'golden-pavilion', name: 'Golden Pavilion', image: 'assets/avatars/golden-pavilion.svg', identity: true },
+  { id: 'midnight-kitsune', name: 'Midnight Kitsune', image: 'assets/avatars/midnight-kitsune.svg', identity: true },
+  { id: 'velvet-lotus', name: 'Velvet Lotus', image: 'assets/avatars/velvet-lotus.svg', identity: true },
   { id: 'sakura', name: 'Sakura', colors: ['#5b1a2f', '#c9607f'], motif: 'sakura', fill: true },
   { id: 'lantern', name: 'Lantern', colors: ['#3b1d0c', '#d98b2b'], motif: 'lantern' },
   { id: 'moon', name: 'Moon', colors: ['#0f1a2e', '#4a5f88'], motif: 'moon', fill: true },
@@ -34,8 +40,14 @@ export const AVATARS = [
 let gradientSeq = 0;
 
 /** Renders an avatar tile. `size` in px (the CSS class can override). */
+export const IDENTITY_AVATARS = AVATARS.filter((a) => a.identity);
+
 export function avatar(id, { size, label, className = 'lm-avatar' } = {}) {
   const a = AVATARS.find((x) => x.id === id) || AVATARS[0];
+  if (a.image) {
+    return h('span', { class: [className, 'lm-avatar--art'], style: size ? { width: `${size}px`, height: `${size}px` } : undefined, role: label ? 'img' : undefined, 'aria-label': label },
+      h('img', { src: a.image, alt: '', decoding: 'async', draggable: 'false' }));
+  }
   const gid = `av-${a.id}-${++gradientSeq}`;
   const svg = h('svg', { xmlns: 'http://www.w3.org/2000/svg', viewBox: '0 0 64 64', 'aria-hidden': 'true', focusable: 'false' },
     h('defs', null, h('linearGradient', { id: gid, x1: 0, y1: 0, x2: 1, y2: 1 }, h('stop', { offset: 0, 'stop-color': a.colors[0] }), h('stop', { offset: 1, 'stop-color': a.colors[1] }))),

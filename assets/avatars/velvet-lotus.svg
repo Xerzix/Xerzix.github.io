@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Velvet Lotus">
+  <defs>
+    <radialGradient id="bg" cx="0.5" cy="0.55" r="0.8">
+      <stop offset="0" stop-color="#26101c"/>
+      <stop offset="0.6" stop-color="#0e080c"/>
+      <stop offset="1" stop-color="#080808"/>
+    </radialGradient>
+    <linearGradient id="front" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#f6c9d6"/>
+      <stop offset="0.6" stop-color="#d0567a"/>
+      <stop offset="1" stop-color="#781b32"/>
+    </linearGradient>
+    <linearGradient id="back" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#d77a96"/>
+      <stop offset="1" stop-color="#5a1226"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f3a7bd" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#f3a7bd" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="256" height="256" fill="url(#bg)"/>
+  <circle cx="128" cy="128" r="96" fill="url(#glow)"/>
+  <!-- back petals -->
+  <g fill="url(#back)">
+    <path d="M128 160C102 140 98 96 128 58c30 38 26 82 0 102z"/>
+    <path d="M128 162c-30 0-60-22-74-56 34-4 62 16 74 56z"/>
+    <path d="M128 162c30 0 60-22 74-56-34-4-62 16-74 56z"/>
+  </g>
+  <!-- side petals -->
+  <g fill="url(#front)" opacity="0.92">
+    <path d="M128 168c-24-6-44-28-46-62 26 8 42 32 46 62z"/>
+    <path d="M128 168c24-6 44-28 46-62-26 8-42 32-46 62z"/>
+  </g>
+  <!-- front petal -->
+  <path d="M128 172c-16-14-20-44 0-80 20 36 16 66 0 80z" fill="url(#front)"/>
+  <path d="M128 98v66" stroke="#fbe3ea" stroke-opacity="0.45" stroke-width="1.5"/>
+  <g fill="#e8c98f">
+    <circle cx="120" cy="96" r="2.6"/><circle cx="136" cy="96" r="2.6"/><circle cx="128" cy="90" r="2.6"/>
+  </g>
+  <!-- water -->
+  <ellipse cx="128" cy="178" rx="70" ry="10" fill="none" stroke="#c6a46a" stroke-opacity="0.5" stroke-width="2"/>
+  <ellipse cx="128" cy="196" rx="96" ry="13" fill="none" stroke="#c6a46a" stroke-opacity="0.3" stroke-width="2"/>
+  <ellipse cx="128" cy="216" rx="110" ry="15" fill="none" stroke="#c6a46a" stroke-opacity="0.16" stroke-width="2"/>
+  <path d="M60 176c10-6 22-6 30 0-8 6-20 6-30 0z" fill="#1f3a2a"/>
+  <path d="M166 176c10-6 22-6 30 0-8 6-20 6-30 0z" fill="#1f3a2a"/>
+  <rect x="8" y="8" width="240" height="240" rx="30" fill="none" stroke="#c6a46a" stroke-opacity="0.38" stroke-width="2"/>
+</svg>

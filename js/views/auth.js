@@ -6,7 +6,8 @@ import { api } from '../api/client.js';
 import { session, refreshSession } from '../core/session.js';
 import { reload } from '../core/router.js';
 import { date } from '../core/format.js';
-import { applyFieldErrors, button, field, linkButton, notice, toast, toastError, withBusy } from '../ui/components.js';
+import { applyFieldErrors, button, checkbox, field, linkButton, notice, toast, toastError, withBusy } from '../ui/components.js';
+import { identityAvatarPicker, markIdentityChosen } from '../ui/identity.js';
 import { icon, logoMark } from '../ui/icons.js';
 
 const AUTH_PATHS = /^\/(login|register|forgot|reset)(\/|\?|$)/;
@@ -20,6 +21,7 @@ export function safeNext(raw) {
 
 /** After signing in: go to `next`, via the profile picker when no profile is active yet. */
 export async function continueAfterAuth(navigate, next) {
+  markIdentityChosen();
   await refreshSession();
   if (session.profile) navigate(next, { replace: true });
   else navigate(`/profiles?next=${encodeURIComponent(next)}`, { replace: true });
@@ -186,19 +188,20 @@ function loginView(ctx, root, next) {
   ctx.setTitle('Sign in');
   let credentials = null;
   const alert = alertRegion();
-  const emailF = field({ label: 'Email', name: 'email', type: 'email', autocomplete: 'username', required: true, value: ctx.query.get('email') || '' });
+  const emailF = field({ label: 'Username or email', name: 'identifier', autocomplete: 'username', required: true, value: ctx.query.get('email') || '' });
   emailF.control.setAttribute('autocapitalize', 'none');
   emailF.control.setAttribute('spellcheck', 'false');
   const pwF = passwordField();
+  const rememberBox = checkbox('Keep me signed in on this device', { name: 'remember', description: 'Switch to this identity from “Who’s watching?” without a password for 30 days, or until you sign out.' });
   const submit = button('Sign in', { variant: 'primary', size: 'lg', type: 'submit', block: true });
   const forgot = h('a', { class: 'lm-link lm-small', href: '#/forgot' }, 'Forgot your password?');
   const syncForgot = () => {
     const email = emailF.control.value.trim();
-    forgot.setAttribute('href', email ? `#/forgot?email=${encodeURIComponent(email)}` : '#/forgot');
+    forgot.setAttribute('href', email.includes('@') ? `#/forgot?email=${encodeURIComponent(email)}` : '#/forgot');
   };
   emailF.control.addEventListener('input', syncForgot);
   syncForgot();
-  const form = h('form', { class: 'lm-form', novalidate: true }, alert, emailF, pwF, h('div', { class: 'lm-auth__row' }, forgot), submit);
+  const form = h('form', { class: 'lm-form', novalidate: true }, alert, emailF, pwF, rememberBox, h('div', { class: 'lm-auth__row' }, forgot), submit);
 
   const signIn = async (body, { onTotp, onError }) => {
     try {
@@ -216,11 +219,11 @@ function loginView(ctx, root, next) {
     alert.replaceChildren();
     const email = emailF.control.value.trim();
     const password = pwF.control.value;
-    emailF.setError(email ? '' : 'Enter your email address.');
+    emailF.setError(email ? '' : 'Enter your username or email address.');
     pwF.setError(password ? '' : 'Enter your password.');
     if (!email) return emailF.control.focus();
     if (!password) return pwF.control.focus();
-    credentials = { email, password };
+    credentials = { identifier: email, password, remember: rememberBox.querySelector('input').checked };
     withBusy(submit, () => signIn(credentials, {
       onTotp: () => totpStep(),
       onError: (err) => {
@@ -295,7 +298,12 @@ function registerView(ctx, root, next) {
     return;
   }
   const alert = alertRegion();
-  const nameF = field({ label: 'Your name', name: 'displayName', autocomplete: 'nickname', required: true, maxlength: 40, hint: 'Shown on your first profile. You can change it later.' });
+  const userF = field({ label: 'Username', name: 'username', autocomplete: 'username', required: true, maxlength: 24, hint: '3–24 letters, numbers, dots, hyphens or underscores. Unique across Lumina; you can sign in with it.' });
+  userF.control.setAttribute('autocapitalize', 'none');
+  userF.control.setAttribute('spellcheck', 'false');
+  const nameF = field({ label: 'Display name (optional)', name: 'displayName', autocomplete: 'nickname', maxlength: 40, hint: 'Shown on your reviews. Defaults to your username.' });
+  const avatarPick = identityAvatarPicker({ taken: new Set() });
+  api.identities.list().then((r) => avatarPick.replaceWith(Object.assign(identityAvatarPicker({ taken: new Set(r.identities.map((x) => x.avatar)) })))).catch(() => {});
   const emailF = field({ label: 'Email', name: 'email', type: 'email', autocomplete: 'email', required: true });
   emailF.control.setAttribute('autocapitalize', 'none');
   emailF.control.setAttribute('spellcheck', 'false');
@@ -311,7 +319,8 @@ function registerView(ctx, root, next) {
     'I agree to the ', h('a', { href: '#/legal/terms', target: '_blank', rel: 'noopener' }, 'Terms of Service', newTab.cloneNode(true)),
     ' and have read the ', h('a', { href: '#/legal/privacy', target: '_blank', rel: 'noopener' }, 'Privacy Policy', newTab.cloneNode(true)), '.'));
   const submit = button('Create account', { variant: 'primary', size: 'lg', type: 'submit', block: true });
-  const form = h('form', { class: 'lm-form', novalidate: true }, alert, nameF, emailF, pwF, confirmF, h('div', { class: 'lm-field' }, termsLabel, termsErr), submit,
+  const rememberReg = checkbox('Keep me signed in on this device', { name: 'remember' });
+  const form = h('form', { class: 'lm-form', novalidate: true }, alert, userF, nameF, emailF, pwF, confirmF, avatarPick, rememberReg, h('div', { class: 'lm-field' }, termsLabel, termsErr), submit,
     h('p', { class: 'lm-auth__fine' }, 'Lumina Free — no payment details are needed or stored.'));
 
   const setTermsError = (msg) => {
@@ -324,13 +333,16 @@ function registerView(ctx, root, next) {
     e.preventDefault();
     alert.replaceChildren();
     const values = {
-      displayName: nameF.control.value.trim(),
+      username: userF.control.value.trim(),
+      displayName: nameF.control.value.trim() || undefined,
       email: emailF.control.value.trim(),
       password: pwF.control.value,
+      avatar: form.querySelector('input[name="avatar"]:checked')?.value,
+      remember: rememberReg.querySelector('input').checked,
       acceptTerms: terms.checked,
     };
     const problems = [
-      [nameF, values.displayName ? '' : 'Tell us what to call you.'],
+      [userF, /^[a-z0-9](?:[a-z0-9._-]{1,22})[a-z0-9]$/i.test(values.username) ? '' : 'Use 3–24 letters, numbers, dots, hyphens or underscores.'],
       [emailF, /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(values.email) ? '' : 'Enter a valid email address.'],
       [pwF, values.password.length >= 10 ? '' : 'Use at least 10 characters.'],
       [confirmF, confirmF.control.value === values.password ? '' : 'The passwords do not match.'],
@@ -343,10 +355,10 @@ function registerView(ctx, root, next) {
     withBusy(submit, async () => {
       try {
         await api.auth.register(values);
-        toast(`Welcome to Lumina, ${values.displayName}.`, { type: 'success' });
+        toast(`Welcome to Lumina, ${values.displayName || values.username}.`, { type: 'success' });
         await continueAfterAuth(ctx.navigate, next);
       } catch (err) {
-        if (err.code === 'VALIDATION_FAILED' || err.code === 'EMAIL_TAKEN') {
+        if (err.code === 'VALIDATION_FAILED' || err.code === 'EMAIL_TAKEN' || err.code === 'USERNAME_TAKEN') {
           applyFieldErrors(form, err);
           if (err.fields?.acceptTerms) setTermsError(err.fields.acceptTerms);
           if (err.code === 'EMAIL_TAKEN') {

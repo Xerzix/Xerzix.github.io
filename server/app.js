@@ -14,12 +14,15 @@ import { CatalogService } from './services/catalog.js';
 import { LibraryService } from './services/library.js';
 import { storagePath, verifyScope } from './services/storage.js';
 import { seedIfEmpty } from './seed/seed.js';
+import { backfillUsernames } from './services/identities.js';
 
 const ROUTES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'routes');
 
 export async function createApp({ dbFile = config.dbPath, seed = true } = {}) {
   const db = openDatabase(dbFile);
   if (seed) seedIfEmpty(db);
+  // Accounts from before usernames existed get a unique one (and a picture) on first start.
+  backfillUsernames(db);
 
   const catalog = new CatalogService(db);
   const services = { catalog, library: new LibraryService(db, catalog) };

@@ -2,7 +2,8 @@
 // catalog snapshot (data/catalog.json) that Preview mode (static hosting) reads.
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ROOT } from '../config.js';
+import { config, ROOT } from '../config.js';
+import { cdnUrl } from '../services/artwork.js';
 import { now, toJson } from '../db/index.js';
 import { log } from '../lib/log.js';
 import { minAgeFor } from '../../js/core/ratings.js';
@@ -35,14 +36,15 @@ export function importCatalog(db, seed) {
       db.run(
         `INSERT INTO titles (id, type, title, original_title, tagline, synopsis, year, release_date, runtime_min, age_rating, rating_source, min_age,
                              genres, tags, moods, keywords, countries, original_language, credits, awards, poster, backdrop, palette, license,
-                             status, featured, editorial_rank, added_at, updated_at, published_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                             status, featured, editorial_rank, added_at, updated_at, published_at, availability, tmdb_id, tmdb_type, artwork)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         t.id, t.type, t.title, t.originalTitle || null, t.tagline || null, t.synopsis || '', t.year ?? null, t.releaseDate || null,
         t.runtimeMin ?? null, t.ageRating || 'NR', t.ratingSource || 'advisory', minAgeFor(t.ageRating || 'NR'),
         toJson(t.genres || []), toJson(t.tags || []), toJson(t.moods || []), toJson(t.keywords || []), toJson(t.countries || []),
         t.originalLanguage || null, toJson(t.credits || {}), toJson(t.awards || []), t.poster || null, t.backdrop || null,
         toJson(t.palette || []), toJson(t.license || {}), t.status || 'published', t.featured ? 1 : 0, t.editorialRank ?? 1000,
         t.addedAt || ts, ts, (t.status || 'published') === 'published' ? ts : null,
+        t.availability === 'catalog' ? 'catalog' : 'stream', t.tmdb?.id ?? null, t.tmdb?.type || null, toJson(t.artwork || {}),
       );
       insertMedia(db, t.media, { titleId: t.id });
       insertMedia(db, t.trailer, { titleId: t.id, role: 'trailer' });
@@ -74,8 +76,18 @@ export function seedIfEmpty(db) {
  * Public snapshot for Preview mode: every published title's detail plus its playable
  * public media. Media stored privately ("storage:") is never exported.
  */
-export function exportCatalog(db, catalog) {
-  const titles = catalog.load().summaries.map((s) => catalog.detail(s.id));
+export function exportCatalog(db, catalog, { imageBase = config.tmdb.imageBase } = {}) {
+  // Static hosting has no artwork cache, so synced TMDB images point at TMDB's CDN there.
+  const cdn = (url) => cdnUrl(url, imageBase);
+  const cdnSet = (srcset) => (srcset ? srcset.split(', ').map((part) => { const [u, w] = part.split(' '); return `${cdn(u)} ${w}`; }).join(', ') : srcset);
+  const titles = catalog.load().summaries.map((s) => catalog.detail(s.id)).map((t) => ({
+    ...t,
+    poster: cdn(t.poster),
+    backdrop: cdn(t.backdrop),
+    ...(t.posterSrcset ? { posterSrcset: cdnSet(t.posterSrcset) } : {}),
+    ...(t.backdropSrcset ? { backdropSrcset: cdnSet(t.backdropSrcset) } : {}),
+    seasons: (t.seasons || []).map((season) => ({ ...season, episodes: season.episodes.map((e) => ({ ...e, still: cdn(e.still) })) })),
+  }));
   const mediaRows = db.all(`SELECT * FROM media WHERE status = 'ready' AND source NOT LIKE 'storage:%'`);
   const media = {};
   for (const m of mediaRows) {
