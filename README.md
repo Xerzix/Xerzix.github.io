@@ -129,4 +129,4 @@ SQLite through `node:sqlite`, stored in `var/lumina.db`, with WAL mode and forei
 The pages in `content/legal/` are **drafts for legal review**, not documents in effect.
 
 ## Legacy files
-`watch.html`, `media.html` and `stream.html` are from the site's previous version. They play third-party embeds from unlicensed sources and contain hard-coded API credentials. Lumina does not use or serve them. **Removing them and rotating those credentials is recommended**; see `docs/AUDIT.md`.
+`watch.html`, `media.html` and `stream.html` were the previous version's pages. Their contents (third-party embeds and hard-coded API credentials) have been removed, and each now redirects to the home page. The old TMDB and OMDb credentials are still in git history, so **rotate them**; see `docs/AUDIT.md`.
