@@ -36,7 +36,7 @@
 | Privacy | Viewing history leaves the server only when the user opts in to history-based Velvia suggestions. Data export and account deletion are implemented. | account routes |
 
 ## Legacy code notice
-The pre-Lumina files `watch.html`, `media.html` and `stream.html` remain in the repository untouched. They embed third-party players from unlicensed sources, and they contain **hard-coded TMDB and OMDb credentials**. Those credentials are in public git history, so rotate them. The Lumina server never serves these files; GitHub Pages still does. Removing them is recommended (see `docs/AUDIT.md`).
+The pre-Lumina pages `watch.html`, `media.html` and `stream.html` embedded third-party players from unlicensed sources and contained **hard-coded TMDB and OMDb credentials**. Their contents have been removed; each is now a short redirect to the home page so old links keep working. The credentials are still in public git history, so **rotate them** with TMDB and OMDb (see `docs/AUDIT.md`).
 
 ## Production checklist
 - Set `NODE_ENV=production`, a strong `SESSION_SECRET` and `PUBLIC_URL`, and terminate TLS in front of the app (`TRUST_PROXY=true` behind a proxy).
