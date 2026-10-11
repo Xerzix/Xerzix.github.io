@@ -26,6 +26,13 @@ export const ROUTES = [
   { path: '/genres', load: () => import('./views/genres.js'), title: 'Genres', page: 'genres' },
   { path: '/genres/:genre', load: () => import('./views/genres.js'), title: 'Genres', page: 'genres' },
   { path: '/discover', load: () => import('./views/discover.js'), title: 'Discover', page: 'discover' },
+  // Explore: the live TMDB catalogue (needs the server, which holds the TMDB credential).
+  { path: '/explore', load: () => import('./views/explore.js'), title: 'Explore', page: 'explore', server: true, feature: 'The TMDB catalogue' },
+  { path: '/explore/search', load: () => import('./views/explore.js'), title: 'Search TMDB', page: 'explore', server: true, feature: 'The TMDB catalogue' },
+  { path: '/explore/genres', load: () => import('./views/explore.js'), title: 'Explore genres', page: 'explore', server: true, feature: 'The TMDB catalogue' },
+  { path: '/explore/genre/:type/:genre', load: () => import('./views/explore.js'), title: 'Explore', page: 'explore', server: true, feature: 'The TMDB catalogue' },
+  { path: '/explore/title/:type/:id', load: () => import('./views/tmdb-title.js'), title: '', page: 'title', server: true, feature: 'The TMDB catalogue' },
+  { path: '/explore/:list', load: () => import('./views/explore.js'), title: 'Explore', page: 'explore', server: true, feature: 'The TMDB catalogue' },
   { path: '/title/:id', load: () => import('./views/title.js'), title: '', page: 'title' },
   { path: '/watch/:id', load: () => import('./views/watch.js'), title: 'Watching', page: 'watch', layout: 'immersive' },
   { path: '/search', load: () => import('./views/search.js'), title: 'Search', page: 'search' },

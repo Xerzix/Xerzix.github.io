@@ -176,6 +176,17 @@ export function createServerBackend() {
       session: (d) => post('/api/playback/sessions', d),
       error: (d) => post('/api/playback/errors', d),
     },
+    // Live TMDB catalogue, proxied by the server (the credential never reaches the browser).
+    tmdb: {
+      status: () => get('/api/tmdb/status'),
+      genres: (opts) => get('/api/tmdb/genres', undefined, opts),
+      trending: (q, opts) => get('/api/tmdb/trending', q, opts),
+      popular: (type, q, opts) => get(`/api/tmdb/${enc(type)}/popular`, q, opts),
+      topRated: (type, q, opts) => get(`/api/tmdb/${enc(type)}/top-rated`, q, opts),
+      discover: (type, q, opts) => get(`/api/tmdb/${enc(type)}/discover`, q, opts),
+      search: (q, opts) => get('/api/tmdb/search', q, opts),
+      details: (type, id, opts) => get(`/api/tmdb/${enc(type)}/${enc(id)}`, undefined, opts),
+    },
     velvia: {
       status: () => get('/api/velvia/status'),
       chat: (d, opts) => post('/api/velvia/chat', d, opts),

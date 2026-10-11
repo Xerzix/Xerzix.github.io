@@ -23,6 +23,9 @@ loadDotEnv(join(ROOT, '.env'));
 const env = process.env;
 const bool = (v, d = false) => (v === undefined || v === '' ? d : /^(1|true|yes|on)$/i.test(v));
 const int = (v, d) => (v === undefined || v === '' || Number.isNaN(Number(v)) ? d : Number(v));
+// `.env.example` placeholders ("your_…_here") count as unset, so a copied example file never
+// sends a bogus credential.
+const secretOrEmpty = (v) => (v && !/^your_.*_here$/i.test(v.trim()) ? v.trim() : '');
 const list = (v, d = []) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : d);
 
 const NODE_ENV = env.NODE_ENV || 'development';
@@ -118,8 +121,8 @@ export const config = {
   // TMDB metadata and artwork. Either a v4 read access token (preferred) or a v3 API key.
   // The bases are overridable for tests and self-hosted mirrors.
   tmdb: {
-    token: env.TMDB_API_TOKEN || '',
-    apiKey: env.TMDB_API_KEY || '',
+    token: secretOrEmpty(env.TMDB_API_TOKEN),
+    apiKey: secretOrEmpty(env.TMDB_API_KEY),
     apiBase: (env.TMDB_API_BASE || 'https://api.themoviedb.org/3').replace(/\/$/, ''),
     imageBase: (env.TMDB_IMAGE_BASE || 'https://image.tmdb.org/t/p').replace(/\/$/, ''),
   },

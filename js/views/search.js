@@ -69,6 +69,12 @@ export default async function render(ctx) {
     input,
     clearBtn);
 
+  // Beyond Lumina's own catalogue: the same words on the live TMDB catalogue (server only).
+  const tmdbLink = session.isServer ? h('a', { class: 'lm-link lm-small lm-srch__tmdb', href: '#/explore/search' }, icon('globe', { size: 14 }), h('span', null, 'Search all films and series on TMDB')) : null;
+  const syncTmdbLink = () => {
+    if (tmdbLink) tmdbLink.href = `#/explore/search${state.q.trim() ? `?q=${encodeURIComponent(state.q.trim().slice(0, 100))}` : ''}`;
+  };
+
   // ── Toolbar: type, filters toggle, sort ──
   const panelId = newUid('filters');
   const filterCount = h('span', { class: 'lm-srch__count', hidden: true });
@@ -323,6 +329,7 @@ export default async function render(ctx) {
 
   input.addEventListener('input', () => {
     state.q = input.value;
+    syncTmdbLink();
     clearBtn.hidden = !input.value;
     liveSearch();
   });
@@ -358,6 +365,8 @@ export default async function render(ctx) {
     controller?.abort();
   });
 
+  syncTmdbLink();
+  tmdbLink?.addEventListener('click', syncTmdbLink);
   renderType();
   renderSort();
   renderPanel();
@@ -370,7 +379,8 @@ export default async function render(ctx) {
     h('header', { class: 'lm-srch__head' },
       h('h1', { class: 'lm-h1' }, 'Search'),
       box,
-      h('p', { class: 'lm-hint lm-srch__hint', id: `${inputId}-hint` }, 'Results update as you type. Search titles, people, genres, moods and keywords.')),
+      h('p', { class: 'lm-hint lm-srch__hint', id: `${inputId}-hint` }, 'Results update as you type. Search titles, people, genres, moods and keywords.'),
+      tmdbLink),
     h('div', { class: 'lm-srch__toolbar' }, typeSlot, filtersBtn, h('span', { class: 'lm-spacer' }), sortSlot),
     panel,
     chipsRow,

@@ -163,8 +163,12 @@ export async function tmdbGet(config, path, params = {}, fetchImpl = fetch) {
   } catch {
     throw new HttpError(502, 'TMDB_UNAVAILABLE', 'TMDB could not be reached. Try again later.');
   }
-  if (res.status === 401) throw new HttpError(502, 'TMDB_AUTH_FAILED', 'TMDB rejected the configured token. Check TMDB_API_TOKEN.');
+  if (res.status === 401) throw new HttpError(502, 'TMDB_AUTH_FAILED', `TMDB rejected the configured credential. Check ${config.tmdb.token ? 'TMDB_API_TOKEN' : 'TMDB_API_KEY'}.`);
   if (res.status === 404) throw new HttpError(404, 'NOT_FOUND', 'TMDB has no entry with that id.');
+  if (res.status === 429) {
+    const retryAfter = Number(res.headers.get?.('retry-after')) || 10;
+    throw new HttpError(503, 'TMDB_BUSY', 'TMDB is busy right now. Try again in a few seconds.', { retryAfter });
+  }
   if (!res.ok) throw new HttpError(502, 'TMDB_UNAVAILABLE', `TMDB answered HTTP ${res.status}.`);
   return res.json();
 }
