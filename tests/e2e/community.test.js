@@ -9,7 +9,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startApp, startStaticServer, startBrowser, newPage, sessionCookie } from './helpers.js';
+import { startApp, startStaticServer, startBrowser, newPage, sessionCookie, freshView, gotoView } from './helpers.js';
 
 let app;
 let stat;
@@ -146,14 +146,16 @@ test('creator: apply, then a submission with a resumable upload and rights, sent
   app.db.run('UPDATE accounts SET is_creator = 1 WHERE id = ?', kenji.accountId);
 
   // 2. Dashboard → new draft.
-  await page.goto(`${app.base}/#/creators/dashboard`);
+  await gotoView(page, `${app.base}/#/creators/dashboard`, 'creators');
   await page.getByRole('button', { name: 'New submission' }).first().click();
   const dialog = page.locator('dialog.lm-modal[open]');
   await dialog.locator('input[name="projectTitle"]').fill('Moss and Stone');
   await dialog.locator('select[name="contentType"]').selectOption('documentary');
   await dialog.locator('textarea[name="description"]').fill('Three seasons with the gardeners who keep a moss garden alive in Kyoto.');
-  await dialog.getByRole('button', { name: 'Create draft' }).click();
-  await page.waitForFunction(() => /^#\/creators\/submissions\/sub_/.test(location.hash));
+  // Wait for the submission workspace itself, not just its address: the dashboard is the same
+  // page type, so only a freshly rendered view counts.
+  await freshView(page, 'creators', () => dialog.getByRole('button', { name: 'Create draft' }).click());
+  assert.match(await page.evaluate(() => location.hash), /^#\/creators\/submissions\/sub_/);
   const submissionId = /submissions\/(sub_[0-9a-z]+)/.exec(page.url())[1];
 
   // Step 1: project details.
