@@ -27,6 +27,23 @@ Open http://localhost:8080. The intro plays on the first visit only (Settings �
 - Usernames are unique regardless of case (a unique database index). Accounts created before usernames existed get one automatically on first start (e.g. `hana.sato`); it can be changed under Settings → Account & profiles → Edit profile.
 - Separate accounts need the Lumina server. On static hosting (Preview mode, e.g. GitHub Pages) the opening screen explains this and lets visitors continue to the open catalog.
 
+## Explore: the live TMDB catalogue
+
+**Explore** (`#/explore`, in the Browse menu and the footer) browses [The Movie Database (TMDB)](https://www.themoviedb.org/) live: trending titles, popular and top-rated films and series, every TMDB genre, search across films and series, and title pages with poster, backdrop, overview, release date, certification, TMDB rating, cast, crew and recommendations. Lists load more pages as you scroll (or with **Load more**), up to TMDB's limit of 500 pages per list. Lumina's own search page links to the same words on TMDB.
+
+**Setting the credential.** TMDB gives two credentials at https://www.themoviedb.org/settings/api; set **one** of them in a file named `.env` in the repository root (next to `package.json`). `.env` is gitignored, so it is never committed.
+
+```bash
+cp .env.example .env          # first time only
+# then edit .env and set ONE of:
+TMDB_API_KEY=<your 32-character "API Key">              # v3 key, sent as the api_key parameter
+TMDB_API_TOKEN=<your long "API Read Access Token">       # v4 token (starts with eyJ), sent as a Bearer header
+```
+
+Restart the server after changing `.env`. Only the server talks to TMDB (`/api/tmdb/*`, see `docs/API.md`); the browser receives titles and public image URLs, never the credential. Responses are cached in memory (lists 10 minutes, details and genres for hours). Without a credential, Explore says it is not set up; if TMDB is down or rate-limits, it says so with **Try again**, and Lumina's own catalogue keeps working. In Preview mode (GitHub Pages) Explore explains that it needs the server.
+
+**Attribution.** Explore pages, title pages and the footer carry TMDB's required notice (“This product uses the TMDB API but is not endorsed or certified by TMDB”) and a link to TMDB. To show TMDB's official logo in that credit, save it from https://www.themoviedb.org/about/logos-attribution as `assets/brand/tmdb-logo.svg`; until then the credit shows the name “TMDB” in text. TMDB titles are for discovery: they are never playable unless they are also in Lumina's own catalogue with authorised media.
+
 ## Real artwork (TMDB)
 
 - **Lumina Originals** use key art made from their own frames: each backdrop is a frame from the film, and the posters are the films’ own title cards (Garden Hours’ title is set over a frame by `npm run art:key-art`).
@@ -78,7 +95,7 @@ Optional integrations (each degrades gracefully when absent):
 | `MAIL_TRANSPORT=webhook` + `MAIL_WEBHOOK_URL` | Password-reset and security email. In development, mail goes to the server log. |
 | `FFMPEG_PATH`, `FFPROBE_PATH` | Transcoding creator uploads into HLS ladders, and detailed media probing |
 | `UPLOAD_SCAN_COMMAND` | Malware scanning of uploads (e.g. ClamAV) |
-| `TMDB_API_TOKEN` (or `TMDB_API_KEY`) | Real posters, backdrops and episode stills from TMDB (`npm run artwork:sync`), and the admin metadata import |
+| `TMDB_API_KEY` (or `TMDB_API_TOKEN`) | Explore (the live TMDB catalogue), real posters, backdrops and episode stills from TMDB (`npm run artwork:sync`), and the admin metadata import |
 
 ## Database
 SQLite through `node:sqlite`, stored in `var/lumina.db`, with WAL mode and foreign keys on. Migrations are the numbered SQL files in `server/db/migrations/`. They are applied automatically at startup, or with `npm run db:migrate`. To change the schema, add a new file; never edit an applied one. For multiple instances, port the SQL to PostgreSQL (the queries are standard).
@@ -96,7 +113,7 @@ SQLite through `node:sqlite`, stored in `var/lumina.db`, with WAL mode and forei
 *Last updated 2026-10-11.*
 
 **Built and covered by tests**
-- Discovery: home rows, personalised Discover, browse, genres, typo-tolerant search with filters (including country and language by name), My List, history and collections.
+- Discovery: home rows, personalised Discover, Explore (the live TMDB catalogue with search, trending, popular, genres and infinite scrolling), browse, genres, typo-tolerant search with filters (including country and language by name), My List, history and collections.
 - Player: HLS with adaptive quality, subtitles, resume, watch parties, and playback-quality reports.
 - Accounts: "Who's watching?" with five identities per account, profiles and parental controls, two-factor sign-in, sessions, appearance and accessibility settings.
 - Velvia Suggestions: built-in catalog engine, with an optional Claude provider.
@@ -104,7 +121,7 @@ SQLite through `node:sqlite`, stored in `var/lumina.db`, with WAL mode and forei
 - Admin dashboard: notifications (including follows of series, genres and creators), curated genres and editorial collections, artwork sync, and draft legal pages.
 - Delivery: Brotli/gzip for text assets and API JSON, a preloaded module graph and a single variable UI font (`docs/STREAMING.md` §4).
 
-**Tests:** `npm test` passes 338 of 338 tests. The ffmpeg integration tests among them are skipped unless ffmpeg is installed (or `FFMPEG_PATH` is set). `npm run test:e2e` passes 67 of 67 in Chromium. GitHub Actions runs both on every pull request and on pushes to `main` (`.github/workflows/test.yml`).
+**Tests:** `npm test` passes 353 of 353 tests. The ffmpeg integration tests among them are skipped unless ffmpeg is installed (or `FFMPEG_PATH` is set). `npm run test:e2e` passes 75 of 75 in Chromium. TMDB is replaced by a local fake in both suites, so live TMDB calls are verified by running Lumina with a real key. GitHub Actions runs both on every pull request and on pushes to `main` (`.github/workflows/test.yml`).
 
 **Known gaps**
 - **Phone page load is closer but still misses its target.** Emulated mid-range phone LCP went from about 6 s to about 4 s, against a 2.5 s target. The hero backdrop is the remaining cost; the options are in `docs/STREAMING.md` §4.

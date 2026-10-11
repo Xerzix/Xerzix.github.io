@@ -4,13 +4,21 @@ import { HttpError, tooMany } from './errors.js';
 
 export function buildCsp() {
   const media = config.media.extraOrigins.join(' ');
+  // Posters and backdrops in the live TMDB catalogue load straight from TMDB's public image CDN
+  // (no credential involved). Only images: scripts and API calls stay same-origin.
+  let tmdbImages = '';
+  try {
+    tmdbImages = new URL(config.tmdb.imageBase).origin;
+  } catch {
+    tmdbImages = '';
+  }
   return [
     "default-src 'self'",
     "script-src 'self'",
     // Inline style attributes are used by a few components for computed geometry.
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
-    `img-src 'self' data: blob: ${media}`,
+    `img-src 'self' data: blob: ${media}${tmdbImages ? ` ${tmdbImages}` : ''}`,
     // data: only for media: hls.js gives each HLS subtitle rendition a placeholder
     // <track src="data:,WEBVTT"> and fills it with cues itself. Media cannot run script.
     `media-src 'self' blob: data: ${media}`,

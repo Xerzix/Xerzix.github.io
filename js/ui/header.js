@@ -28,6 +28,7 @@ const NAV = [
 // are always one click away without duplicating what is already in the bar.
 const MORE = [
   { href: '#/discover', key: 'nav.discover', label: 'Discover', icon: 'compass' },
+  { href: '#/explore', key: 'nav.explore', label: 'Explore TMDB', icon: 'globe' },
   { href: '#/genres', key: 'nav.genres', label: 'Genres', icon: 'grid', priority: 2 },
   { href: '#/new', key: 'nav.new', label: 'New Releases', icon: 'calendar', priority: 2 },
   { href: '#/trending', key: 'nav.trending', label: 'Trending', icon: 'flame', priority: 3 },

@@ -331,10 +331,10 @@ test('creators can be followed, Discover is in the header at every desktop width
     await page.waitForFunction(() => document.querySelector('[data-row="creator-spotlight"] [data-follow-creator]')?.getAttribute('aria-pressed') === 'false');
     assert.ok(!(await u.get('/api/follows')).body.items.some((f) => f.type === 'creator'));
 
-    // Wide desktop: Discover and Creators are in the Browse menu; Trending is not repeated.
+    // Wide desktop: Discover, Explore TMDB and Creators are in the Browse menu; Trending is not repeated.
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByRole('button', { name: 'Browse' }).click();
-    assert.deepEqual(await page.locator('.lm-nav__more .lm-menu__item:visible').allInnerTexts(), ['Discover', 'Creators']);
+    assert.deepEqual(await page.locator('.lm-nav__more .lm-menu__item:visible').allInnerTexts(), ['Discover', 'Explore TMDB', 'Creators']);
     await page.keyboard.press('Escape');
 
     // Search: a country by name, and the Country of origin filter.

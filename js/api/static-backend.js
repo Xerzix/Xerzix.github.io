@@ -366,6 +366,17 @@ export async function createStaticBackend() {
         return respond(titles, payload, signals());
       },
     },
+    // The TMDB catalogue needs the server, which holds the TMDB credential.
+    tmdb: {
+      status: async () => ({ configured: false, preview: true, attribution: 'This product uses the TMDB API but is not endorsed or certified by TMDB.' }),
+      genres: notInPreview('The TMDB catalogue'),
+      trending: notInPreview('The TMDB catalogue'),
+      popular: notInPreview('The TMDB catalogue'),
+      topRated: notInPreview('The TMDB catalogue'),
+      discover: notInPreview('The TMDB catalogue'),
+      search: notInPreview('The TMDB catalogue'),
+      details: notInPreview('The TMDB catalogue'),
+    },
     creators: new Proxy({}, { get: () => notInPreview('Creator submissions') }),
     uploads: new Proxy({}, { get: () => notInPreview('Uploads') }),
     notifications: {

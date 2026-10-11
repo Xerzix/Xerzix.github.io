@@ -234,7 +234,7 @@ export class ArtworkService {
         log.warn('artwork sync failed', { title: id, code: err.code, message: err.message });
         results.push({ id, status: 'error', code: err.code || 'ERROR', message: err instanceof HttpError ? err.message : 'Sync failed; see the server log.' });
         // Stop early when TMDB itself is unreachable or rejects the credential.
-        if (['TMDB_UNAVAILABLE', 'TMDB_AUTH_FAILED'].includes(err.code)) break;
+        if (['TMDB_UNAVAILABLE', 'TMDB_AUTH_FAILED', 'TMDB_BUSY'].includes(err.code)) break;
       }
     }
     this.catalog?.invalidate();

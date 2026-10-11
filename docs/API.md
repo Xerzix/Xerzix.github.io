@@ -50,6 +50,20 @@ JSON over HTTPS, same-origin, cookie session. The browser client lives in `js/ap
 | GET | `/api/playback/:titleId?episodeId&role=trailer` | Playback (402 `ENTITLEMENT_REQUIRED` in paid modes, 404 `MEDIA_UNAVAILABLE`) |
 | GET | `/api/discover` | `{sections: [{id, title, description?, items: [{title, reason?}], creators?: [{id, name}]}]}` (personalised discovery page; `creators` on the creator-spotlight section lists the followable creators named in the row) |
 
+## TMDB catalogue (public, read-only, rate-limited)
+The server calls TMDB with `TMDB_API_KEY` (v3) or `TMDB_API_TOKEN` (v4); the credential never appears in a response. Lists return `{ page, totalPages, totalResults, items }` (pages 1–500, TMDB's own limit); items are `{ id, type: 'movie'|'tv', title, originalTitle, overview, releaseDate, year, rating (0–10 or null), voteCount, genres, poster: {src, srcset}|null, backdrop }` with image URLs on `image.tmdb.org`. Without a credential every data endpoint answers `503 TMDB_NOT_CONFIGURED`; TMDB failures answer `502 TMDB_UNAVAILABLE`, `502 TMDB_AUTH_FAILED` or `503 TMDB_BUSY`.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/tmdb/status` | `{ configured, attribution }` |
+| GET | `/api/tmdb/genres` | `{ movie: [{id, name}], tv: [...] }` |
+| GET | `/api/tmdb/trending?type=all\|movie\|tv&window=day\|week&page=` | |
+| GET | `/api/tmdb/:type/popular?page=` | `type` is `movie` or `tv` |
+| GET | `/api/tmdb/:type/top-rated?page=` | |
+| GET | `/api/tmdb/:type/discover?genre=&sort=popular\|rating\|newest&page=` | Titles in one genre |
+| GET | `/api/tmdb/search?q=&type=multi\|movie\|tv&page=` | `q` 1–100 characters |
+| GET | `/api/tmdb/:type/:id` | Details plus `tagline, runtimeMin, certification, cast[], directors, writers, seasonCount, recommendations[]` |
+
 ## Library (profile)
 | GET | `/api/library/summary` | `{watchlistIds[], progress: {[titleId]: {episodeId, positionS, durationS, completed, updatedAt}}, ratings: {[titleId]: 1-5}}` |
 |---|---|---|
