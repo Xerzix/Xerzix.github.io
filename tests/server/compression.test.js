@@ -70,8 +70,22 @@ test('range requests and binary assets are never compressed', async () => {
   assert.equal(ranged.headers['content-encoding'], undefined);
   assert.equal(ranged.body.length, 100);
 
-  const font = await rawGet(t.base, '/assets/fonts/inter-latin-400-normal.woff2', { 'Accept-Encoding': 'br' });
+  const font = await rawGet(t.base, '/assets/fonts/inter-latin-wght-normal.woff2', { 'Accept-Encoding': 'br' });
   assert.equal(font.status, 200);
   assert.equal(font.headers['content-encoding'], undefined);
   assert.equal(font.headers.vary, undefined);
+});
+
+test('large JSON responses are compressed; small ones are not', async () => {
+  const big = await rawGet(t.base, '/api/home', { 'Accept-Encoding': 'br' });
+  assert.equal(big.status, 200);
+  assert.equal(big.headers['content-encoding'], 'br');
+  assert.equal(big.headers.vary, 'Accept-Encoding');
+  assert.ok(Array.isArray(JSON.parse(brotliDecompressSync(big.body)).rows ?? []));
+  const plain = await rawGet(t.base, '/api/home');
+  assert.equal(plain.headers['content-encoding'], undefined);
+  assert.deepEqual(JSON.parse(plain.body), JSON.parse(brotliDecompressSync(big.body)));
+
+  const small = await rawGet(t.base, '/api/health', { 'Accept-Encoding': 'br' });
+  assert.equal(small.headers['content-encoding'], undefined);
 });

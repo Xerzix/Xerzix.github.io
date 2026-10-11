@@ -5,7 +5,10 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { brotliCompress, constants as zlibConstants, gzip } from 'node:zlib';
+import { pickEncoding } from './encoding.js';
 import { HttpError } from './errors.js';
+
+export { pickEncoding };
 
 export const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -51,21 +54,6 @@ const gzipAsync = promisify(gzip);
 const compressedCache = new Map();
 const COMPRESSED_CACHE_BYTES = 32 * 1024 * 1024;
 let compressedCacheSize = 0;
-
-/** Picks br or gzip from an Accept-Encoding header, or null. Codings with q=0 are refused. */
-export function pickEncoding(header) {
-  if (!header) return null;
-  const accepted = new Map();
-  for (const part of String(header).toLowerCase().split(',')) {
-    const [name, ...params] = part.trim().split(';');
-    const q = params.map((p) => /^\s*q=([\d.]+)\s*$/.exec(p)).find(Boolean);
-    accepted.set(name.trim(), q ? Number(q[1]) : 1);
-  }
-  const ok = (name) => (accepted.get(name) ?? accepted.get('*') ?? 0) > 0;
-  if (ok('br')) return 'br';
-  if (ok('gzip')) return 'gzip';
-  return null;
-}
 
 async function compressedBody(filePath, etag, encoding) {
   const key = `${filePath}\0${etag}\0${encoding}`;
