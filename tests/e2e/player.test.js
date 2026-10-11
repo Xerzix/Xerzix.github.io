@@ -99,6 +99,10 @@ const waitPlaying = (page, minT = 0.3, timeout = 15000) => page.waitForFunction(
 
 /** Shows the auto-hiding controls (a real mouse movement over the player). */
 async function wake(page) {
+  // The player animates open from zero height. Measured mid-animation, "a third of the way down"
+  // lands inside the top control bar, and a mouse resting there rightly keeps the controls up.
+  // So wait until it is laid out at full size.
+  await page.waitForFunction(() => (document.querySelector('.lm-player')?.getBoundingClientRect().height || 0) > 300);
   const box = await page.locator('.lm-player').boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 3);
   await page.mouse.move(box.x + box.width / 2 + 12, box.y + box.height / 3 + 8);
@@ -438,6 +442,10 @@ test('keyboard focus keeps the controls up; the series control bar fits a 360 px
   for (let i = 0; i < 20 && !(await page.evaluate(() => !!document.activeElement?.closest('.lm-player__bottom'))); i++) await page.keyboard.press('Tab');
   const focused = await page.evaluate(() => document.activeElement?.getAttribute('aria-label'));
   assert.ok(await page.evaluate(() => !!document.activeElement?.closest('.lm-player__bottom')), 'Tab reaches the bottom bar');
+  // The episode is only about 12 s long. On a slow runner the Tab loop above can take several
+  // seconds, and an episode that ends shows the end screen, which rightly keeps the controls up.
+  // Rewind (without moving focus) so the checks below happen mid-episode.
+  await page.evaluate(() => { document.querySelector('.lm-player video').currentTime = 0.5; });
   await page.waitForTimeout(4500); // past the 3 s auto-hide
   assert.equal((await video(page)).paused, false);
   assert.equal(await page.getAttribute('.lm-player', 'data-controls'), 'visible', `controls stay up while “${focused}” has keyboard focus`);

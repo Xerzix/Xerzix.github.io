@@ -3,7 +3,7 @@
 // licence details, motion and touch-target settings, and Preview mode statistics.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { newPage, sessionCookie, startApp, startBrowser, startStaticServer } from './helpers.js';
+import { freshView, gotoView, newPage, sessionCookie, startApp, startBrowser, startStaticServer } from './helpers.js';
 
 let app;
 let browser;
@@ -284,11 +284,12 @@ test('Preview mode: statistics switch off for real, and a collection description
     assert.equal(stats.moviesWatched, 0);
 
     // Collection description: set it, then clear it.
-    await page.goto(`${site.base}/#/my-list/collections`);
-    await page.click('button:has-text("New collection")');
-    await page.fill('input[name=name]', 'Preview picks');
-    await page.fill('textarea[name=description]', 'Some words');
-    await page.click('button:has-text("Create collection")');
+    await gotoView(page, `${site.base}/#/my-list/collections`, 'my-list');
+    await page.click('#main button:has-text("New collection")');
+    await page.waitForSelector('dialog[open] input[name=name]');
+    await page.fill('dialog[open] input[name=name]', 'Preview picks');
+    await page.fill('dialog[open] textarea[name=description]', 'Some words');
+    await freshView(page, 'collection', () => page.click('dialog[open] button:has-text("Create collection")'));
     await page.locator('.lm-coll__desc', { hasText: 'Some words' }).waitFor();
     await page.locator('.lm-coll .lm-empty', { hasText: 'Choose Add titles' }).waitFor();
     await page.click('button:has-text("Edit")');

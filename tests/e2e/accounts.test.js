@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { startApp, startStaticServer, startBrowser, newPage } from './helpers.js';
+import { startApp, startStaticServer, startBrowser, newPage, freshView } from './helpers.js';
 
 const PW = 'velvet lanterns at dusk';
 const LIMIT_MESSAGE = 'This account already has 5 profiles, the maximum. Profiles belong to one account — they are not separate subscriptions or simultaneous streams. Delete a profile to create another.';
@@ -37,8 +37,7 @@ async function registerThroughUi(page, email, displayName = 'Aiko') {
   await page.fill('input[name=password]', PW);
   await page.fill('input[name=confirm]', PW);
   await page.check('input[name=acceptTerms]');
-  await page.click('.lm-auth__panel button[type=submit]');
-  await page.waitForFunction(() => location.hash === '#/');
+  await freshView(page, 'home', () => page.click('.lm-auth__panel button[type=submit]'));
 }
 
 /** Calls the API from inside the page, with the page's session cookie. */
@@ -260,8 +259,7 @@ test('an appearance preset persists across reloads and, for a profile, on the se
   assert.equal(await fresh.evaluate(() => document.documentElement.style.getPropertyValue('--lm-bg')), '#080808');
   await fresh.fill('input[name=identifier]', email);
   await fresh.fill('input[name=password]', PW);
-  await fresh.click('.lm-auth__panel button[type=submit]');
-  await fresh.waitForFunction(() => location.hash === '#/');
+  await freshView(fresh, 'home', () => fresh.click('.lm-auth__panel button[type=submit]'));
   await fresh.waitForFunction(() => document.documentElement.style.getPropertyValue('--lm-bg') === '#0a0505');
   await fresh.goto(`${app.base}/#/settings/appearance`);
   await fresh.waitForSelector('.lm-preset-grid');
@@ -311,8 +309,8 @@ test('a custom colour with poor contrast shows a readable warning; the fix and D
   await page.click('.lm-settings__nav a[href="#/settings/playback"]');
   await page.waitForSelector('dialog .lm-modal__foot');
   assert.match(await page.textContent('dialog'), /Discard unsaved changes\?/);
-  await page.locator('dialog .lm-modal__foot button', { hasText: 'Discard changes' }).click();
-  await page.waitForFunction(() => location.hash === '#/settings/playback');
+  await freshView(page, 'settings', () => page.locator('dialog .lm-modal__foot button', { hasText: 'Discard changes' }).click());
+  assert.equal(await page.evaluate(() => location.hash), '#/settings/playback');
   await page.waitForSelector('.lm-settings-group');
   assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--lm-text')), '#f8f5f2');
   assert.deepEqual(page.errors, []);

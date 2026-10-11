@@ -1,7 +1,7 @@
 // "Who's watching?", five identities, switching accounts (navigation menu and Settings), sign-out.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { startApp, startBrowser, startStaticServer, newPage } from './helpers.js';
+import { startApp, startBrowser, startStaticServer, newPage, freshView, gotoView } from './helpers.js';
 
 const PW = 'moonlight over the koi pond';
 let app;
@@ -29,8 +29,13 @@ async function createIdentity(page, username) {
   await page.fill('dialog[open] input[name=email]', `${username}@example.com`);
   await page.fill('dialog[open] input[name=password]', PW);
   await page.check('dialog[open] input[name=acceptTerms]');
-  await page.click('dialog[open] button[type=submit]');
-  await page.waitForFunction(() => location.hash === '#/');
+  await freshView(page, 'home', () => page.click('dialog[open] button[type=submit]'));
+}
+
+/** Opens "Who's watching?" and waits for its freshly loaded grid. */
+async function whosWatching(page, query = '') {
+  await gotoView(page, `${app.base}/#/whos-watching${query}`, 'whos-watching');
+  await page.waitForSelector('#main > .lm-view:not([data-stale]) .lm-who__grid');
 }
 
 const menuUser = (page) => page.locator('.lm-menu__who > div > span').first().textContent();
@@ -47,8 +52,7 @@ test('Lumina opens to “Who’s watching?” with exactly five slots; identitie
   const names = ['aiko', 'kenji', 'mei', 'sora', 'yuki'];
   for (const n of names) {
     await createIdentity(page, n);
-    await page.goto(`${app.base}/#/whos-watching`);
-    await page.waitForSelector('.lm-who__grid');
+    await whosWatching(page);
   }
   assert.equal(await page.locator('.lm-who__slot').count(), 5, 'still five slots');
   assert.equal(await page.locator('.lm-who__slot--empty').count(), 0, 'no sixth slot');
@@ -59,7 +63,7 @@ test('Lumina opens to “Who’s watching?” with exactly five slots; identitie
   assert.match(await page.locator('.lm-who__status').textContent(), /maximum of five/);
 
   // A duplicate username is refused (case-insensitive) — try through the sign-up page.
-  await page.goto(`${app.base}/#/whos-watching?manage=1`);
+  await whosWatching(page, '?manage=1');
   await page.locator('.lm-who__remove').first().click();
   await page.click('dialog[open] .lm-btn--danger');
   await page.waitForFunction(() => document.querySelectorAll('.lm-who__slot--empty').length === 1 && !document.querySelector('dialog[open]'));
@@ -82,16 +86,16 @@ test('switching account from the navigation menu changes the signed-in identity 
   await page.waitForSelector('.lm-who__grid');
   await createIdentity(page, 'hana');
   // Hana adds a title to her list.
-  await page.goto(`${app.base}/#/title/hanami`);
+  await gotoView(page, `${app.base}/#/title/hanami`, 'title');
   await page.locator('.lm-detail__hero button[data-list-toggle]').first().click();
   await page.waitForFunction(() => document.querySelector('.lm-detail__hero button[data-list-toggle]')?.getAttribute('aria-pressed') === 'true');
 
-  await page.goto(`${app.base}/#/whos-watching`);
+  await whosWatching(page);
   await createIdentity(page, 'ren');
   await page.click('.lm-profile-btn');
   assert.equal(await menuUser(page), '@ren');
   // Ren's list is empty.
-  await page.goto(`${app.base}/#/my-list`);
+  await gotoView(page, `${app.base}/#/my-list`, 'my-list');
   await page.waitForSelector('.lm-empty, .lm-grid');
   assert.equal(await page.locator('[data-title-id="hanami"]').count(), 0);
 
@@ -105,13 +109,12 @@ test('switching account from the navigation menu changes the signed-in identity 
   await page.click('dialog[open] button[type=submit]');
   await page.waitForSelector('dialog[open] .lm-form-error:not(:empty)');
   await page.fill('dialog[open] input[name=password]', PW);
-  await page.click('dialog[open] button[type=submit]');
-  await page.waitForFunction(() => location.hash === '#/');
+  await freshView(page, 'home', () => page.click('dialog[open] button[type=submit]'));
   await page.click('.lm-profile-btn');
   assert.equal(await menuUser(page), '@hana');
   const session = await page.evaluate(() => fetch('/api/session').then((r) => r.json()));
   assert.equal(session.account.username, 'hana', 'the server session is Hana’s');
-  await page.goto(`${app.base}/#/my-list`);
+  await gotoView(page, `${app.base}/#/my-list`, 'my-list');
   await page.waitForSelector('[data-title-id="hanami"]');
   assert.deepEqual(page.errors, []);
   await page.context().close();
@@ -128,24 +131,21 @@ test('Settings → Account & profiles switches accounts; signing out locks priva
   await page.fill('dialog[open] input[name=password]', PW);
   await page.check('dialog[open] input[name=remember]');
   await page.check('dialog[open] input[name=acceptTerms]');
-  await page.click('dialog[open] button[type=submit]');
-  await page.waitForFunction(() => location.hash === '#/');
-  await page.goto(`${app.base}/#/whos-watching`);
+  await freshView(page, 'home', () => page.click('dialog[open] button[type=submit]'));
+  await whosWatching(page);
   await createIdentity(page, 'taro');
 
-  await page.goto(`${app.base}/#/settings/account`);
+  await gotoView(page, `${app.base}/#/settings/account`, 'settings');
   await page.waitForSelector('.lm-acctid');
   assert.match(await page.locator('.lm-acctid__text').textContent(), /@taro/);
   assert.equal(await page.locator('.lm-acctid__roster li').count(), 2);
-  await page.click('.lm-acctid__roster button[aria-label="Switch to nori"]');
-  await page.waitForFunction(() => location.hash === '#/');
+  await freshView(page, 'home', () => page.click('.lm-acctid__roster button[aria-label="Switch to nori"]'));
   const s = await page.evaluate(() => fetch('/api/session').then((r) => r.json()));
   assert.equal(s.account.username, 'nori', 'remembered identity switched without a password');
 
   // Sign out from the menu: back to "Who's watching?", and private pages need an identity.
   await page.click('.lm-profile-btn');
-  await page.click('.lm-menu__item:has-text("Sign out")');
-  await page.waitForFunction(() => location.hash === '#/whos-watching');
+  await freshView(page, 'whos-watching', () => page.click('.lm-menu__item:has-text("Sign out")'));
   const after = await page.evaluate(() => fetch('/api/session').then((r) => r.json()));
   assert.equal(after.account, null);
   const list = await page.evaluate(() => fetch('/api/library/watchlist').then((r) => r.status));

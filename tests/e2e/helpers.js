@@ -59,3 +59,25 @@ export async function startApp() {
 export function sessionCookie(client) {
   return { name: 'lumina_sid', value: client.jar.get('lumina_sid') };
 }
+
+/**
+ * Runs `action` (a click, a submit, a goto) and waits until the router has rendered a NEW view
+ * for `pageName` (body[data-page]). Waiting on the hash or on a selector alone races the
+ * router: the hash changes before the view renders, and the previous view's markup can still
+ * match. Views present before the action are marked stale, so only a fresh render counts.
+ */
+export async function freshView(page, pageName, action) {
+  await page.evaluate(() => {
+    for (const v of document.querySelectorAll('#main > .lm-view')) v.dataset.stale = '1';
+  });
+  await action();
+  await page.waitForFunction((name) => {
+    const v = document.querySelector('#main > .lm-view');
+    return !!v && !v.dataset.stale && document.body.dataset.page === name;
+  }, pageName);
+}
+
+/** page.goto() that resolves once the router has rendered the destination view. */
+export function gotoView(page, url, pageName) {
+  return freshView(page, pageName, () => page.goto(url));
+}
