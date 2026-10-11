@@ -459,13 +459,16 @@ test('keyboard focus keeps the controls up; the series control bar fits a 360 px
     .map((b) => { const r = b.getBoundingClientRect(); return { label: b.getAttribute('aria-label'), left: r.left, right: r.right, height: r.height }; })
     .sort((a, b) => a.left - b.left));
   assert.ok(rects.length >= 7, JSON.stringify(rects));
+  // Rects can sit on fractional positions mid-transition, so heights carry float error
+  // (39.999996 for a 40 px box); compare to within a hundredth of a pixel.
+  const atLeast40 = (px) => px >= 40 - 0.01;
   for (const r of rects) {
     assert.ok(r.left >= 0 && r.right <= 360, `${r.label} is on screen: ${r.left}–${r.right}`);
-    assert.ok(r.height >= 40, `${r.label} is at least 40 px tall`);
+    assert.ok(atLeast40(r.height), `${r.label} is at least 40 px tall`);
   }
   for (let i = 1; i < rects.length; i++) assert.ok(rects[i].left >= rects[i - 1].right - 0.5, `${rects[i - 1].label} and ${rects[i].label} do not overlap`);
   const time = await phone.locator('.lm-player__time').boundingBox();
-  assert.ok(time.height >= 40, `time toggle is ${time.height} px tall`);
+  assert.ok(atLeast40(time.height), `time toggle is ${time.height} px tall`);
   await phone.context().close();
 });
 
