@@ -112,6 +112,9 @@ async function guard(route, ctx) {
 
 // ── Boot ──────────────────────────────────────────────────
 export async function boot() {
+  // Server detection and the session request start first, so the network works while the
+  // garden and particle fields are set up.
+  const apiReady = initApi();
   document.querySelector('.lm-skip-link')?.addEventListener('click', (e) => {
     e.preventDefault();
     document.getElementById('main').focus();
@@ -125,7 +128,7 @@ export async function boot() {
   frontField = new ParticleField(front, { front: true });
   setAppearance(store.get('appearance', DEFAULT_APPEARANCE), { persistLocal: false });
 
-  const mode = await initApi();
+  const mode = await apiReady;
   document.documentElement.dataset.mode = mode;
   try {
     await refreshSession();

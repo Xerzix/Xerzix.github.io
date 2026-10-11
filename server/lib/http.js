@@ -1,10 +1,15 @@
 // Minimal HTTP application layer on top of node:http: routing with params, guard chains,
 // JSON bodies with size limits, cookies, and uniform error responses.
 import { randomBytes } from 'node:crypto';
+import { brotliCompressSync, constants as zlibConstants, gzipSync } from 'node:zlib';
+import { pickEncoding } from './encoding.js';
 import { HttpError, badRequest } from './errors.js';
 import { log } from './log.js';
 
 const DEFAULT_JSON_LIMIT = 1024 * 1024; // 1 MiB
+// JSON bodies at least this large are compressed when the client accepts it. Smaller ones
+// gain less than the headers cost.
+const COMPRESS_JSON_BYTES = 2048;
 
 function compile(pattern) {
   const keys = [];
@@ -152,12 +157,20 @@ export class Context {
 
   json(data, status = 200) {
     if (this.sent) return;
-    const payload = JSON.stringify(data);
-    this.writeHead(status, {
+    let payload = JSON.stringify(data);
+    const headers = {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': this._headers['Cache-Control'] || 'no-store',
-      'Content-Length': Buffer.byteLength(payload),
-    });
+    };
+    if (Buffer.byteLength(payload) >= COMPRESS_JSON_BYTES) {
+      headers.Vary = 'Accept-Encoding';
+      const encoding = pickEncoding(this.header('accept-encoding'));
+      if (encoding === 'br') payload = brotliCompressSync(payload, { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5 } });
+      else if (encoding === 'gzip') payload = gzipSync(payload, { level: 6 });
+      if (encoding) headers['Content-Encoding'] = encoding;
+    }
+    headers['Content-Length'] = Buffer.byteLength(payload);
+    this.writeHead(status, headers);
     this.res.end(this.method === 'HEAD' ? undefined : payload);
   }
 

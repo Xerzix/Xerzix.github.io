@@ -58,6 +58,7 @@ For **Preview mode**, serve the repository root with any static file server (Git
 | `npm run art:build` | Regenerate the key-art SVGs |
 | `npm run worker` | Run the transcoding worker as a separate process |
 | `npm run vendor:sync` | Copy hls.js from node_modules into `js/vendor/` |
+| `npm run preload:sync` | Rewrite the `<link rel="modulepreload">` list in `index.html` after changing the shell's or home view's imports |
 | `npm run perf:baseline` | Measure LCP, CLS and click latency of the home and title pages (desktop and throttled phone) |
 
 ## Configuration
@@ -92,31 +93,34 @@ SQLite through `node:sqlite`, stored in `var/lumina.db`, with WAL mode and forei
 - `docs/MONETIZATION.md`: how subscriptions or ads would plug in (none are active)
 
 ## Status and next steps
-*Last updated 2026-10-09.*
+*Last updated 2026-10-11.*
 
 **Built and covered by tests**
 - Discovery: home rows, personalised Discover, browse, genres, typo-tolerant search with filters (including country and language by name), My List, history and collections.
 - Player: HLS with adaptive quality, subtitles, resume, watch parties, and playback-quality reports.
-- Accounts: profiles and parental controls, two-factor sign-in, sessions, appearance and accessibility settings.
+- Accounts: "Who's watching?" with five identities per account, profiles and parental controls, two-factor sign-in, sessions, appearance and accessibility settings.
 - Velvia Suggestions: built-in catalog engine, with an optional Claude provider.
 - Community: reviews, creator applications and submissions, resumable uploads and the transcoding pipeline.
-- Admin dashboard: notifications (including follows of series, genres and creators), curated genres and editorial collections, and draft legal pages.
+- Admin dashboard: notifications (including follows of series, genres and creators), curated genres and editorial collections, artwork sync, and draft legal pages.
+- Delivery: Brotli/gzip for text assets and API JSON, a preloaded module graph and a single variable UI font (`docs/STREAMING.md` §4).
 
-**Tests:** `npm test` passes 300 of 308 tests. The other 8 are ffmpeg integration tests, which are skipped unless `FFMPEG_PATH` is set. `npm run test:e2e` passes 57 of 57 in Chromium.
+**Tests:** `npm test` passes 338 of 338 tests. The ffmpeg integration tests among them are skipped unless ffmpeg is installed (or `FFMPEG_PATH` is set). `npm run test:e2e` passes 67 of 67 in Chromium. GitHub Actions runs both on every pull request and on pushes to `main` (`.github/workflows/test.yml`).
 
 **Known gaps**
-- **Phone page load misses its target.** Measured LCP is about 6 s on an emulated mid-range phone, against a 2.5 s target. Text assets are served uncompressed and 13 stylesheets load up front. Measurements and causes are in `docs/STREAMING.md` §4.
+- **Phone page load is closer but still misses its target.** Emulated mid-range phone LCP went from about 6 s to about 4 s, against a 2.5 s target. The hero backdrop is the remaining cost; the options are in `docs/STREAMING.md` §4.
 - **Streaming metrics are not measured.** Time to first frame and rebuffering need real devices and the production telemetry. This test Chromium cannot decode H.264.
 - **External services are not connected:** email delivery, malware scanning, payments, DRM, and multi-instance pub/sub (see `docs/AUDIT.md` §6). Velvia's AI conversation needs an API key; otherwise the built-in engine answers.
+- **The open movies show the Lumina fallback cover** until an administrator runs the artwork sync with `TMDB_API_TOKEN` set (Admin → Content → **Sync artwork**, or `npm run artwork:sync`), then `npm run catalog:export` for the GitHub Pages preview.
 - **Legal pages are drafts** awaiting legal review.
-- **Legacy pages still contain hard-coded credentials.** `watch.html`, `media.html` and `stream.html` should be removed and their credentials rotated.
+- **Old API keys need rotating.** The legacy pages are gone, but the TMDB and OMDb keys they contained are still in git history.
 
 **Recommended next phase**
-1. Turn on Brotli or gzip at the CDN, split CSS by route, then measure again on real Android and iOS devices.
-2. Move media to object storage behind a CDN, using a managed transcoder (`docs/STREAMING.md` checklist).
-3. Connect a mail provider and a malware scanner. Then run a security review against `docs/SECURITY.md`.
-4. Move to PostgreSQL and Redis before running more than one server instance.
-5. Complete the legal review, then decide on monetisation (`docs/MONETIZATION.md`).
+1. Rotate the old TMDB and OMDb keys, then set a fresh `TMDB_API_TOKEN` on the server and sync artwork.
+2. Add a 1280 px hero backdrop and inline the first hero, then measure on real Android and iOS devices.
+3. Move media to object storage behind a CDN, using a managed transcoder (`docs/STREAMING.md` checklist).
+4. Connect a mail provider and a malware scanner. Then run a security review against `docs/SECURITY.md`.
+5. Move to PostgreSQL and Redis before running more than one server instance.
+6. Complete the legal review, then decide on monetisation (`docs/MONETIZATION.md`).
 
 ## Content and licensing
 - The seed catalog contains four **Blender Foundation open movies** (Creative Commons Attribution). They are streamed from public hosts, and each title page shows its attribution.
@@ -129,4 +133,4 @@ SQLite through `node:sqlite`, stored in `var/lumina.db`, with WAL mode and forei
 The pages in `content/legal/` are **drafts for legal review**, not documents in effect.
 
 ## Legacy files
-`watch.html`, `media.html` and `stream.html` are from the site's previous version. They play third-party embeds from unlicensed sources and contain hard-coded API credentials. Lumina does not use or serve them. **Removing them and rotating those credentials is recommended**; see `docs/AUDIT.md`.
+`watch.html`, `media.html` and `stream.html` were the previous version's pages. Their contents (third-party embeds and hard-coded API credentials) have been removed, and each now redirects to the home page. The old TMDB and OMDb credentials are still in git history, so **rotate them**; see `docs/AUDIT.md`.

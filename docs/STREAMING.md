@@ -108,13 +108,39 @@ What this shows:
 - **Clicks meet the INP target on desktop.** One phone click (opening the menu drawer under 4× CPU
   slowdown) came in at about 250 ms, just over the 200 ms target.
 
-Next steps, in order of effect:
-1. Serve text assets with Brotli or gzip, either at the CDN or reverse proxy (recommended) or in
-   `server/lib/static.js`.
-2. Combine the stylesheets and defer the ones a route does not need. Player, account, community
-   and admin CSS are not needed on the home page.
-3. Load fewer font files on first paint. Today that is four Inter weights and two Cormorant
-   Garamond weights.
+#### After the load-time work (2026-10-11)
+Same script and machine class, median of 5 runs. The home page is now measured past
+"Who's watching?", which opens first once per browser session.
+
+| Page | Conditions | LCP | CLS | FCP | Click → next paint |
+|---|---|---|---|---|---|
+| Home | Desktop 1440×900, no throttling | 1504 ms | 0 | 496 ms | 176 ms |
+| Title | Desktop 1440×900, no throttling | 656 ms | 0 | 432 ms | 192 ms |
+| Home | Phone 390×844, throttled | **4124 ms** | 0 | 2136 ms | 296 ms |
+| Title | Phone 390×844, throttled | **3876 ms** | 0 | 2120 ms | 128 ms |
+| Home | Phone, throttled, reduced motion | 4000 ms | 0 | 2080 ms | 176 ms |
+
+What changed:
+1. **Compression.** `server/lib/static.js` sends CSS, JS, JSON, SVG and HTML with Brotli or gzip
+   (cached per file version, per-encoding ETag, `Vary: Accept-Encoding`), and API JSON of 2 KB
+   or more is compressed too. The 14 stylesheets the app loads went from about 300 KB to about 57 KB on the wire.
+2. **Fonts.** Inter is one variable file per subset (48 KB) instead of four static weights
+   (about 98 KB). First paint now needs at most three font files.
+3. **No module waterfall.** `index.html` preloads the static import graph of the app shell and
+   the home view (`npm run preload:sync`; a unit test fails if it goes stale). Before, the
+   browser found modules one import level at a time, a round trip each.
+4. **Fewer serial requests.** The session request runs alongside the health check and starts
+   before the garden is set up. Only the first hero backdrop loads with the page.
+
+Phone LCP fell by about 2 s on both pages but is still above the 2.5 s target. The LCP element on
+the home page is the hero backdrop. At the phone's 3× pixel density it picks the 1920 px copy
+(about 100 KB), and it cannot start until the app has booted and `/api/home` has answered.
+Remaining options, in order of effect:
+1. Add a 1280 px backdrop copy so high-density phones stop downloading the 1920 px one.
+2. Inline the first hero's data in `index.html` (or server-render the hero) so its backdrop can
+   start downloading before the app boots.
+3. Split CSS by route. A first attempt that deferred `player.css` changed how the player's
+   controls behaved in the browser tests, so it was left out; it needs a closer look.
 
 Then measure again on real mid-range Android and iOS devices.
 

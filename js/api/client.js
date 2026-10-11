@@ -242,6 +242,9 @@ export const api = {};
 /** Detects whether the Lumina server is reachable and installs the matching backend. */
 export async function initApi() {
   let serverUp = false;
+  // The session is requested alongside the health check rather than after it, saving a round
+  // trip before the first page renders. On static hosting it simply fails and is ignored.
+  const earlySession = get('/api/session').catch(() => null);
   try {
     const res = await fetch('/api/health', { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(3500) });
     const data = res.ok && (res.headers.get('content-type') || '').includes('json') ? await res.json() : null;
@@ -250,7 +253,16 @@ export async function initApi() {
     serverUp = false;
   }
   if (serverUp) {
-    Object.assign(api, createServerBackend());
+    const backend = createServerBackend();
+    const getSession = backend.session.get;
+    let early = earlySession;
+    backend.session.get = async () => {
+      const pending = early;
+      early = null;
+      const s = pending && (await pending);
+      return s?.mode === 'server' ? s : getSession();
+    };
+    Object.assign(api, backend);
   } else {
     const { createStaticBackend } = await import('./static-backend.js');
     Object.assign(api, await createStaticBackend());

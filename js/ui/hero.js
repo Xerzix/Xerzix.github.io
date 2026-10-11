@@ -21,8 +21,26 @@ export function hero(input, { autoRotate = true, previews = true } = {}) {
   let paused = !autoRotate || prefersReducedMotion() || items.length < 2;
   let userPaused = false;
 
-  const slides = items.map((t, i) => h('div', { class: ['lm-hero__slide', i === 0 && 'is-active'], 'aria-hidden': 'true' },
-    artImg({ src: t.backdrop, srcset: t.backdropSrcset, sizes: '100vw', title: '', kind: 'backdrop', fetchpriority: i === 0 ? 'high' : 'low', loading: i === 0 ? 'eager' : 'lazy' })));
+  // Only the first backdrop loads with the page. The slides are stacked in the viewport, so
+  // loading="lazy" would not hold the others back; they are added once the first has loaded
+  // (it is usually the largest paint), or when a slide is shown.
+  const slides = items.map((t, i) => h('div', { class: ['lm-hero__slide', i === 0 && 'is-active'], 'aria-hidden': 'true' }));
+  const filled = new Set();
+  const fillSlide = (i) => {
+    if (filled.has(i)) return;
+    filled.add(i);
+    const t = items[i];
+    slides[i].prepend(artImg({ src: t.backdrop, srcset: t.backdropSrcset, sizes: '100vw', title: '', kind: 'backdrop', fetchpriority: i === 0 ? 'high' : 'low', loading: i === 0 ? 'eager' : 'lazy' }));
+  };
+  const fillRest = () => items.forEach((_, i) => fillSlide(i));
+  fillSlide(0);
+  const first = slides[0].querySelector('img');
+  if (first && !first.complete) {
+    first.addEventListener('load', fillRest, { once: true });
+    first.addEventListener('error', fillRest, { once: true });
+  } else {
+    fillRest();
+  }
   const content = h('div', { class: 'lm-hero__content' });
   const dots = h('div', { class: 'lm-hero__dots', role: 'group', 'aria-label': 'Featured titles' });
   const pauseBtn = h('button', { class: 'lm-icon-btn', type: 'button' });
@@ -98,6 +116,7 @@ export function hero(input, { autoRotate = true, previews = true } = {}) {
     slides[index].classList.remove('is-active');
     dots.children[index]?.setAttribute('aria-current', 'false');
     index = (i + items.length) % items.length;
+    fillSlide(index);
     slides[index].classList.add('is-active');
     dots.children[index]?.setAttribute('aria-current', 'true');
     renderContent(items[index]);

@@ -61,6 +61,8 @@ function observe() {
 async function measure(browser, base, profile, pg) {
   const context = await browser.newContext({ viewport: profile.viewport, ignoreHTTPSErrors: true, reducedMotion: REDUCED ? 'reduce' : 'no-preference', isMobile: !!profile.mobile, hasTouch: !!profile.mobile, deviceScaleFactor: profile.mobile ? 3 : 1 });
   await context.addInitScript(() => localStorage.setItem('lumina.introSeen', '1'));
+  // Skip "Who's watching?" (shown once per browser session) unless that page is being measured.
+  if (pg.id !== 'whos-watching') await context.addInitScript(() => sessionStorage.setItem('lumina.identityChosen', '1'));
   await context.addInitScript(observe);
   // External hosts (fonts, remote media) are not part of the measurement.
   const origin = new URL(base).origin;

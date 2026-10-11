@@ -28,7 +28,7 @@ const POSTERS = [
 
 const page = (p) => `<!doctype html><meta charset="utf-8"><style>
 @font-face { font-family: C; font-weight: 600; src: url(${file('assets/fonts/cormorant-garamond-latin-600-normal.woff2')}); }
-@font-face { font-family: I; font-weight: 600; src: url(${file('assets/fonts/inter-latin-600-normal.woff2')}); }
+@font-face { font-family: I; font-weight: 100 900; src: url(${file('assets/fonts/inter-latin-wght-normal.woff2')}); }
 html, body { margin: 0; width: 360px; height: 540px; background: #080808; overflow: hidden; }
 .bg { position: absolute; inset: 0; background: url(${file(p.frame)}) center / auto 100% no-repeat; }
 .shade { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 42%, rgba(8,8,8,0) 0, rgba(8,8,8,.35) 70%), linear-gradient(180deg, rgba(8,8,8,.15), rgba(8,8,8,0) 30%, rgba(8,8,8,.55) 100%); }

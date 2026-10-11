@@ -47,7 +47,7 @@ The only working playback path loads **unlicensed copies of commercial films and
 Lumina's brief requires authorized media: rights confirmation, "secure access to authorized media", and "do not imply that a movie has a language track that has not been … legally made available". That pipeline cannot meet those requirements and is also a security liability (item 3 above). **The new platform does not use it.** Specifically:
 
 - The new app plays only media from its own catalog. That media is served from Lumina storage, from a configured CDN, or from openly licensed public sources, and every item carries its licence and attribution metadata.
-- `watch.html`, `media.html` and `stream.html` were **left untouched** in the repository. The new app does not link to them. Removing them, and rotating the TMDB and OMDb credentials they contain, is recommended but is the owner's decision.
+- `watch.html`, `media.html` and `stream.html` were at first left untouched. Their contents have since been removed, and each is now a redirect to the home page. The TMDB and OMDb credentials they contained remain in git history and should be rotated.
 - TMDB is kept as a legitimate, **server-side, metadata-only** integration. Administrators can pre-fill title metadata from TMDB when they add licensed content. The token comes from an environment variable and is never sent to the browser.
 
 ## 4. What was retained, and how
